@@ -2,6 +2,8 @@
 
 Tarayıcı tabanlı, [emu8086](https://emu8086-microprocessor-emulator.en.softonic.com/)'dan ilham alan bir 8086 assembly simülatörü. React + TypeScript + Vite ile geliştiriliyor.
 
+**Canlı demo:** https://suatata2121-lang.github.io/x86sim/
+
 ## Durum
 
 Erken aşama. Şu an çalışan:
@@ -44,6 +46,10 @@ Erken aşama. Şu an çalışan:
 npm install
 npm run dev
 ```
+
+## Dağıtım
+
+`main` dalına yapılan her push, `.github/workflows/deploy.yml` ile otomatik olarak build edilip GitHub Pages'e (`https://suatata2121-lang.github.io/x86sim/`) yayınlanır. `vite.config.ts`'teki `base: '/x86sim/'` ayarı, bu alt yol altında çalışacak şekilde varlık yollarını ayarlar.
 
 ## Yapı
 
