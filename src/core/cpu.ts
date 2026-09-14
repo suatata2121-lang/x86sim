@@ -87,6 +87,7 @@ export class Cpu {
   private effectiveAddress(op: Operand & { kind: 'mem' }): number {
     let addr = op.disp
     if (op.base) addr += this.getReg(op.base)
+    if (op.index) addr += this.getReg(op.index)
     if (op.label) {
       const info = this.dataLabels.get(op.label)
       if (!info) throw new Error(`Tanımsız veri etiketi: ${op.label}`)

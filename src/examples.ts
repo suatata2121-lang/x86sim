@@ -180,4 +180,20 @@ MOV AH, 4Ch
 INT 21h
 `,
   },
+  {
+    id: 'base-index',
+    title: 'Taban+İndeks Adresleme',
+    description: '[TABLE+BX+SI] ile bir tabloya taban (BX/BP) ve indeks (SI/DI) yazmaçlarını aynı anda kullanarak erişir.',
+    source: `; Taban+indeks adresleme: [TABLE+BX+SI] ile bir tabloya erisir
+; TABLE 3 satir x 2 sutunluk gibi dusunulebilir: her satir 2 bayt
+TABLE DB 10, 20, 30, 40, 50, 60
+
+MOV BX, 4       ; 3. satirin (0 tabanli: satir 2) baslangic offseti
+MOV SI, 1       ; o satirin 2. sutunu
+MOV AL, [TABLE+BX+SI]   ; TABLE[4+1] = TABLE[5] = 60
+
+MOV AH, 4Ch
+INT 21h
+`,
+  },
 ]

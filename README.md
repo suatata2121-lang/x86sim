@@ -6,19 +6,19 @@ Tarayıcı tabanlı, [emu8086](https://emu8086-microprocessor-emulator.en.softon
 
 Erken aşama. Şu an çalışan:
 
-- Bir assembler (`src/core/assembler.ts`): etiketler, yorumlar, `DB`/`DW` veri direktifleri, bellek operandları (`[BX]`, `[SI+4]`, `[MSG]`, `[MSG+SI]`, `BYTE/WORD PTR`), işlenen sayısı/türü ve tanımsız-etiket doğrulaması (derleme zamanında hata verir). Hatalar satır **ve sütun** bilgisiyle gelir; bilinmeyen bir komut yazınca ("MOVE" gibi) en yakın gerçek komut önerilir.
+- Bir assembler (`src/core/assembler.ts`): etiketler, yorumlar, `DB`/`DW` veri direktifleri, bellek operandları — taban (`BX`/`BP`), indeks (`SI`/`DI`), etiket ve sabit ofsetin herhangi bir birleşimi (`[BX]`, `[SI+4]`, `[MSG]`, `[BX+SI]`, `[TABLE+BX+SI+2]`, `BYTE/WORD PTR`) —, işlenen sayısı/türü ve tanımsız-etiket doğrulaması (derleme zamanında hata verir). Hatalar satır **ve sütun** bilgisiyle gelir; bilinmeyen bir komut yazınca ("MOVE" gibi) en yakın gerçek komut önerilir.
 - Bir 8086 CPU çekirdeği (`src/core/cpu.ts`): 16/8-bit yazmaçlar, bayraklar, 64K düz bellek, veri etiketlerinin belleğe yerleştirilmesi, `INT 21h` desteği (AH=01 karakter oku, AH=02 karakter yazdır, AH=09 `$`-sonlandırmalı string yazdır, AH=0Ah tamponlu satır oku, AH=4Ch çıkış)
 - Desteklenen komutlar: `MOV ADD SUB INC DEC CMP MUL DIV AND OR XOR NOT SHL SHR JMP JE JNE JG JL JGE JLE LOOP PUSH POP CALL RET INT NOP HLT` (kaynak/hedef olarak yazmaç, sayı ya da bellek adresi)
 - Adım adım / tam çalıştırma, yazmaç ve bayrak görünümü, derleme + çalışma zamanı hata gösterimi olan minimal bir arayüz
 - Bir bellek görüntüleyici (`src/components/MemoryView.tsx`): 16x16 hex dump + ASCII, adrese/SP'ye/veri etiketlerine atlama
 - Kesme noktaları (breakpoint): editörün kenar şeridinden (`src/components/CodeEditor.tsx`) satıra tıklayarak aç/kapat; "Çalıştır" o satıra gelmeden hemen önce durur, tekrar "Çalıştır"a basınca devam eder
 - Klavye girişi: `INT 21h AH=01` (tek karakter) ve `AH=0Ah` (tamponlu satır) programı beklemeye alır, arayüzde bir giriş kutusu çıkar; kullanıcı "Gönder"e basınca (veya Enter'a) yürütme kaldığı yerden devam eder
-- Örnek program kütüphanesi (`src/examples.ts`): editörün üstündeki açılır listeden 9 hazır program (Merhaba Dünya, aritmetik, döngü, bellek adresleme, bit işlemleri, çarpma/bölme, alt program, koşullu atlama, klavye girişi) "Yükle" ile editöre aktarılabilir
+- Örnek program kütüphanesi (`src/examples.ts`): editörün üstündeki açılır listeden 10 hazır program (Merhaba Dünya, aritmetik, döngü, bellek adresleme, bit işlemleri, çarpma/bölme, alt program, koşullu atlama, klavye girişi, taban+indeks adresleme) "Yükle" ile editöre aktarılabilir
 - Hata konumlandırma: hatalı satır editörün kenar şeridinde kırmızı vurgulanır; hata listesindeki her madde, hatanın tam yerini `^` işaretiyle gösteren küçük bir satır önizlemesi içerir
 
 ### Bilinen sınırlamalar
 
-- Taban + indeks kombinasyonu (`[BX+SI]` gibi) desteklenmiyor — en fazla bir taban yazmacı (`BX/BP/SI/DI`) + bir etiket + bir sabit ofset.
+- Bellek operandında en fazla bir taban (`BX` veya `BP`) VE en fazla bir indeks (`SI` veya `DI`) yazmacı aynı anda kullanılabilir; iki taban (`[BX+BP]`) ya da iki indeks (`[SI+DI]`) birlikte kullanılamaz — gerçek 8086'da da bu kombinasyonlar yoktur.
 - Bellek işleneninin boyutu (`BYTE`/`WORD PTR` verilmediğinde) bir yazmaçtan çıkarılamıyorsa varsayılan olarak word (16-bit) kabul edilir; MASM'deki gibi "boyut belirsiz" hatası verilmez.
 - Segment yazmaçları (`DS/ES/SS/CS`) yok; bellek düz (flat) 64K olarak modelleniyor.
 - `SHL`/`SHR` çok bitlik kaydırmalarda `OF` bayrağını her zaman `false` yapar (gerçek 8086'da `OF` yalnızca 1 bitlik kaydırmada tanımlıdır); `CF` doğru hesaplanır.
@@ -36,7 +36,7 @@ Erken aşama. Şu an çalışan:
 - [x] Breakpoint desteği
 - [x] Assembler hata mesajlarının iyileştirilmesi (kolon/karakter konumu)
 - [x] Örnek program kütüphanesi
-- [ ] `[BX+SI]` tarzı taban+indeks adresleme
+- [x] `[BX+SI]` tarzı taban+indeks adresleme
 
 ## Geliştirme
 

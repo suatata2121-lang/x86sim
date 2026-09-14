@@ -2,8 +2,11 @@ export type Reg16 = 'AX' | 'BX' | 'CX' | 'DX' | 'SI' | 'DI' | 'BP' | 'SP'
 export type Reg8 = 'AL' | 'AH' | 'BL' | 'BH' | 'CL' | 'CH' | 'DL' | 'DH'
 export type RegName = Reg16 | Reg8
 
-// Bellek dolaylı adresleme için taban yazmacı olarak kullanılabilenler.
-export type BaseReg = 'BX' | 'BP' | 'SI' | 'DI'
+// Bellek dolaylı adresleme: taban (BX/BP) ve indeks (SI/DI) ayrı gruplardır,
+// aynı anda biri tabandan biri indeksten olmak üzere ikisi birden kullanılabilir
+// (örn. [BX+SI]), ama aynı gruptan iki yazmaç bir arada kullanılamaz.
+export type BaseReg = 'BX' | 'BP'
+export type IndexReg = 'SI' | 'DI'
 
 export interface Flags {
   ZF: boolean
@@ -16,7 +19,7 @@ export type Operand =
   | { kind: 'reg'; name: RegName }
   | { kind: 'imm'; value: number }
   | { kind: 'label'; name: string }
-  | { kind: 'mem'; base?: BaseReg; label?: string; disp: number; size?: 'byte' | 'word' }
+  | { kind: 'mem'; base?: BaseReg; index?: IndexReg; label?: string; disp: number; size?: 'byte' | 'word' }
 
 export type Mnemonic =
   | 'MOV' | 'ADD' | 'SUB' | 'INC' | 'DEC' | 'CMP'

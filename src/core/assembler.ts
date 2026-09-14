@@ -1,11 +1,12 @@
-import type { AssembleError, BaseReg, DataDeclaration, Instruction, Mnemonic, Operand, RegName } from './types'
+import type { AssembleError, BaseReg, DataDeclaration, IndexReg, Instruction, Mnemonic, Operand, RegName } from './types'
 
 const REGISTERS: RegName[] = [
   'AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP',
   'AL', 'AH', 'BL', 'BH', 'CL', 'CH', 'DL', 'DH',
 ]
 
-const BASE_REGS: BaseReg[] = ['BX', 'BP', 'SI', 'DI']
+const BASE_REGS: BaseReg[] = ['BX', 'BP']
+const INDEX_REGS: IndexReg[] = ['SI', 'DI']
 
 const MNEMONICS: Mnemonic[] = [
   'MOV', 'ADD', 'SUB', 'INC', 'DEC', 'CMP',
@@ -59,7 +60,7 @@ function suggestMnemonic(token: string): string | null {
   return best !== null && bestDist > 0 && bestDist <= 2 ? best : null
 }
 
-type MemParts = { base?: BaseReg; label?: string; disp: number }
+type MemParts = { base?: BaseReg; index?: IndexReg; label?: string; disp: number }
 
 function parseMemOperand(inner: string): MemParts | null {
   const body = inner.replace(/\s+/g, '')
@@ -69,6 +70,7 @@ function parseMemOperand(inner: string): MemParts | null {
   if (tokens.length === 0) return null
 
   let base: BaseReg | undefined
+  let index: IndexReg | undefined
   let label: string | undefined
   let disp = 0
 
@@ -76,10 +78,16 @@ function parseMemOperand(inner: string): MemParts | null {
     const negative = rawTok.startsWith('-')
     const tok = negative ? rawTok.slice(1) : rawTok
     if (tok.length === 0) return null
+    const upper = tok.toUpperCase()
 
-    if ((BASE_REGS as string[]).includes(tok.toUpperCase())) {
+    if ((BASE_REGS as string[]).includes(upper)) {
       if (negative || base) return null
-      base = tok.toUpperCase() as BaseReg
+      base = upper as BaseReg
+      continue
+    }
+    if ((INDEX_REGS as string[]).includes(upper)) {
+      if (negative || index) return null
+      index = upper as IndexReg
       continue
     }
     const imm = parseImmediate(tok)
@@ -95,7 +103,7 @@ function parseMemOperand(inner: string): MemParts | null {
     return null
   }
 
-  return { base, label, disp }
+  return { base, index, label, disp }
 }
 
 function parseOperand(token: string): Operand {
@@ -110,7 +118,7 @@ function parseOperand(token: string): Operand {
 
   if (t.startsWith('[') && t.endsWith(']')) {
     const mem = parseMemOperand(t.slice(1, -1))
-    if (mem) return { kind: 'mem', base: mem.base, label: mem.label, disp: mem.disp, size }
+    if (mem) return { kind: 'mem', base: mem.base, index: mem.index, label: mem.label, disp: mem.disp, size }
     return { kind: 'label', name: token.trim() }
   }
   if (size) return { kind: 'label', name: token.trim() }
@@ -270,7 +278,13 @@ function describeOperand(op: Operand): string {
   if (op.kind === 'reg') return op.name
   if (op.kind === 'label') return op.name
   if (op.kind === 'imm') return String(op.value)
-  return `[${op.base ?? ''}${op.label ?? ''}${op.disp ? (op.disp > 0 ? '+' : '') + op.disp : ''}]`
+  const parts: string[] = []
+  if (op.label) parts.push(op.label)
+  if (op.base) parts.push(op.base)
+  if (op.index) parts.push(op.index)
+  let inner = parts.join('+')
+  if (op.disp) inner += (op.disp > 0 ? '+' : '') + op.disp
+  return `[${inner}]`
 }
 
 function validateOperands(
