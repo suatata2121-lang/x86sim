@@ -132,6 +132,15 @@ export class Cpu {
     this.flags.CF = result < 0 || result > mask
   }
 
+  private setLogicalFlags(result: number, isWord: boolean) {
+    const mask = isWord ? 0xffff : 0xff
+    const signBit = isWord ? 0x8000 : 0x80
+    this.flags.ZF = (result & mask) === 0
+    this.flags.SF = (result & signBit) !== 0
+    this.flags.CF = false
+    this.flags.OF = false
+  }
+
   private jumpToLabel(op: Operand) {
     if (op.kind === 'label') {
       const idx = this.labels.get(op.name)
@@ -185,6 +194,107 @@ export class Cpu {
         const result = this.readOperand(op1, isWord) - 1
         this.writeOperand(op1, result, isWord)
         this.setArithFlags(result, isWord)
+        break
+      }
+      case 'MUL': {
+        const value = this.readOperand(op1, isWord)
+        if (isWord) {
+          const product = this.getReg('AX') * value
+          this.regs.AX = product & 0xffff
+          this.regs.DX = Math.floor(product / 0x10000) & 0xffff
+          const overflow = this.regs.DX !== 0
+          this.flags.CF = overflow
+          this.flags.OF = overflow
+        } else {
+          const product = this.getReg('AL') * value
+          this.setReg('AX', product & 0xffff)
+          const overflow = (product & 0xff00) !== 0
+          this.flags.CF = overflow
+          this.flags.OF = overflow
+        }
+        break
+      }
+      case 'DIV': {
+        const value = this.readOperand(op1, isWord)
+        if (value === 0) throw new Error('Sıfıra bölme hatası (DIV)')
+        if (isWord) {
+          const dividend = this.regs.DX * 0x10000 + this.regs.AX
+          const quotient = Math.floor(dividend / value)
+          if (quotient > 0xffff) throw new Error('Bölme taşması (DIV): sonuç 16 bit yazmaca sığmıyor')
+          this.regs.AX = quotient & 0xffff
+          this.regs.DX = (dividend % value) & 0xffff
+        } else {
+          const dividend = this.getReg('AX')
+          const quotient = Math.floor(dividend / value)
+          if (quotient > 0xff) throw new Error('Bölme taşması (DIV): sonuç 8 bit yazmaca sığmıyor')
+          this.setReg('AL', quotient & 0xff)
+          this.setReg('AH', (dividend % value) & 0xff)
+        }
+        break
+      }
+      case 'AND': {
+        const result = this.readOperand(op1, isWord) & this.readOperand(op2, isWord)
+        this.writeOperand(op1, result, isWord)
+        this.setLogicalFlags(result, isWord)
+        break
+      }
+      case 'OR': {
+        const result = this.readOperand(op1, isWord) | this.readOperand(op2, isWord)
+        this.writeOperand(op1, result, isWord)
+        this.setLogicalFlags(result, isWord)
+        break
+      }
+      case 'XOR': {
+        const result = this.readOperand(op1, isWord) ^ this.readOperand(op2, isWord)
+        this.writeOperand(op1, result, isWord)
+        this.setLogicalFlags(result, isWord)
+        break
+      }
+      case 'NOT': {
+        const result = ~this.readOperand(op1, isWord)
+        this.writeOperand(op1, result, isWord)
+        break
+      }
+      case 'SHL': {
+        const size = isWord ? 16 : 8
+        const mask = isWord ? 0xffff : 0xff
+        const value = this.readOperand(op1, isWord)
+        const count = Math.min(this.readOperand(op2, false), 31)
+        const result = count === 0 ? value : (value << count) & mask
+        if (count > 0) this.flags.CF = count <= size && ((value >> (size - count)) & 1) === 1
+        this.writeOperand(op1, result, isWord)
+        this.flags.ZF = (result & mask) === 0
+        this.flags.SF = (result & (isWord ? 0x8000 : 0x80)) !== 0
+        this.flags.OF = false
+        break
+      }
+      case 'SHR': {
+        const mask = isWord ? 0xffff : 0xff
+        const value = this.readOperand(op1, isWord)
+        const count = Math.min(this.readOperand(op2, false), 31)
+        const result = count === 0 ? value : (value >>> count) & mask
+        if (count > 0) this.flags.CF = ((value >> (count - 1)) & 1) === 1
+        this.writeOperand(op1, result, isWord)
+        this.flags.ZF = (result & mask) === 0
+        this.flags.SF = (result & (isWord ? 0x8000 : 0x80)) !== 0
+        this.flags.OF = false
+        break
+      }
+      case 'CALL': {
+        const returnIdx = this.ip + 1
+        const sp = (this.regs.SP - 2) & 0xffff
+        this.regs.SP = sp
+        this.memory[sp] = returnIdx & 0xff
+        this.memory[(sp + 1) & 0xffff] = (returnIdx >> 8) & 0xff
+        this.jumpToLabel(op1)
+        nextIp = this.ip
+        break
+      }
+      case 'RET': {
+        const sp = this.regs.SP
+        const idx = this.memory[sp] | (this.memory[(sp + 1) & 0xffff] << 8)
+        this.regs.SP = (sp + 2) & 0xffff
+        nextIp = idx
         break
       }
       case 'JMP': this.jumpToLabel(op1); nextIp = this.ip; break

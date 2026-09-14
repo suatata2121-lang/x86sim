@@ -9,11 +9,12 @@ const BASE_REGS: BaseReg[] = ['BX', 'BP', 'SI', 'DI']
 
 const MNEMONICS: Mnemonic[] = [
   'MOV', 'ADD', 'SUB', 'INC', 'DEC', 'CMP',
+  'MUL', 'DIV', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR',
   'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE',
-  'LOOP', 'PUSH', 'POP', 'INT', 'NOP', 'HLT',
+  'LOOP', 'PUSH', 'POP', 'CALL', 'RET', 'INT', 'NOP', 'HLT',
 ]
 
-const JUMP_MNEMONICS = new Set<Mnemonic>(['JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'LOOP'])
+const JUMP_MNEMONICS = new Set<Mnemonic>(['JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'LOOP', 'CALL'])
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -177,8 +178,18 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
   CMP: [['reg', 'mem'], ['reg', 'imm', 'mem']],
   INC: [['reg', 'mem']],
   DEC: [['reg', 'mem']],
+  MUL: [['reg', 'mem']],
+  DIV: [['reg', 'mem']],
+  AND: [['reg', 'mem'], ['reg', 'imm', 'mem']],
+  OR: [['reg', 'mem'], ['reg', 'imm', 'mem']],
+  XOR: [['reg', 'mem'], ['reg', 'imm', 'mem']],
+  NOT: [['reg', 'mem']],
+  SHL: [['reg', 'mem'], ['reg', 'imm']],
+  SHR: [['reg', 'mem'], ['reg', 'imm']],
   PUSH: [['reg', 'mem']],
   POP: [['reg', 'mem']],
+  CALL: [['label']],
+  RET: [],
   JMP: [['label']],
   JE: [['label']],
   JNE: [['label']],

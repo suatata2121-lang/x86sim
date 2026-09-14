@@ -20,8 +20,9 @@ export type Operand =
 
 export type Mnemonic =
   | 'MOV' | 'ADD' | 'SUB' | 'INC' | 'DEC' | 'CMP'
+  | 'MUL' | 'DIV' | 'AND' | 'OR' | 'XOR' | 'NOT' | 'SHL' | 'SHR'
   | 'JMP' | 'JE' | 'JNE' | 'JG' | 'JL' | 'JGE' | 'JLE'
-  | 'LOOP' | 'PUSH' | 'POP' | 'INT' | 'NOP' | 'HLT'
+  | 'LOOP' | 'PUSH' | 'POP' | 'CALL' | 'RET' | 'INT' | 'NOP' | 'HLT'
 
 export interface Instruction {
   mnemonic: Mnemonic
