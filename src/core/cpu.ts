@@ -1,4 +1,4 @@
-import type { DataDeclaration, Flags, Instruction, Operand, Reg16, Reg8, RegName } from './types'
+import type { DataDeclaration, Flags, Instruction, Operand, PendingInput, Reg16, Reg8, RegName } from './types'
 
 const REG16: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP']
 
@@ -23,6 +23,7 @@ export class Cpu {
   ip = 0
   halted = false
   hitBreakpoint = false
+  waitingForInput: PendingInput | null = null
   output: string[] = []
   steps = 0
 
@@ -48,6 +49,7 @@ export class Cpu {
     this.ip = 0
     this.halted = false
     this.hitBreakpoint = false
+    this.waitingForInput = null
     this.output = []
     this.steps = 0
   }
@@ -154,7 +156,7 @@ export class Cpu {
   }
 
   step() {
-    if (this.halted) return
+    if (this.halted || this.waitingForInput) return
     if (this.ip < 0 || this.ip >= this.instructions.length) {
       this.halted = true
       return
@@ -331,6 +333,10 @@ export class Cpu {
       case 'HLT': this.halted = true; break
     }
 
+    // AH=01/0A klavye girişi istedi: bu komutu tamamlamadan (ip'yi ilerletmeden)
+    // dur; provideInput() çağrıldığında tamamlanıp ip ilerletilecek.
+    if (this.waitingForInput) return
+
     this.ip = nextIp
     this.steps += 1
     if (this.ip >= this.instructions.length) this.halted = true
@@ -349,9 +355,40 @@ export class Cpu {
         addr = (addr + 1) & 0xffff
       }
       this.output.push(s)
+    } else if (ah === 0x01) {
+      this.waitingForInput = { kind: 'char' }
+    } else if (ah === 0x0a) {
+      const bufferAddr = this.getReg('DX')
+      this.waitingForInput = { kind: 'string', bufferAddr, maxLen: this.memory[bufferAddr] }
     } else if (ah === 0x4c) {
       this.halted = true
     }
+  }
+
+  // AH=01/0A ile beklemeye giren bir INT'i, kullanıcının sağladığı metinle
+  // tamamlar: AL'ye ya da bellekteki tampona yazar, ardından komutu bitirip
+  // (ip'yi ilerletip) yürütmenin devam edebilmesini sağlar.
+  provideInput(text: string) {
+    const req = this.waitingForInput
+    if (!req) return
+
+    if (req.kind === 'char') {
+      const ch = text.length > 0 ? text[0] : '\r'
+      this.setReg('AL', ch.charCodeAt(0) & 0xff)
+      this.output.push(ch)
+    } else {
+      const trimmed = text.slice(0, req.maxLen)
+      this.memory[(req.bufferAddr + 1) & 0xffff] = trimmed.length & 0xff
+      for (let i = 0; i < trimmed.length; i++) {
+        this.memory[(req.bufferAddr + 2 + i) & 0xffff] = trimmed.charCodeAt(i) & 0xff
+      }
+      this.output.push(trimmed + '\n')
+    }
+
+    this.waitingForInput = null
+    this.ip += 1
+    this.steps += 1
+    if (this.ip >= this.instructions.length) this.halted = true
   }
 
   // breakpoints: kaynak dosyasındaki satır numaraları. O satıra gelen bir komutu
@@ -361,7 +398,7 @@ export class Cpu {
   run(maxSteps = 100000, breakpoints?: Set<number>) {
     this.hitBreakpoint = false
     let first = true
-    while (!this.halted && this.steps < maxSteps) {
+    while (!this.halted && !this.waitingForInput && this.steps < maxSteps) {
       if (!first && breakpoints && breakpoints.size > 0) {
         const instr = this.instructions[this.ip]
         if (instr && breakpoints.has(instr.line)) {

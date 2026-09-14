@@ -44,3 +44,8 @@ export interface AssembleError {
   line: number
   message: string
 }
+
+// INT 21h AH=01/0A klavye girişi bekliyorken CPU'nun durumu.
+export type PendingInput =
+  | { kind: 'char' }
+  | { kind: 'string'; bufferAddr: number; maxLen: number }

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { assemble } from './core/assembler'
 import { Cpu } from './core/cpu'
-import type { AssembleError, Flags, Reg16 } from './core/types'
+import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
 import { RegisterView } from './components/RegisterView'
 import { MemoryView } from './components/MemoryView'
 import { CodeEditor } from './components/CodeEditor'
@@ -42,8 +42,10 @@ export default function App() {
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
   const [hitBreakpoint, setHitBreakpoint] = useState(false)
+  const [waitingForInput, setWaitingForInput] = useState<PendingInput | null>(null)
+  const [inputValue, setInputValue] = useState('')
 
-  const canRun = assembled && !halted
+  const canRun = assembled && !halted && !waitingForInput
 
   function toggleBreakpoint(line: number) {
     setBreakpoints((prev) => {
@@ -61,6 +63,7 @@ export default function App() {
     setOutput(cpu.output.join(''))
     setHalted(cpu.halted)
     setHitBreakpoint(cpu.hitBreakpoint)
+    setWaitingForInput(cpu.waitingForInput)
     const instr = cpu.instructions[cpu.ip]
     setCurrentLine(instr ? instr.line : null)
   }
@@ -101,6 +104,18 @@ export default function App() {
   function handleReset() {
     cpuRef.current.reset()
     setRuntimeError(null)
+    setInputValue('')
+    syncState()
+  }
+
+  function handleSubmitInput() {
+    try {
+      cpuRef.current.provideInput(inputValue)
+      setInputValue('')
+      setRuntimeError(null)
+    } catch (e) {
+      setRuntimeError(e instanceof Error ? e.message : String(e))
+    }
     syncState()
   }
 
@@ -145,6 +160,27 @@ export default function App() {
             </p>
           )}
           {runtimeError && <p className="status error">Çalışma zamanı hatası: {runtimeError}</p>}
+          {waitingForInput && (
+            <div className="panel input-request">
+              <h3>Klavye girişi bekleniyor</h3>
+              <p className="status">
+                {waitingForInput.kind === 'char'
+                  ? 'Program bir karakter okuyor (INT 21h, AH=01h).'
+                  : `Program en fazla ${waitingForInput.maxLen} karakterlik bir satır okuyor (INT 21h, AH=0Ah).`}
+              </p>
+              <div className="input-request-row">
+                <input
+                  autoFocus
+                  className="input-request-field"
+                  value={inputValue}
+                  maxLength={waitingForInput.kind === 'string' ? waitingForInput.maxLen : 1}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitInput() }}
+                />
+                <button onClick={handleSubmitInput}>Gönder</button>
+              </div>
+            </div>
+          )}
           <div className="panel">
             <h3>Çıktı</h3>
             <pre className="output">{output || '(henüz çıktı yok)'}</pre>
