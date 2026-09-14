@@ -10,6 +10,7 @@ Erken aşama. Şu an çalışan:
 - Bir 8086 CPU çekirdeği (`src/core/cpu.ts`): 16/8-bit yazmaçlar, bayraklar, 64K düz bellek, veri etiketlerinin belleğe yerleştirilmesi, `INT 21h` desteği (AH=02 karakter yazdır, AH=09 `$`-sonlandırmalı string yazdır, AH=4Ch çıkış)
 - Desteklenen komutlar: `MOV ADD SUB INC DEC CMP JMP JE JNE JG JL JGE JLE LOOP PUSH POP INT NOP HLT` (kaynak/hedef olarak yazmaç, sayı ya da bellek adresi)
 - Adım adım / tam çalıştırma, yazmaç ve bayrak görünümü, derleme + çalışma zamanı hata gösterimi olan minimal bir arayüz
+- Bir bellek görüntüleyici (`src/components/MemoryView.tsx`): 16x16 hex dump + ASCII, adrese/SP'ye/veri etiketlerine atlama
 
 ### Bilinen sınırlamalar
 
@@ -20,7 +21,7 @@ Erken aşama. Şu an çalışan:
 ## Yapılacaklar (yol haritası)
 
 - [x] Veri segmenti / `DB`, `DW` direktifleri ve bellek üzerinden adresleme
-- [ ] Bellek görüntüleyici (hex dump) arayüzü
+- [x] Bellek görüntüleyici (hex dump) arayüzü
 - [ ] Eksik komutlar: `MUL DIV AND OR XOR NOT SHL SHR CALL RET`
 - [x] `INT 21h` AH=09 (string yazdırma)
 - [ ] `INT 21h` AH=01/0A (klavye girişi)
@@ -46,5 +47,6 @@ src/
     cpu.ts            # CPU durumu ve komut yürütme
   components/
     RegisterView.tsx # yazmaç/bayrak paneli
+    MemoryView.tsx   # bellek hex dump / gezinme paneli
   App.tsx             # editör + kontroller + üst düzey akış
 ```
