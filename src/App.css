@@ -112,6 +112,17 @@ textarea {
   color: #c8ffc8;
 }
 
+.gutter-error {
+  background: #4a1f1f;
+  color: #ffb3b3;
+  box-shadow: inset 2px 0 0 #e05555;
+}
+
+.gutter-error.gutter-current {
+  background: #3a3f1f;
+  color: #e8ffb3;
+}
+
 .bp-dot {
   width: 8px;
   height: 8px;
@@ -218,6 +229,23 @@ textarea {
 .errors {
   color: #ff8080;
   font-size: 0.9rem;
+  padding-left: 1.2rem;
+  margin: 0.5rem 0;
+}
+
+.errors li {
+  margin-bottom: 0.5rem;
+}
+
+.error-preview {
+  margin: 0.2rem 0 0;
+  padding: 0.3rem 0.5rem;
+  background: #2a1414;
+  border-radius: 4px;
+  color: #ffb3b3;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+  overflow-x: auto;
 }
 
 .status {

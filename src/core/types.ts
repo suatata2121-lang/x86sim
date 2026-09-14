@@ -43,6 +43,10 @@ export interface DataDeclaration {
 export interface AssembleError {
   line: number
   message: string
+  /** 1-indexli sütun; hatanın kaynak satırındaki tam konumu bilinmiyorsa yoktur. */
+  column?: number
+  /** Sütundan itibaren kaç karakterin vurgulanacağı (hatalı metnin uzunluğu). */
+  length?: number
 }
 
 // INT 21h AH=01/0A klavye girişi bekliyorken CPU'nun durumu.

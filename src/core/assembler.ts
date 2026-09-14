@@ -31,6 +31,34 @@ function parseImmediate(token: string): number | null {
   return null
 }
 
+// İki dizgi arasındaki düzenleme (Levenshtein) mesafesi; yazım hatası önerileri için kullanılır.
+function levenshtein(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    }
+  }
+  return dp[a.length][b.length]
+}
+
+function suggestMnemonic(token: string): string | null {
+  let best: string | null = null
+  let bestDist = Infinity
+  for (const m of MNEMONICS) {
+    const d = levenshtein(token.toUpperCase(), m)
+    if (d < bestDist) {
+      bestDist = d
+      best = m
+    }
+  }
+  return best !== null && bestDist > 0 && bestDist <= 2 ? best : null
+}
+
 type MemParts = { base?: BaseReg; label?: string; disp: number }
 
 function parseMemOperand(inner: string): MemParts | null {
@@ -93,12 +121,32 @@ function parseOperand(token: string): Operand {
   return { kind: 'label', name: t }
 }
 
-// Virgülle ayrılmış öğeleri, tırnak içindeki virgülleri yok sayarak böler.
-function splitTopLevel(text: string): string[] {
-  const items: string[] = []
+interface TextAt {
+  text: string
+  /** text'in kaynak satırındaki 0-indeksli konumu. */
+  offset: number
+}
+
+// Virgülle ayrılmış işlenenleri, her birinin satırdaki konumuyla birlikte böler.
+function splitWithOffsets(text: string, baseOffset: number): TextAt[] {
+  const result: TextAt[] = []
+  let cursor = 0
+  for (const part of text.split(',')) {
+    const leadWs = part.length - part.trimStart().length
+    result.push({ text: part.trim(), offset: baseOffset + cursor + leadWs })
+    cursor += part.length + 1
+  }
+  return result
+}
+
+// DB/DW öğelerini, tırnak içindeki virgülleri yok sayarak ve konumlarını koruyarak böler.
+function splitTopLevelWithOffsets(text: string, baseOffset: number): TextAt[] {
+  const rawParts: TextAt[] = []
   let cur = ''
+  let start = 0
   let quote: string | null = null
-  for (const ch of text) {
+  for (let idx = 0; idx < text.length; idx++) {
+    const ch = text[idx]
     if (quote) {
       cur += ch
       if (ch === quote) quote = null
@@ -110,24 +158,32 @@ function splitTopLevel(text: string): string[] {
       continue
     }
     if (ch === ',') {
-      items.push(cur.trim())
+      rawParts.push({ text: cur, offset: start })
       cur = ''
+      start = idx + 1
       continue
     }
     cur += ch
   }
-  if (cur.trim().length > 0) items.push(cur.trim())
-  return items
+  rawParts.push({ text: cur, offset: start })
+
+  const result: TextAt[] = []
+  for (const part of rawParts) {
+    const leadWs = part.text.length - part.text.trimStart().length
+    const trimmed = part.text.trim()
+    if (trimmed.length > 0) result.push({ text: trimmed, offset: baseOffset + part.offset + leadWs })
+  }
+  return result
 }
 
-function parseDbItems(text: string, lineNo: number, errors: AssembleError[]): number[] | null {
-  const items = splitTopLevel(text)
+function parseDbItems(text: string, lineNo: number, baseOffset: number, errors: AssembleError[]): number[] | null {
+  const items = splitTopLevelWithOffsets(text, baseOffset)
   if (items.length === 0) {
-    errors.push({ line: lineNo, message: 'DB en az bir değer bekliyor' })
+    errors.push({ line: lineNo, message: 'DB en az bir değer bekliyor', column: baseOffset + 1 })
     return null
   }
   const bytes: number[] = []
-  for (const item of items) {
+  for (const { text: item, offset } of items) {
     const strMatch = item.match(/^'([^']*)'$|^"([^"]*)"$/)
     if (strMatch) {
       const s = strMatch[1] ?? strMatch[2]
@@ -140,7 +196,7 @@ function parseDbItems(text: string, lineNo: number, errors: AssembleError[]): nu
     }
     const imm = parseImmediate(item)
     if (imm === null || imm < -128 || imm > 255) {
-      errors.push({ line: lineNo, message: `Geçersiz DB değeri: "${item}"` })
+      errors.push({ line: lineNo, message: `Geçersiz DB değeri: "${item}"`, column: offset + 1, length: item.length })
       return null
     }
     bytes.push(imm & 0xff)
@@ -148,21 +204,21 @@ function parseDbItems(text: string, lineNo: number, errors: AssembleError[]): nu
   return bytes
 }
 
-function parseDwItems(text: string, lineNo: number, errors: AssembleError[]): number[] | null {
-  const items = splitTopLevel(text)
+function parseDwItems(text: string, lineNo: number, baseOffset: number, errors: AssembleError[]): number[] | null {
+  const items = splitTopLevelWithOffsets(text, baseOffset)
   if (items.length === 0) {
-    errors.push({ line: lineNo, message: 'DW en az bir değer bekliyor' })
+    errors.push({ line: lineNo, message: 'DW en az bir değer bekliyor', column: baseOffset + 1 })
     return null
   }
   const bytes: number[] = []
-  for (const item of items) {
+  for (const { text: item, offset } of items) {
     if (item === '?') {
       bytes.push(0, 0)
       continue
     }
     const imm = parseImmediate(item)
     if (imm === null || imm < -32768 || imm > 65535) {
-      errors.push({ line: lineNo, message: `Geçersiz DW değeri: "${item}"` })
+      errors.push({ line: lineNo, message: `Geçersiz DW değeri: "${item}"`, column: offset + 1, length: item.length })
       return null
     }
     const v = imm & 0xffff
@@ -217,32 +273,56 @@ function describeOperand(op: Operand): string {
   return `[${op.base ?? ''}${op.label ?? ''}${op.disp ? (op.disp > 0 ? '+' : '') + op.disp : ''}]`
 }
 
-function validateOperands(mnemonic: Mnemonic, opsText: string, ops: Operand[], lineNo: number, errors: AssembleError[]): boolean {
+function validateOperands(
+  mnemonic: Mnemonic,
+  opsText: string,
+  ops: Operand[],
+  opEntries: TextAt[],
+  lineNo: number,
+  mnemonicCol: number,
+  mnemonicLen: number,
+  errors: AssembleError[],
+): boolean {
   const spec = OPERAND_SPECS[mnemonic] ?? []
   if (ops.length !== spec.length) {
     errors.push({
       line: lineNo,
       message: `${mnemonic} komutu ${spec.length} işlenen bekliyor, ${ops.length} bulundu: "${opsText}"`,
+      column: mnemonicCol,
+      length: mnemonicLen,
     })
     return false
   }
   for (let i = 0; i < ops.length; i++) {
     const op = ops[i]
+    const entry = opEntries[i]
     if (!spec[i].includes(op.kind)) {
       const expected = spec[i].map((k) => OPERAND_KIND_LABEL[k]).join(' veya ')
       errors.push({
         line: lineNo,
         message: `${mnemonic} komutunun ${i + 1}. işleneni geçersiz: "${describeOperand(op)}" (${expected} bekleniyor)`,
+        column: entry.offset + 1,
+        length: entry.text.length,
       })
       return false
     }
     if (op.kind === 'label' && !IDENTIFIER_RE.test(op.name)) {
-      errors.push({ line: lineNo, message: `Geçersiz işlenen sözdizimi: "${op.name}"` })
+      errors.push({
+        line: lineNo,
+        message: `Geçersiz işlenen sözdizimi: "${op.name}"`,
+        column: entry.offset + 1,
+        length: entry.text.length,
+      })
       return false
     }
   }
   if (ops.length === 2 && ops[0].kind === 'mem' && ops[1].kind === 'mem') {
-    errors.push({ line: lineNo, message: `${mnemonic}: iki bellek işleneni aynı anda kullanılamaz` })
+    errors.push({
+      line: lineNo,
+      message: `${mnemonic}: iki bellek işleneni aynı anda kullanılamaz`,
+      column: mnemonicCol,
+      length: mnemonicLen,
+    })
     return false
   }
   return true
@@ -258,23 +338,28 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
 
   for (let i = 0; i < lines.length; i++) {
     const lineNo = i + 1
-    let raw = lines[i]
+    const originalLine = lines[i]
 
-    const commentIdx = raw.indexOf(';')
-    if (commentIdx >= 0) raw = raw.slice(0, commentIdx)
-    raw = raw.trim()
-    if (raw.length === 0) continue
+    let work = originalLine
+    const commentIdx = work.indexOf(';')
+    if (commentIdx >= 0) work = work.slice(0, commentIdx)
 
-    const dataMatch = raw.match(/^([A-Za-z_][A-Za-z0-9_]*):?\s+(DB|DW)\s+(.*)$/i)
+    let offset = work.length - work.trimStart().length
+    work = work.trim()
+    if (work.length === 0) continue
+
+    const dataMatch = work.match(/^([A-Za-z_][A-Za-z0-9_]*):?\s+(DB|DW)\s+(.*)$/i)
     if (dataMatch) {
       const [, name, directive, itemsText] = dataMatch
+      const nameCol = offset + 1
       if (declaredLabels.has(name)) {
-        errors.push({ line: lineNo, message: `Etiket zaten tanımlı: ${name}` })
+        errors.push({ line: lineNo, message: `Etiket zaten tanımlı: ${name}`, column: nameCol, length: name.length })
         continue
       }
+      const itemsOffset = offset + (dataMatch[0].length - itemsText.length)
       const bytes = directive.toUpperCase() === 'DB'
-        ? parseDbItems(itemsText, lineNo, errors)
-        : parseDwItems(itemsText, lineNo, errors)
+        ? parseDbItems(itemsText, lineNo, itemsOffset, errors)
+        : parseDwItems(itemsText, lineNo, itemsOffset, errors)
       if (bytes === null) continue
       declaredLabels.add(name)
       data.push({ name, address: dataCursor, bytes, line: lineNo })
@@ -283,51 +368,68 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
     }
 
     let label: string | undefined
-    const labelMatch = raw.match(/^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/)
+    const labelMatch = work.match(/^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/)
     if (labelMatch) {
       const name = labelMatch[1]
-      raw = labelMatch[2].trim()
+      const nameCol = offset + 1
+      offset += labelMatch[0].length - labelMatch[2].length
+      work = labelMatch[2].replace(/\s+$/, '')
       if (declaredLabels.has(name)) {
-        errors.push({ line: lineNo, message: `Etiket zaten tanımlı: ${name}` })
+        errors.push({ line: lineNo, message: `Etiket zaten tanımlı: ${name}`, column: nameCol, length: name.length })
       } else {
         declaredLabels.add(name)
         label = name
       }
-      if (raw.length === 0) {
-        instructions.push({ mnemonic: 'NOP', ops: [], label, line: lineNo, raw: lines[i].trim() })
+      if (work.length === 0) {
+        instructions.push({ mnemonic: 'NOP', ops: [], label, line: lineNo, raw: originalLine.trim() })
         continue
       }
     }
 
-    const parts = raw.split(/\s+/)
+    const parts = work.split(/\s+/)
     const mnemonicToken = parts[0].toUpperCase()
     if (!MNEMONICS.includes(mnemonicToken as Mnemonic)) {
-      errors.push({ line: lineNo, message: `Bilinmeyen komut: ${parts[0]}` })
+      const suggestion = suggestMnemonic(mnemonicToken)
+      const message = suggestion
+        ? `Bilinmeyen komut: "${parts[0]}". "${suggestion}" mi demek istediniz?`
+        : `Bilinmeyen komut: "${parts[0]}"`
+      errors.push({ line: lineNo, message, column: offset + 1, length: parts[0].length })
       continue
     }
     const mnemonic = mnemonicToken as Mnemonic
-    const opsText = raw.slice(parts[0].length).trim()
-    const ops = opsText.length > 0 ? opsText.split(',').map((o) => parseOperand(o)) : []
+    const afterMnemonic = work.slice(parts[0].length)
+    const opsLeadWs = afterMnemonic.length - afterMnemonic.trimStart().length
+    const opsText = afterMnemonic.trim()
+    const opsOffset = offset + parts[0].length + opsLeadWs
+    const opEntries = opsText.length > 0 ? splitWithOffsets(opsText, opsOffset) : []
+    const ops = opEntries.map((e) => parseOperand(e.text))
 
-    if (!validateOperands(mnemonic, opsText, ops, lineNo, errors)) continue
+    if (!validateOperands(mnemonic, opsText, ops, opEntries, lineNo, offset + 1, mnemonic.length, errors)) continue
 
-    instructions.push({ mnemonic, ops, label, line: lineNo, raw: lines[i].trim() })
+    instructions.push({ mnemonic, ops, label, line: lineNo, raw: originalLine.trim() })
   }
 
   const codeLabelNames = new Set(instructions.filter((instr) => instr.label).map((instr) => instr.label!))
   const dataLabelNames = new Set(data.map((d) => d.name))
 
+  function findColumn(lineNo: number, name: string): number | undefined {
+    const idx = lines[lineNo - 1]?.indexOf(name)
+    return idx !== undefined && idx >= 0 ? idx + 1 : undefined
+  }
+
   for (const instr of instructions) {
     for (const op of instr.ops) {
       if (op.kind === 'label') {
         if (JUMP_MNEMONICS.has(instr.mnemonic)) {
-          if (!codeLabelNames.has(op.name)) errors.push({ line: instr.line, message: `Tanımsız etiket: ${op.name}` })
+          if (!codeLabelNames.has(op.name)) {
+            errors.push({ line: instr.line, message: `Tanımsız etiket: ${op.name}`, column: findColumn(instr.line, op.name), length: op.name.length })
+          }
         } else if (!dataLabelNames.has(op.name)) {
-          errors.push({ line: instr.line, message: `Tanımsız veri etiketi: ${op.name}` })
+          errors.push({ line: instr.line, message: `Tanımsız veri etiketi: ${op.name}`, column: findColumn(instr.line, op.name), length: op.name.length })
         }
       }
       if (op.kind === 'mem' && op.label && !dataLabelNames.has(op.label)) {
-        errors.push({ line: instr.line, message: `Tanımsız veri etiketi: ${op.label}` })
+        errors.push({ line: instr.line, message: `Tanımsız veri etiketi: ${op.label}`, column: findColumn(instr.line, op.label), length: op.label.length })
       }
     }
   }

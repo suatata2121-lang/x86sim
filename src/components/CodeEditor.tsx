@@ -4,12 +4,14 @@ export function CodeEditor({
   breakpoints,
   onToggleBreakpoint,
   currentLine,
+  errorLines,
 }: {
   value: string
   onChange: (value: string) => void
   breakpoints: Set<number>
   onToggleBreakpoint: (line: number) => void
   currentLine: number | null
+  errorLines?: Set<number>
 }) {
   const lineCount = value.split('\n').length
 
@@ -20,6 +22,7 @@ export function CodeEditor({
           const lineNo = i + 1
           const classes = ['gutter-line']
           if (currentLine === lineNo) classes.push('gutter-current')
+          if (errorLines?.has(lineNo)) classes.push('gutter-error')
           return (
             <div
               key={lineNo}

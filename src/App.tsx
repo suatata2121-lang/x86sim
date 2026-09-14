@@ -142,6 +142,7 @@ export default function App() {
             breakpoints={breakpoints}
             onToggleBreakpoint={toggleBreakpoint}
             currentLine={currentLine}
+            errorLines={new Set(errors.map((e) => e.line))}
           />
           <div className="toolbar">
             <button onClick={handleAssemble}>Derle</button>
@@ -154,9 +155,21 @@ export default function App() {
           </div>
           {errors.length > 0 && (
             <ul className="errors">
-              {errors.map((e, i) => (
-                <li key={i}>Satır {e.line}: {e.message}</li>
-              ))}
+              {errors.map((e, i) => {
+                const lineText = source.split('\n')[e.line - 1] ?? ''
+                return (
+                  <li key={i}>
+                    <div>
+                      Satır {e.line}{e.column ? `, Sütun ${e.column}` : ''}: {e.message}
+                    </div>
+                    {e.column && (
+                      <pre className="error-preview">
+                        {lineText + '\n' + ' '.repeat(e.column - 1) + '^'.repeat(Math.max(1, e.length ?? 1))}
+                      </pre>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           )}
           {assembled && (
