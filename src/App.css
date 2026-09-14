@@ -124,6 +124,10 @@ textarea {
   color: #a0a0a0;
 }
 
+.status.error {
+  color: #ff8080;
+}
+
 .output {
   min-height: 2rem;
   white-space: pre-wrap;

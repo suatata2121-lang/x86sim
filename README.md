@@ -6,20 +6,28 @@ Tarayıcı tabanlı, [emu8086](https://emu8086-microprocessor-emulator.en.softon
 
 Erken aşama. Şu an çalışan:
 
-- Basit bir assembler (`src/core/assembler.ts`): etiketler, yorumlar, temel komutlar
-- Bir 8086 CPU çekirdeği (`src/core/cpu.ts`): 16/8-bit yazmaçlar, bayraklar, 64K bellek, temel `INT 21h` desteği (AH=02 karakter yazdır, AH=4Ch çıkış)
-- Desteklenen komutlar: `MOV ADD SUB INC DEC CMP JMP JE JNE JG JL JGE JLE LOOP PUSH POP INT NOP HLT`
-- Adım adım / tam çalıştırma, yazmaç ve bayrak görünümü olan minimal bir arayüz
+- Bir assembler (`src/core/assembler.ts`): etiketler, yorumlar, `DB`/`DW` veri direktifleri, bellek operandları (`[BX]`, `[SI+4]`, `[MSG]`, `[MSG+SI]`, `BYTE/WORD PTR`), işlenen sayısı/türü ve tanımsız-etiket doğrulaması (derleme zamanında hata verir)
+- Bir 8086 CPU çekirdeği (`src/core/cpu.ts`): 16/8-bit yazmaçlar, bayraklar, 64K düz bellek, veri etiketlerinin belleğe yerleştirilmesi, `INT 21h` desteği (AH=02 karakter yazdır, AH=09 `$`-sonlandırmalı string yazdır, AH=4Ch çıkış)
+- Desteklenen komutlar: `MOV ADD SUB INC DEC CMP JMP JE JNE JG JL JGE JLE LOOP PUSH POP INT NOP HLT` (kaynak/hedef olarak yazmaç, sayı ya da bellek adresi)
+- Adım adım / tam çalıştırma, yazmaç ve bayrak görünümü, derleme + çalışma zamanı hata gösterimi olan minimal bir arayüz
+
+### Bilinen sınırlamalar
+
+- Taban + indeks kombinasyonu (`[BX+SI]` gibi) desteklenmiyor — en fazla bir taban yazmacı (`BX/BP/SI/DI`) + bir etiket + bir sabit ofset.
+- Bellek işleneninin boyutu (`BYTE`/`WORD PTR` verilmediğinde) bir yazmaçtan çıkarılamıyorsa varsayılan olarak word (16-bit) kabul edilir; MASM'deki gibi "boyut belirsiz" hatası verilmez.
+- Segment yazmaçları (`DS/ES/SS/CS`) yok; bellek düz (flat) 64K olarak modelleniyor.
 
 ## Yapılacaklar (yol haritası)
 
-- [ ] Veri segmenti / `DB`, `DW` direktifleri ve bellek üzerinden adresleme
+- [x] Veri segmenti / `DB`, `DW` direktifleri ve bellek üzerinden adresleme
 - [ ] Bellek görüntüleyici (hex dump) arayüzü
 - [ ] Eksik komutlar: `MUL DIV AND OR XOR NOT SHL SHR CALL RET`
-- [ ] `INT 21h` AH=09 (string yazdırma), AH=01/0A (klavye girişi)
+- [x] `INT 21h` AH=09 (string yazdırma)
+- [ ] `INT 21h` AH=01/0A (klavye girişi)
 - [ ] Breakpoint desteği
 - [ ] Assembler hata mesajlarının iyileştirilmesi (kolon/karakter konumu)
 - [ ] Örnek program kütüphanesi
+- [ ] `[BX+SI]` tarzı taban+indeks adresleme
 
 ## Geliştirme
 
