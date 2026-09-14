@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { assemble } from './core/assembler'
 import { Cpu } from './core/cpu'
 import type { AssembleError, Flags, Reg16 } from './core/types'
 import { RegisterView } from './components/RegisterView'
 import { MemoryView } from './components/MemoryView'
+import { CodeEditor } from './components/CodeEditor'
 import './App.css'
 
 const SAMPLE = `; Bir dizideki baytları toplar; veri segmenti + bellek adresleme örneği
@@ -39,8 +40,19 @@ export default function App() {
   const [assembled, setAssembled] = useState(false)
   const [currentLine, setCurrentLine] = useState<number | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
+  const [hitBreakpoint, setHitBreakpoint] = useState(false)
 
   const canRun = assembled && !halted
+
+  function toggleBreakpoint(line: number) {
+    setBreakpoints((prev) => {
+      const next = new Set(prev)
+      if (next.has(line)) next.delete(line)
+      else next.add(line)
+      return next
+    })
+  }
 
   function syncState() {
     const cpu = cpuRef.current
@@ -48,6 +60,7 @@ export default function App() {
     setFlags({ ...cpu.flags })
     setOutput(cpu.output.join(''))
     setHalted(cpu.halted)
+    setHitBreakpoint(cpu.hitBreakpoint)
     const instr = cpu.instructions[cpu.ip]
     setCurrentLine(instr ? instr.line : null)
   }
@@ -77,7 +90,7 @@ export default function App() {
 
   function handleRun() {
     try {
-      cpuRef.current.run()
+      cpuRef.current.run(100000, breakpoints)
       setRuntimeError(null)
     } catch (e) {
       setRuntimeError(e instanceof Error ? e.message : String(e))
@@ -91,8 +104,6 @@ export default function App() {
     syncState()
   }
 
-  const lineCount = useMemo(() => source.split('\n').length, [source])
-
   return (
     <div className="app">
       <header>
@@ -101,17 +112,21 @@ export default function App() {
       </header>
       <main>
         <section className="editor-panel">
-          <textarea
-            spellCheck={false}
+          <CodeEditor
             value={source}
-            onChange={(e) => setSource(e.target.value)}
-            rows={Math.max(16, lineCount + 1)}
+            onChange={setSource}
+            breakpoints={breakpoints}
+            onToggleBreakpoint={toggleBreakpoint}
+            currentLine={currentLine}
           />
           <div className="toolbar">
             <button onClick={handleAssemble}>Derle</button>
             <button onClick={handleStep} disabled={!canRun}>Adım</button>
             <button onClick={handleRun} disabled={!canRun}>Çalıştır</button>
             <button onClick={handleReset} disabled={!assembled}>Sıfırla</button>
+            {breakpoints.size > 0 && (
+              <button onClick={() => setBreakpoints(new Set())}>Kesme noktalarını temizle</button>
+            )}
           </div>
           {errors.length > 0 && (
             <ul className="errors">
@@ -122,7 +137,11 @@ export default function App() {
           )}
           {assembled && (
             <p className="status">
-              {halted ? 'Program durdu.' : `Sıradaki satır: ${currentLine ?? '-'}`}
+              {halted
+                ? 'Program durdu.'
+                : hitBreakpoint
+                  ? `⏸ Kesme noktasında durduruldu: satır ${currentLine ?? '-'}`
+                  : `Sıradaki satır: ${currentLine ?? '-'}`}
             </p>
           )}
           {runtimeError && <p className="status error">Çalışma zamanı hatası: {runtimeError}</p>}

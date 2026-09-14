@@ -22,6 +22,7 @@ export class Cpu {
   dataLabels = new Map<string, { address: number; length: number }>()
   ip = 0
   halted = false
+  hitBreakpoint = false
   output: string[] = []
   steps = 0
 
@@ -46,6 +47,7 @@ export class Cpu {
     }
     this.ip = 0
     this.halted = false
+    this.hitBreakpoint = false
     this.output = []
     this.steps = 0
   }
@@ -352,7 +354,23 @@ export class Cpu {
     }
   }
 
-  run(maxSteps = 100000) {
-    while (!this.halted && this.steps < maxSteps) this.step()
+  // breakpoints: kaynak dosyasındaki satır numaraları. O satıra gelen bir komutu
+  // ÇALIŞTIRMADAN ÖNCE durur (adım adım çalıştırma bu kontrolü es geçer). Devam
+  // ederken, o an durulan satırın kendisinde tekrar durmamak için ilk komut her
+  // zaman çalıştırılır.
+  run(maxSteps = 100000, breakpoints?: Set<number>) {
+    this.hitBreakpoint = false
+    let first = true
+    while (!this.halted && this.steps < maxSteps) {
+      if (!first && breakpoints && breakpoints.size > 0) {
+        const instr = this.instructions[this.ip]
+        if (instr && breakpoints.has(instr.line)) {
+          this.hitBreakpoint = true
+          break
+        }
+      }
+      this.step()
+      first = false
+    }
   }
 }

@@ -11,6 +11,7 @@ Erken aşama. Şu an çalışan:
 - Desteklenen komutlar: `MOV ADD SUB INC DEC CMP MUL DIV AND OR XOR NOT SHL SHR JMP JE JNE JG JL JGE JLE LOOP PUSH POP CALL RET INT NOP HLT` (kaynak/hedef olarak yazmaç, sayı ya da bellek adresi)
 - Adım adım / tam çalıştırma, yazmaç ve bayrak görünümü, derleme + çalışma zamanı hata gösterimi olan minimal bir arayüz
 - Bir bellek görüntüleyici (`src/components/MemoryView.tsx`): 16x16 hex dump + ASCII, adrese/SP'ye/veri etiketlerine atlama
+- Kesme noktaları (breakpoint): editörün kenar şeridinden (`src/components/CodeEditor.tsx`) satıra tıklayarak aç/kapat; "Çalıştır" o satıra gelmeden hemen önce durur, tekrar "Çalıştır"a basınca devam eder
 
 ### Bilinen sınırlamalar
 
@@ -27,7 +28,7 @@ Erken aşama. Şu an çalışan:
 - [x] Eksik komutlar: `MUL DIV AND OR XOR NOT SHL SHR CALL RET`
 - [x] `INT 21h` AH=09 (string yazdırma)
 - [ ] `INT 21h` AH=01/0A (klavye girişi)
-- [ ] Breakpoint desteği
+- [x] Breakpoint desteği
 - [ ] Assembler hata mesajlarının iyileştirilmesi (kolon/karakter konumu)
 - [ ] Örnek program kütüphanesi
 - [ ] `[BX+SI]` tarzı taban+indeks adresleme
@@ -50,5 +51,6 @@ src/
   components/
     RegisterView.tsx # yazmaç/bayrak paneli
     MemoryView.tsx   # bellek hex dump / gezinme paneli
+    CodeEditor.tsx   # satır numaralı editör + breakpoint kenar şeridi
   App.tsx             # editör + kontroller + üst düzey akış
 ```
