@@ -3,6 +3,7 @@ import { assemble } from './core/assembler'
 import { Cpu } from './core/cpu'
 import type { AssembleError, Flags, Reg16 } from './core/types'
 import { RegisterView } from './components/RegisterView'
+import { MemoryView } from './components/MemoryView'
 import './App.css'
 
 const SAMPLE = `; Bir dizideki baytları toplar; veri segmenti + bellek adresleme örneği
@@ -132,6 +133,7 @@ export default function App() {
         </section>
         <aside>
           <RegisterView regs={regs} flags={flags} />
+          <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
         </aside>
       </main>
     </div>
