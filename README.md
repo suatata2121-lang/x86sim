@@ -13,6 +13,7 @@ Erken aşama. Şu an çalışan:
 - Bir bellek görüntüleyici (`src/components/MemoryView.tsx`): 16x16 hex dump + ASCII, adrese/SP'ye/veri etiketlerine atlama
 - Kesme noktaları (breakpoint): editörün kenar şeridinden (`src/components/CodeEditor.tsx`) satıra tıklayarak aç/kapat; "Çalıştır" o satıra gelmeden hemen önce durur, tekrar "Çalıştır"a basınca devam eder
 - Klavye girişi: `INT 21h AH=01` (tek karakter) ve `AH=0Ah` (tamponlu satır) programı beklemeye alır, arayüzde bir giriş kutusu çıkar; kullanıcı "Gönder"e basınca (veya Enter'a) yürütme kaldığı yerden devam eder
+- Örnek program kütüphanesi (`src/examples.ts`): editörün üstündeki açılır listeden 9 hazır program (Merhaba Dünya, aritmetik, döngü, bellek adresleme, bit işlemleri, çarpma/bölme, alt program, koşullu atlama, klavye girişi) "Yükle" ile editöre aktarılabilir
 
 ### Bilinen sınırlamalar
 
@@ -32,7 +33,7 @@ Erken aşama. Şu an çalışan:
 - [x] `INT 21h` AH=01/0A (klavye girişi)
 - [x] Breakpoint desteği
 - [ ] Assembler hata mesajlarının iyileştirilmesi (kolon/karakter konumu)
-- [ ] Örnek program kütüphanesi
+- [x] Örnek program kütüphanesi
 - [ ] `[BX+SI]` tarzı taban+indeks adresleme
 
 ## Geliştirme
@@ -54,5 +55,6 @@ src/
     RegisterView.tsx # yazmaç/bayrak paneli
     MemoryView.tsx   # bellek hex dump / gezinme paneli
     CodeEditor.tsx   # satır numaralı editör + breakpoint kenar şeridi
+  examples.ts         # hazır örnek program kütüphanesi
   App.tsx             # editör + kontroller + üst düzey akış
 ```

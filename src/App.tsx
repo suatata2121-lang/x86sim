@@ -5,32 +5,14 @@ import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
 import { RegisterView } from './components/RegisterView'
 import { MemoryView } from './components/MemoryView'
 import { CodeEditor } from './components/CodeEditor'
+import { EXAMPLES } from './examples'
 import './App.css'
 
-const SAMPLE = `; Bir dizideki baytları toplar; veri segmenti + bellek adresleme örneği
-MSG DB 'Sonuc: $'
-NUMS DB 10, 20, 30, 40, 5
-
-MOV AH, 9
-MOV DX, MSG
-INT 21h
-
-MOV CX, 5
-MOV SI, 0
-MOV AX, 0
-SUMLOOP:
-MOV BL, [NUMS+SI]
-MOV BH, 0
-ADD AX, BX
-INC SI
-LOOP SUMLOOP
-
-MOV AH, 4Ch
-INT 21h
-`
+const DEFAULT_EXAMPLE_ID = 'array-sum'
 
 export default function App() {
-  const [source, setSource] = useState(SAMPLE)
+  const [source, setSource] = useState(EXAMPLES.find((e) => e.id === DEFAULT_EXAMPLE_ID)!.source)
+  const [selectedExampleId, setSelectedExampleId] = useState(DEFAULT_EXAMPLE_ID)
   const [errors, setErrors] = useState<AssembleError[]>([])
   const cpuRef = useRef(new Cpu())
   const [regs, setRegs] = useState<Record<Reg16, number>>(cpuRef.current.regs)
@@ -108,6 +90,19 @@ export default function App() {
     syncState()
   }
 
+  function handleLoadExample() {
+    const example = EXAMPLES.find((e) => e.id === selectedExampleId)
+    if (!example) return
+    setSource(example.source)
+    setErrors([])
+    setAssembled(false)
+    setRuntimeError(null)
+    setBreakpoints(new Set())
+    setInputValue('')
+    cpuRef.current = new Cpu()
+    syncState()
+  }
+
   function handleSubmitInput() {
     try {
       cpuRef.current.provideInput(inputValue)
@@ -127,6 +122,20 @@ export default function App() {
       </header>
       <main>
         <section className="editor-panel">
+          <div className="examples-bar">
+            <select
+              value={selectedExampleId}
+              onChange={(e) => setSelectedExampleId(e.target.value)}
+            >
+              {EXAMPLES.map((ex) => (
+                <option key={ex.id} value={ex.id}>{ex.title}</option>
+              ))}
+            </select>
+            <button onClick={handleLoadExample}>Yükle</button>
+          </div>
+          <p className="example-description">
+            {EXAMPLES.find((e) => e.id === selectedExampleId)?.description}
+          </p>
           <CodeEditor
             value={source}
             onChange={setSource}
