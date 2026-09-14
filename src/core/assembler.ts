@@ -31,6 +31,65 @@ function parseOperand(token: string): Operand {
   return { kind: 'label', name: t }
 }
 
+const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+// Her komutun beklediği işlenen sayısı ve konum başına izin verilen işlenen türleri.
+const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
+  MOV: [['reg'], ['reg', 'imm']],
+  ADD: [['reg'], ['reg', 'imm']],
+  SUB: [['reg'], ['reg', 'imm']],
+  CMP: [['reg'], ['reg', 'imm']],
+  INC: [['reg']],
+  DEC: [['reg']],
+  PUSH: [['reg']],
+  POP: [['reg']],
+  JMP: [['label']],
+  JE: [['label']],
+  JNE: [['label']],
+  JG: [['label']],
+  JL: [['label']],
+  JGE: [['label']],
+  JLE: [['label']],
+  LOOP: [['label']],
+  INT: [['imm']],
+  NOP: [],
+  HLT: [],
+}
+
+const OPERAND_KIND_LABEL: Record<Operand['kind'], string> = {
+  reg: 'yazmaç',
+  imm: 'sayı',
+  label: 'etiket',
+}
+
+function validateOperands(mnemonic: Mnemonic, opsText: string, ops: Operand[], lineNo: number, errors: AssembleError[]): boolean {
+  const spec = OPERAND_SPECS[mnemonic] ?? []
+  if (ops.length !== spec.length) {
+    errors.push({
+      line: lineNo,
+      message: `${mnemonic} komutu ${spec.length} işlenen bekliyor, ${ops.length} bulundu: "${opsText}"`,
+    })
+    return false
+  }
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i]
+    if (!spec[i].includes(op.kind)) {
+      const expected = spec[i].map((k) => OPERAND_KIND_LABEL[k]).join(' veya ')
+      const shown = op.kind === 'label' ? op.name : op.kind === 'reg' ? op.name : String(op.value)
+      errors.push({
+        line: lineNo,
+        message: `${mnemonic} komutunun ${i + 1}. işleneni geçersiz: "${shown}" (${expected} bekleniyor)`,
+      })
+      return false
+    }
+    if (op.kind === 'label' && !IDENTIFIER_RE.test(op.name)) {
+      errors.push({ line: lineNo, message: `Geçersiz etiket adı: "${op.name}"` })
+      return false
+    }
+  }
+  return true
+}
+
 export function assemble(source: string): { instructions: Instruction[]; errors: AssembleError[] } {
   const instructions: Instruction[] = []
   const errors: AssembleError[] = []
@@ -65,6 +124,8 @@ export function assemble(source: string): { instructions: Instruction[]; errors:
     const mnemonic = mnemonicToken as Mnemonic
     const opsText = raw.slice(parts[0].length).trim()
     const ops = opsText.length > 0 ? opsText.split(',').map((o) => parseOperand(o)) : []
+
+    if (!validateOperands(mnemonic, opsText, ops, lineNo, errors)) continue
 
     instructions.push({ mnemonic, ops, label, line: lineNo, raw: lines[i].trim() })
   }
