@@ -11,10 +11,10 @@ Early stage. Currently working:
 - An assembler (`src/core/assembler.ts`): labels, comments, `DB`/`DW` data directives, memory operands — any combination of a base (`BX`/`BP`), an index (`SI`/`DI`), a label, and a constant offset (`[BX]`, `[SI+4]`, `[MSG]`, `[BX+SI]`, `[TABLE+BX+SI+2]`, `BYTE/WORD PTR`) —, operand count/type checking, and undefined-label validation (reported at assemble time). Errors come with a line **and column**; an unknown instruction (like "MOVE") gets a "did you mean" suggestion for the closest real one.
 - An 8086 CPU core (`src/core/cpu.ts`): 16/8-bit registers, flags (`ZF SF CF OF DF`), a flat 64K memory, data labels placed into memory, `INT 21h` support (AH=01 read character, AH=02 print character, AH=09 print `$`-terminated string, AH=0Ah read a buffered line, AH=4Ch exit)
 - Supported instructions: `MOV ADD SUB INC DEC CMP MUL DIV AND OR XOR NOT SHL SHR XCHG NEG TEST JMP JE JNE JG JL JGE JLE JA JAE JB JBE JCXZ LOOP PUSH POP CALL RET IN OUT MOVSB STOSB LODSB CMPSB SCASB CLD STD INT NOP HLT`, plus the `REP`/`REPE`/`REPNE` prefixes on the string instructions (source/destination can be a register, a number, or a memory address)
-- A minimal UI with step/run, register and flag views, and assemble-time + runtime error display
+- A CodeMirror 6 editor (`src/components/CodeEditor.tsx`, `src/components/asmLanguage.ts`) with real syntax highlighting for this assembly dialect (mnemonics, registers, directives, labels, numbers, strings, comments), undo/redo, and bracket matching — replacing the earlier plain `<textarea>`
 - Virtual device control: `IN`/`OUT` read and write a 256-entry virtual I/O port space (`Cpu.ports`), wired up to four animated devices in the sidebar (`src/components/Devices.tsx`) — a traffic light, a stepper motor, a 7-segment display, and a thermometer (see **Virtual devices** below). A new **▶ Animate** mode steps the program automatically at a fixed pace (instead of instantly, like "Run") so you can actually watch a device change over time; **⏹ Stop** ends it early.
 - A memory viewer (`src/components/MemoryView.tsx`): a 16x16 hex dump + ASCII, jump to an address/SP/data label
-- Breakpoints: click a line in the editor's gutter (`src/components/CodeEditor.tsx`) to toggle one; "Run" stops right before reaching that line, and resumes on the next "Run"
+- Breakpoints: click a line in the editor's gutter to toggle one (shown as a red dot); "Run" stops right before reaching that line, and resumes on the next "Run"
 - Keyboard input: `INT 21h AH=01` (single character) and `AH=0Ah` (buffered line) pause the program; an input box appears in the UI, and execution resumes once the user hits "Send" (or Enter)
 - `JA`/`JAE`/`JB`/`JBE` (unsigned conditional jumps, using `CF`/`ZF`) alongside the existing signed `JG`/`JL`/`JGE`/`JLE`; `JCXZ` (jump if `CX` is zero); `XCHG`, `NEG`, `TEST`
 - Byte string instructions `MOVSB`/`STOSB`/`LODSB`/`CMPSB`/`SCASB`, optionally prefixed with `REP`/`REPE`/`REPNE` to repeat while `CX != 0` (and, for `REPE`/`REPNE`, while `ZF` keeps matching); `CLD`/`STD` set the direction `SI`/`DI` move in
@@ -46,6 +46,8 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - Only 4 fixed virtual devices exist, at fixed ports; there's no way to attach a device to an arbitrary port or add a new device type from the UI.
 - `IN` always returns whatever was last written with `OUT` (or `0` if nothing has been written yet) — none of the four devices act as a live sensor feeding independent data back to the program.
 - Only the byte forms of the string instructions exist (`MOVSB` etc.); there's no `MOVSW`/`STOSW`/`LODSW`/`CMPSW`/`SCASW`. `REP`-prefixed string instructions run their entire loop within a single "Step", rather than stopping after each iteration.
+- The editor's syntax highlighting is a small hand-written tokenizer (`src/components/asmLanguage.ts`), not a full parser — it colors things by lexical pattern (is this word a known mnemonic/register/directive?) rather than validating structure, so it can occasionally color a token in a way that doesn't match how the assembler will actually interpret that line. Breakpoint/error-line highlighting is recomputed from the plain source text on every keystroke rather than tracked as live document positions, so it's simple but doesn't shift a breakpoint's line if you insert lines above it before re-assembling.
+- Adding CodeMirror grew the production JS bundle substantially (~190KB gzipped); it isn't code-split, so the whole editor loads up front.
 
 ## Roadmap
 
@@ -60,7 +62,7 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - [x] `[BX+SI]`-style base+index addressing
 - [x] Virtual device control (`IN`/`OUT`): traffic light, stepper motor, 7-segment display, thermometer
 - [x] More instructions: `XCHG NEG TEST JA JAE JB JBE JCXZ`, byte string ops (`MOVSB STOSB LODSB CMPSB SCASB`) with `REP`/`REPE`/`REPNE`, `CLD`/`STD`
-- [ ] A modern code editor (CodeMirror 6) with real syntax highlighting, replacing the plain textarea
+- [x] A modern code editor (CodeMirror 6) with real syntax highlighting, replacing the plain textarea
 - [ ] UI: light/dark theme toggle, multi-file/tabbed editing
 - [ ] Data-bus animations showing register/memory/ALU data flow as each instruction executes
 
@@ -86,7 +88,8 @@ src/
   components/
     RegisterView.tsx # register/flag panel
     MemoryView.tsx   # memory hex dump / navigation panel
-    CodeEditor.tsx   # line-numbered editor + breakpoint gutter
+    CodeEditor.tsx   # CodeMirror 6 editor: breakpoint gutter, current-line/error-line highlighting
+    asmLanguage.ts   # hand-written CodeMirror tokenizer for this assembly dialect
     Devices.tsx      # virtual I/O device views (traffic light, motor, 7-seg, thermometer)
   examples.ts         # built-in example program library
   App.tsx             # editor + controls + top-level flow
