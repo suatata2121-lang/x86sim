@@ -12,11 +12,15 @@ const MNEMONICS = new Set([
 ])
 
 const REGISTERS = new Set([
-  'AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP',
+  'AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'DS', 'ES', 'SS', 'CS',
   'AL', 'AH', 'BL', 'BH', 'CL', 'CH', 'DL', 'DH',
 ])
 
-const DIRECTIVES = new Set(['DB', 'DW', 'BYTE', 'WORD', 'PTR'])
+const DIRECTIVES = new Set([
+  'DB', 'DW', 'BYTE', 'WORD', 'PTR',
+  'MODEL', 'STACK', 'DATA', 'CODE', 'CONST', 'DOSSEG', 'STARTUP',
+  'ASSUME', 'END', 'PROC', 'ENDP',
+])
 
 // The raw tokenizer, exported separately from the StreamLanguage wrapper so
 // it can be unit-tested directly against a real StringStream without going

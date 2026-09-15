@@ -1,6 +1,6 @@
 import type { DataDeclaration, Flags, Instruction, Operand, PendingInput, Reg16, Reg8, RegName } from './types'
 
-const REG16: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP']
+const REG16: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'DS', 'ES', 'SS', 'CS']
 
 const REG8_PARENT: Record<Reg8, { parent: Reg16; high: boolean }> = {
   AH: { parent: 'AX', high: true }, AL: { parent: 'AX', high: false },
@@ -13,7 +13,7 @@ const MEMORY_SIZE = 0x10000
 const INITIAL_SP = 0xfffe
 
 export class Cpu {
-  regs: Record<Reg16, number> = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP }
+  regs: Record<Reg16, number> = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP, DS: 0, ES: 0, SS: 0, CS: 0 }
   flags: Flags = { ZF: false, SF: false, CF: false, OF: false, DF: false }
   memory = new Uint8Array(MEMORY_SIZE)
   // Virtual I/O ports for IN/OUT, driving the virtual device views (traffic
@@ -47,7 +47,7 @@ export class Cpu {
   }
 
   reset() {
-    this.regs = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP }
+    this.regs = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP, DS: 0, ES: 0, SS: 0, CS: 0 }
     this.flags = { ZF: false, SF: false, CF: false, OF: false, DF: false }
     this.memory.fill(0)
     this.ports.fill(0)

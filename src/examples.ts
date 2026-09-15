@@ -359,4 +359,50 @@ MOV AH, 4Ch
 INT 21h
 `,
   },
+  {
+    id: 'masm-boilerplate',
+    title: 'MASM-Style PUSH/POP',
+    description: 'A textbook-style program with .MODEL/.STACK/.DATA/.CODE segment directives, showing they assemble and run unchanged here.',
+    source: `; 8086 Assembly - basic PUSH/POP example
+; Compiler: MASM/TASM (16-bit)
+
+.MODEL SMALL
+.STACK 100H          ; reserve 256 bytes of stack
+
+.DATA
+    num1 DW 1234h
+    num2 DW 5678h
+    result DW ?
+
+.CODE
+START:
+    MOV AX, @DATA
+    MOV DS, AX
+
+    ; --- save register values ---
+    MOV AX, 1111h
+    MOV BX, 2222h
+    MOV CX, 3333h
+
+    PUSH AX          ; AX pushed onto the stack (SP = SP - 2)
+    PUSH BX          ; BX pushed
+    PUSH CX          ; CX pushed
+
+    ; clobber the registers to prove the restore works
+    MOV AX, 0
+    MOV BX, 0
+    MOV CX, 0
+
+    ; --- restore (LIFO: last in, first out) ---
+    POP CX           ; CX = 3333h
+    POP BX           ; BX = 2222h
+    POP AX           ; AX = 1111h
+
+    ; end of program
+    MOV AH, 4Ch
+    INT 21h
+
+END START
+`,
+  },
 ]

@@ -1,7 +1,7 @@
 import type { AssembleError, BaseReg, DataDeclaration, IndexReg, Instruction, Mnemonic, Operand, RegName, RepPrefix } from './types'
 
 const REGISTERS: RegName[] = [
-  'AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP',
+  'AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'DS', 'ES', 'SS', 'CS',
   'AL', 'AH', 'BL', 'BH', 'CL', 'CH', 'DL', 'DH',
 ]
 
@@ -39,6 +39,10 @@ function parseImmediate(token: string): number | null {
   if (/^0x[0-9a-f]+$/i.test(t)) return parseInt(t, 16)
   if (/^-?[0-9]+$/.test(t)) return parseInt(t, 10)
   if (/^'.'$/.test(t)) return t.charCodeAt(1)
+  // MASM's built-in "segment address of the data group" symbol. This
+  // simulator has no segmentation, so there's no real value to give it —
+  // it resolves to 0, matching how loading DS with it is also a no-op here.
+  if (/^@data$/i.test(t)) return 0
   return null
 }
 
@@ -424,6 +428,32 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
     let offset = work.length - work.trimStart().length
     work = work.trim()
     if (work.length === 0) continue
+
+    // MASM/TASM-style boilerplate this simulator's flat-memory model has no
+    // use for (segment/model declarations, END's optional entry-point
+    // label) — recognized and skipped rather than erroring as an unknown
+    // instruction, so a textbook/emu8086-style program can be pasted in
+    // without stripping this scaffolding first.
+    if (/^\.(MODEL|STACK|DATA|CODE|CONST|DOSSEG|STARTUP)\b/i.test(work)) continue
+    if (/^ASSUME\b/i.test(work)) continue
+    if (/^END(\s+[A-Za-z_][A-Za-z0-9_]*)?$/i.test(work)) continue
+
+    // "NAME PROC ..." starts a procedure — treated exactly like a standalone
+    // "NAME:" label line (a NOP with that label attached) so CALLs to it
+    // still resolve. "NAME ENDP" just closes it off; nothing to emit.
+    const procMatch = work.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+PROC\b.*$/i)
+    if (procMatch) {
+      const name = procMatch[1]
+      const nameCol = offset + 1
+      if (declaredLabels.has(name)) {
+        errors.push({ line: lineNo, message: `Label already defined: ${name}`, column: nameCol, length: name.length })
+      } else {
+        declaredLabels.add(name)
+        instructions.push({ mnemonic: 'NOP', ops: [], label: name, line: lineNo, raw: originalLine.trim() })
+      }
+      continue
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]*\s+ENDP\b/i.test(work)) continue
 
     const dataMatch = work.match(/^([A-Za-z_][A-Za-z0-9_]*):?\s+(DB|DW)\s+(.*)$/i)
     if (dataMatch) {

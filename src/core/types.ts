@@ -1,4 +1,8 @@
-export type Reg16 = 'AX' | 'BX' | 'CX' | 'DX' | 'SI' | 'DI' | 'BP' | 'SP'
+// DS/ES/SS/CS are accepted for source compatibility with real 8086/MASM
+// code (so e.g. "MOV DS, AX" from a textbook program assembles and runs)
+// but are otherwise inert: this simulator has no segmentation, so their
+// value never affects how an address is computed.
+export type Reg16 = 'AX' | 'BX' | 'CX' | 'DX' | 'SI' | 'DI' | 'BP' | 'SP' | 'DS' | 'ES' | 'SS' | 'CS'
 export type Reg8 = 'AL' | 'AH' | 'BL' | 'BH' | 'CL' | 'CH' | 'DL' | 'DH'
 export type RegName = Reg16 | Reg8
 

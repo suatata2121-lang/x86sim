@@ -1,6 +1,6 @@
 import type { Flags, Reg16 } from '../core/types'
 
-const REG_ORDER: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP']
+const REG_ORDER: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'DS', 'ES', 'SS', 'CS']
 
 function hex(value: number) {
   return value.toString(16).toUpperCase().padStart(4, '0')
