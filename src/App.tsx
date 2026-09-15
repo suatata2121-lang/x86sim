@@ -364,11 +364,11 @@ export default function App() {
         <aside>
           <RegisterView regs={regs} flags={flags} />
           <DataBusView
-            key={cpuGeneration}
+            key={`bus-${cpuGeneration}`}
             lastInstruction={cpuRef.current.lastInstruction}
             steps={cpuRef.current.steps}
           />
-          <DevicesView key={cpuGeneration} ports={cpuRef.current.ports} />
+          <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} />
           <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
         </aside>
       </main>
