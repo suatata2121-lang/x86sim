@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-
-export const PORTS = {
-  TRAFFIC_LIGHT: 0x40,
-  STEPPER_MOTOR: 0x41,
-  SEVEN_SEGMENT: 0x42,
-  THERMOMETER: 0x43,
-} as const
+import { PORTS, STEPPER_SEQUENCE, stepperDelta } from '../core/stepper'
 
 function TrafficLightView({ value }: { value: number }) {
   const red = (value & 0x1) !== 0
@@ -20,19 +14,7 @@ function TrafficLightView({ value }: { value: number }) {
   )
 }
 
-// A standard 4-step full-step unipolar coil sequence. Each valid step (a
-// value from this list that differs from the last one seen) rotates the
-// dial by STEP_DEGREES, forward or backward depending on which direction
-// through the sequence the new value is closer to.
-const STEPPER_SEQUENCE = [0b0011, 0b0110, 0b1100, 0b1001]
 const STEP_DEGREES = 90
-
-export function stepperDelta(sequence: number[], fromIndex: number, toIndex: number): number {
-  const n = sequence.length
-  const forward = (toIndex - fromIndex + n) % n
-  const backward = (fromIndex - toIndex + n) % n
-  return forward <= backward ? forward : -backward
-}
 
 function StepperMotorView({ value }: { value: number }) {
   const [angle, setAngle] = useState(0)
