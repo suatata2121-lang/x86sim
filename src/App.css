@@ -461,6 +461,83 @@ aside {
 
 /* Theme-aware again from here on. */
 
+.stack-diagram {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.seg-band {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  transition: y 0.3s ease, height 0.3s ease;
+}
+
+.seg-data {
+  fill: #3a5a7a;
+}
+
+.seg-free {
+  fill: var(--bg-panel-alt);
+}
+
+.seg-stack {
+  fill: #7a4a2a;
+}
+
+.seg-label {
+  fill: var(--text-dim);
+  font-size: 9px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.seg-label-end {
+  text-anchor: end;
+}
+
+.seg-label-sp {
+  fill: #ffb366;
+  font-weight: bold;
+}
+
+.seg-label-bp {
+  fill: #66c2ff;
+  font-weight: bold;
+}
+
+.seg-bp-line {
+  stroke: #66c2ff;
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+}
+
+.seg-flash {
+  animation: seg-flash-anim 0.5s ease-out;
+}
+
+.seg-flash-push {
+  fill: #6fd66f;
+}
+
+.seg-flash-pop {
+  fill: #ff8a3b;
+}
+
+@keyframes seg-flash-anim {
+  0% { opacity: 0; r: 2; }
+  30% { opacity: 1; r: 8; }
+  100% { opacity: 0; r: 5; }
+}
+
+.stack-detail {
+  text-align: center;
+  margin-top: 0.4rem;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
 .bus-diagram {
   width: 100%;
   height: auto;

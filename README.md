@@ -23,6 +23,7 @@ Early stage. Currently working:
 - A light/dark theme toggle (top right) that persists across reloads (`localStorage`); the four virtual device panels intentionally keep a fixed dark "hardware housing" look in either theme
 - Tabbed editing: open several programs at once, each with its own source and breakpoints. "Load in new tab" opens a library example without discarding what you were working on; closing the last tab is blocked (there's always at least one open)
 - A data bus diagram (`src/components/DataBusView.tsx`) showing Memory / CPU (Registers + ALU + IP) / I/O Ports as three connected blocks; after each step, a small pulse animates along the relevant line (Memory↔CPU for a memory access, CPU↔I/O for `IN`/`OUT`/`INT`) or lights up the matching sub-block (ALU for arithmetic/logic, REG for a plain `MOV`/`XCHG`, IP for a jump/`CALL`/`RET`/`LOOP`) with a text line naming what just happened. `Cpu.lastInstruction` (the instruction step() most recently fetched, even one still waiting on keyboard input) drives it; the classification itself is a pure function of an instruction's mnemonic and operand kinds
+- A Stack/Heap/Data map (`src/components/StackView.tsx`) as an alternative to reading raw hex: three stacked, labeled blocks — **Data** (everything declared with `DB`/`DW`), **Free** (unused memory between the end of static data and the current stack top — there's no real heap allocator, so this is just "not yet used"), and **Stack** (from the current `SP` up to the top of memory) — with the Data/Stack boundary addresses and the live `SP` value shown as text. The Stack block's height (and the Free block shrinking to make room) animates smoothly via a CSS transition whenever `SP` moves, so `PUSH`/`POP`/`CALL`/`RET` visibly grow or shrink it; those four instructions also flash a small marker at the boundary (green for push-like, orange for pop-like). A dashed `BP` line appears inside the Stack block whenever `BP` currently points into it (e.g. after the classic `PUSH BP` / `MOV BP, SP` frame-setup idiom), and the exact word currently on top of the stack is shown as text below the diagram. None of this is drawn to real scale — see the known limitations
 
 ### Virtual devices
 
@@ -54,6 +55,7 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - Switching tabs remounts the editor (so each tab gets its own undo history instead of one shared history across all of them), which means cursor position and scroll offset aren't remembered when you come back to a tab — only the text and breakpoints are.
 - Tabs aren't renameable or persisted; closing the browser tab loses all open programs except whatever's in `localStorage` for the theme choice. There's no save-to-disk / open-from-disk yet.
 - The data bus diagram shows *what kind* of transfer just happened (memory read/write, ALU, I/O, register move, control flow), not the actual values or addresses involved, and it's a simplified 3-block model — no separate address bus / control bus, no segment registers, and a `REP`-prefixed string instruction only shows one pulse for the whole loop rather than one per byte.
+- The Stack/Heap/Data map is intentionally *not to scale* — each block's height is clamped between a fixed minimum and maximum regardless of its real byte count (a real memory map would make Data/Stack invisible slivers next to tens of thousands of Free bytes), so use the printed addresses for exact positions, not the pixel proportions. The `BP` marker's position within the Stack block is similarly an approximation once that block has hit its height cap. There's no real heap allocator, so "Free" never distinguishes "available for a future allocation" from "just never been touched."
 
 ## Roadmap
 
@@ -71,6 +73,7 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - [x] A modern code editor (CodeMirror 6) with real syntax highlighting, replacing the plain textarea
 - [x] UI: light/dark theme toggle, multi-file/tabbed editing
 - [x] Data-bus animations showing register/memory/ALU data flow as each instruction executes
+- [x] A Stack/Heap/Data segment map with animated SP/BP movement on PUSH/POP/CALL
 
 ## Development
 
@@ -91,6 +94,9 @@ src/
     types.ts        # shared types (Instruction, Operand, Flags, ...)
     assembler.ts     # source code -> Instruction[] converter
     cpu.ts            # CPU state and instruction execution
+    dataBus.ts        # pure classifier behind DataBusView (kept out of the component for testability + Fast Refresh)
+    stepper.ts         # pure helpers behind Devices.tsx's stepper motor (same reason)
+    segments.ts         # pure Data/Free/Stack boundary math behind StackView
   components/
     RegisterView.tsx # register/flag panel
     MemoryView.tsx   # memory hex dump / navigation panel
@@ -98,6 +104,7 @@ src/
     asmLanguage.ts   # hand-written CodeMirror tokenizer for this assembly dialect
     Devices.tsx      # virtual I/O device views (traffic light, motor, 7-seg, thermometer)
     DataBusView.tsx  # Memory/CPU/I/O bus diagram + per-instruction classifier
+    StackView.tsx    # Stack/Heap/Data segment map with animated SP/BP
   examples.ts         # built-in example program library
   App.tsx             # editor + controls + top-level flow
 ```

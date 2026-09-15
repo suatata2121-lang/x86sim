@@ -7,6 +7,7 @@ import { MemoryView } from './components/MemoryView'
 import { CodeEditor } from './components/CodeEditor'
 import { DevicesView } from './components/Devices'
 import { DataBusView } from './components/DataBusView'
+import { StackView } from './components/StackView'
 import { EXAMPLES } from './examples'
 import './App.css'
 
@@ -366,6 +367,15 @@ export default function App() {
           <DataBusView
             key={`bus-${cpuGeneration}`}
             lastInstruction={cpuRef.current.lastInstruction}
+            steps={cpuRef.current.steps}
+          />
+          <StackView
+            key={`stack-${cpuGeneration}`}
+            memory={cpuRef.current.memory}
+            data={cpuRef.current.data}
+            sp={regs.SP}
+            bp={regs.BP}
+            lastInstructionMnemonic={cpuRef.current.lastInstruction?.mnemonic ?? null}
             steps={cpuRef.current.steps}
           />
           <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} />
