@@ -9,7 +9,7 @@ function hex(value: number) {
 export function RegisterView({ regs, flags }: { regs: Record<Reg16, number>; flags: Flags }) {
   return (
     <div className="panel">
-      <h3>Yazmaçlar</h3>
+      <h3>Registers</h3>
       <table className="reg-table">
         <tbody>
           {REG_ORDER.map((name) => (
@@ -21,7 +21,7 @@ export function RegisterView({ regs, flags }: { regs: Record<Reg16, number>; fla
           ))}
         </tbody>
       </table>
-      <h3>Bayraklar</h3>
+      <h3>Flags</h3>
       <div className="flags">
         <span className={flags.ZF ? 'flag on' : 'flag'}>ZF</span>
         <span className={flags.SF ? 'flag on' : 'flag'}>SF</span>

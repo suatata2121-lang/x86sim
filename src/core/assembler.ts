@@ -32,7 +32,7 @@ function parseImmediate(token: string): number | null {
   return null
 }
 
-// İki dizgi arasındaki düzenleme (Levenshtein) mesafesi; yazım hatası önerileri için kullanılır.
+// Edit (Levenshtein) distance between two strings; used for typo suggestions.
 function levenshtein(a: string, b: string): number {
   const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
   for (let i = 0; i <= a.length; i++) dp[i][0] = i
@@ -131,11 +131,11 @@ function parseOperand(token: string): Operand {
 
 interface TextAt {
   text: string
-  /** text'in kaynak satırındaki 0-indeksli konumu. */
+  /** 0-indexed position of `text` within the source line. */
   offset: number
 }
 
-// Virgülle ayrılmış işlenenleri, her birinin satırdaki konumuyla birlikte böler.
+// Splits comma-separated operands, tracking each one's position in the line.
 function splitWithOffsets(text: string, baseOffset: number): TextAt[] {
   const result: TextAt[] = []
   let cursor = 0
@@ -147,7 +147,7 @@ function splitWithOffsets(text: string, baseOffset: number): TextAt[] {
   return result
 }
 
-// DB/DW öğelerini, tırnak içindeki virgülleri yok sayarak ve konumlarını koruyarak böler.
+// Splits DB/DW items, ignoring commas inside quotes and preserving their positions.
 function splitTopLevelWithOffsets(text: string, baseOffset: number): TextAt[] {
   const rawParts: TextAt[] = []
   let cur = ''
@@ -187,7 +187,7 @@ function splitTopLevelWithOffsets(text: string, baseOffset: number): TextAt[] {
 function parseDbItems(text: string, lineNo: number, baseOffset: number, errors: AssembleError[]): number[] | null {
   const items = splitTopLevelWithOffsets(text, baseOffset)
   if (items.length === 0) {
-    errors.push({ line: lineNo, message: 'DB en az bir değer bekliyor', column: baseOffset + 1 })
+    errors.push({ line: lineNo, message: 'DB expects at least one value', column: baseOffset + 1 })
     return null
   }
   const bytes: number[] = []
@@ -204,7 +204,7 @@ function parseDbItems(text: string, lineNo: number, baseOffset: number, errors: 
     }
     const imm = parseImmediate(item)
     if (imm === null || imm < -128 || imm > 255) {
-      errors.push({ line: lineNo, message: `Geçersiz DB değeri: "${item}"`, column: offset + 1, length: item.length })
+      errors.push({ line: lineNo, message: `Invalid DB value: "${item}"`, column: offset + 1, length: item.length })
       return null
     }
     bytes.push(imm & 0xff)
@@ -215,7 +215,7 @@ function parseDbItems(text: string, lineNo: number, baseOffset: number, errors: 
 function parseDwItems(text: string, lineNo: number, baseOffset: number, errors: AssembleError[]): number[] | null {
   const items = splitTopLevelWithOffsets(text, baseOffset)
   if (items.length === 0) {
-    errors.push({ line: lineNo, message: 'DW en az bir değer bekliyor', column: baseOffset + 1 })
+    errors.push({ line: lineNo, message: 'DW expects at least one value', column: baseOffset + 1 })
     return null
   }
   const bytes: number[] = []
@@ -226,7 +226,7 @@ function parseDwItems(text: string, lineNo: number, baseOffset: number, errors: 
     }
     const imm = parseImmediate(item)
     if (imm === null || imm < -32768 || imm > 65535) {
-      errors.push({ line: lineNo, message: `Geçersiz DW değeri: "${item}"`, column: offset + 1, length: item.length })
+      errors.push({ line: lineNo, message: `Invalid DW value: "${item}"`, column: offset + 1, length: item.length })
       return null
     }
     const v = imm & 0xffff
@@ -268,10 +268,10 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
 }
 
 const OPERAND_KIND_LABEL: Record<Operand['kind'], string> = {
-  reg: 'yazmaç',
-  imm: 'sayı',
-  label: 'etiket',
-  mem: 'bellek adresi',
+  reg: 'register',
+  imm: 'number',
+  label: 'label',
+  mem: 'memory address',
 }
 
 function describeOperand(op: Operand): string {
@@ -301,7 +301,7 @@ function validateOperands(
   if (ops.length !== spec.length) {
     errors.push({
       line: lineNo,
-      message: `${mnemonic} komutu ${spec.length} işlenen bekliyor, ${ops.length} bulundu: "${opsText}"`,
+      message: `${mnemonic} expects ${spec.length} operand(s), found ${ops.length}: "${opsText}"`,
       column: mnemonicCol,
       length: mnemonicLen,
     })
@@ -311,10 +311,10 @@ function validateOperands(
     const op = ops[i]
     const entry = opEntries[i]
     if (!spec[i].includes(op.kind)) {
-      const expected = spec[i].map((k) => OPERAND_KIND_LABEL[k]).join(' veya ')
+      const expected = spec[i].map((k) => OPERAND_KIND_LABEL[k]).join(' or ')
       errors.push({
         line: lineNo,
-        message: `${mnemonic} komutunun ${i + 1}. işleneni geçersiz: "${describeOperand(op)}" (${expected} bekleniyor)`,
+        message: `Operand ${i + 1} of ${mnemonic} is invalid: "${describeOperand(op)}" (expected ${expected})`,
         column: entry.offset + 1,
         length: entry.text.length,
       })
@@ -323,7 +323,7 @@ function validateOperands(
     if (op.kind === 'label' && !IDENTIFIER_RE.test(op.name)) {
       errors.push({
         line: lineNo,
-        message: `Geçersiz işlenen sözdizimi: "${op.name}"`,
+        message: `Invalid operand syntax: "${op.name}"`,
         column: entry.offset + 1,
         length: entry.text.length,
       })
@@ -333,7 +333,7 @@ function validateOperands(
   if (ops.length === 2 && ops[0].kind === 'mem' && ops[1].kind === 'mem') {
     errors.push({
       line: lineNo,
-      message: `${mnemonic}: iki bellek işleneni aynı anda kullanılamaz`,
+      message: `${mnemonic}: cannot use two memory operands at the same time`,
       column: mnemonicCol,
       length: mnemonicLen,
     })
@@ -367,7 +367,7 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
       const [, name, directive, itemsText] = dataMatch
       const nameCol = offset + 1
       if (declaredLabels.has(name)) {
-        errors.push({ line: lineNo, message: `Etiket zaten tanımlı: ${name}`, column: nameCol, length: name.length })
+        errors.push({ line: lineNo, message: `Label already defined: ${name}`, column: nameCol, length: name.length })
         continue
       }
       const itemsOffset = offset + (dataMatch[0].length - itemsText.length)
@@ -389,7 +389,7 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
       offset += labelMatch[0].length - labelMatch[2].length
       work = labelMatch[2].replace(/\s+$/, '')
       if (declaredLabels.has(name)) {
-        errors.push({ line: lineNo, message: `Etiket zaten tanımlı: ${name}`, column: nameCol, length: name.length })
+        errors.push({ line: lineNo, message: `Label already defined: ${name}`, column: nameCol, length: name.length })
       } else {
         declaredLabels.add(name)
         label = name
@@ -405,8 +405,8 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
     if (!MNEMONICS.includes(mnemonicToken as Mnemonic)) {
       const suggestion = suggestMnemonic(mnemonicToken)
       const message = suggestion
-        ? `Bilinmeyen komut: "${parts[0]}". "${suggestion}" mi demek istediniz?`
-        : `Bilinmeyen komut: "${parts[0]}"`
+        ? `Unknown instruction: "${parts[0]}". Did you mean "${suggestion}"?`
+        : `Unknown instruction: "${parts[0]}"`
       errors.push({ line: lineNo, message, column: offset + 1, length: parts[0].length })
       continue
     }
@@ -436,14 +436,14 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
       if (op.kind === 'label') {
         if (JUMP_MNEMONICS.has(instr.mnemonic)) {
           if (!codeLabelNames.has(op.name)) {
-            errors.push({ line: instr.line, message: `Tanımsız etiket: ${op.name}`, column: findColumn(instr.line, op.name), length: op.name.length })
+            errors.push({ line: instr.line, message: `Undefined label: ${op.name}`, column: findColumn(instr.line, op.name), length: op.name.length })
           }
         } else if (!dataLabelNames.has(op.name)) {
-          errors.push({ line: instr.line, message: `Tanımsız veri etiketi: ${op.name}`, column: findColumn(instr.line, op.name), length: op.name.length })
+          errors.push({ line: instr.line, message: `Undefined data label: ${op.name}`, column: findColumn(instr.line, op.name), length: op.name.length })
         }
       }
       if (op.kind === 'mem' && op.label && !dataLabelNames.has(op.label)) {
-        errors.push({ line: instr.line, message: `Tanımsız veri etiketi: ${op.label}`, column: findColumn(instr.line, op.label), length: op.label.length })
+        errors.push({ line: instr.line, message: `Undefined data label: ${op.label}`, column: findColumn(instr.line, op.label), length: op.label.length })
       }
     }
   }

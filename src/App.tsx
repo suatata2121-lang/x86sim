@@ -118,7 +118,7 @@ export default function App() {
     <div className="app">
       <header>
         <h1>x86sim</h1>
-        <p>Tarayıcı tabanlı, emu8086'dan ilham alan 8086 assembly simülatörü.</p>
+        <p>A browser-based 8086 assembly simulator inspired by emu8086.</p>
       </header>
       <main>
         <section className="editor-panel">
@@ -131,7 +131,7 @@ export default function App() {
                 <option key={ex.id} value={ex.id}>{ex.title}</option>
               ))}
             </select>
-            <button onClick={handleLoadExample}>Yükle</button>
+            <button onClick={handleLoadExample}>Load</button>
           </div>
           <p className="example-description">
             {EXAMPLES.find((e) => e.id === selectedExampleId)?.description}
@@ -145,12 +145,12 @@ export default function App() {
             errorLines={new Set(errors.map((e) => e.line))}
           />
           <div className="toolbar">
-            <button onClick={handleAssemble}>Derle</button>
-            <button onClick={handleStep} disabled={!canRun}>Adım</button>
-            <button onClick={handleRun} disabled={!canRun}>Çalıştır</button>
-            <button onClick={handleReset} disabled={!assembled}>Sıfırla</button>
+            <button onClick={handleAssemble}>Assemble</button>
+            <button onClick={handleStep} disabled={!canRun}>Step</button>
+            <button onClick={handleRun} disabled={!canRun}>Run</button>
+            <button onClick={handleReset} disabled={!assembled}>Reset</button>
             {breakpoints.size > 0 && (
-              <button onClick={() => setBreakpoints(new Set())}>Kesme noktalarını temizle</button>
+              <button onClick={() => setBreakpoints(new Set())}>Clear breakpoints</button>
             )}
           </div>
           {errors.length > 0 && (
@@ -160,7 +160,7 @@ export default function App() {
                 return (
                   <li key={i}>
                     <div>
-                      Satır {e.line}{e.column ? `, Sütun ${e.column}` : ''}: {e.message}
+                      Line {e.line}{e.column ? `, Column ${e.column}` : ''}: {e.message}
                     </div>
                     {e.column && (
                       <pre className="error-preview">
@@ -175,20 +175,20 @@ export default function App() {
           {assembled && (
             <p className="status">
               {halted
-                ? 'Program durdu.'
+                ? 'Program halted.'
                 : hitBreakpoint
-                  ? `⏸ Kesme noktasında durduruldu: satır ${currentLine ?? '-'}`
-                  : `Sıradaki satır: ${currentLine ?? '-'}`}
+                  ? `⏸ Paused at breakpoint: line ${currentLine ?? '-'}`
+                  : `Next line: ${currentLine ?? '-'}`}
             </p>
           )}
-          {runtimeError && <p className="status error">Çalışma zamanı hatası: {runtimeError}</p>}
+          {runtimeError && <p className="status error">Runtime error: {runtimeError}</p>}
           {waitingForInput && (
             <div className="panel input-request">
-              <h3>Klavye girişi bekleniyor</h3>
+              <h3>Waiting for keyboard input</h3>
               <p className="status">
                 {waitingForInput.kind === 'char'
-                  ? 'Program bir karakter okuyor (INT 21h, AH=01h).'
-                  : `Program en fazla ${waitingForInput.maxLen} karakterlik bir satır okuyor (INT 21h, AH=0Ah).`}
+                  ? 'The program is reading a character (INT 21h, AH=01h).'
+                  : `The program is reading a line of up to ${waitingForInput.maxLen} characters (INT 21h, AH=0Ah).`}
               </p>
               <div className="input-request-row">
                 <input
@@ -199,13 +199,13 @@ export default function App() {
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitInput() }}
                 />
-                <button onClick={handleSubmitInput}>Gönder</button>
+                <button onClick={handleSubmitInput}>Send</button>
               </div>
             </div>
           )}
           <div className="panel">
-            <h3>Çıktı</h3>
-            <pre className="output">{output || '(henüz çıktı yok)'}</pre>
+            <h3>Output</h3>
+            <pre className="output">{output || '(no output yet)'}</pre>
           </div>
         </section>
         <aside>

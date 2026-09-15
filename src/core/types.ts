@@ -2,9 +2,9 @@ export type Reg16 = 'AX' | 'BX' | 'CX' | 'DX' | 'SI' | 'DI' | 'BP' | 'SP'
 export type Reg8 = 'AL' | 'AH' | 'BL' | 'BH' | 'CL' | 'CH' | 'DL' | 'DH'
 export type RegName = Reg16 | Reg8
 
-// Bellek dolaylı adresleme: taban (BX/BP) ve indeks (SI/DI) ayrı gruplardır,
-// aynı anda biri tabandan biri indeksten olmak üzere ikisi birden kullanılabilir
-// (örn. [BX+SI]), ama aynı gruptan iki yazmaç bir arada kullanılamaz.
+// Indirect memory addressing: base (BX/BP) and index (SI/DI) are separate
+// groups — one from each group can be combined at once (e.g. [BX+SI]), but
+// two registers from the same group can't be used together.
 export type BaseReg = 'BX' | 'BP'
 export type IndexReg = 'SI' | 'DI'
 
@@ -35,7 +35,7 @@ export interface Instruction {
   raw: string
 }
 
-// DB/DW ile tanımlanan bir veri etiketi: belleğe yerleştirilen ilk baytlar ve adresi.
+// A data label defined with DB/DW: its initial bytes placed in memory, and its address.
 export interface DataDeclaration {
   name: string
   address: number
@@ -46,13 +46,13 @@ export interface DataDeclaration {
 export interface AssembleError {
   line: number
   message: string
-  /** 1-indexli sütun; hatanın kaynak satırındaki tam konumu bilinmiyorsa yoktur. */
+  /** 1-indexed column; absent if the error's exact position in the source line is unknown. */
   column?: number
-  /** Sütundan itibaren kaç karakterin vurgulanacağı (hatalı metnin uzunluğu). */
+  /** How many characters from the column to highlight (length of the offending text). */
   length?: number
 }
 
-// INT 21h AH=01/0A klavye girişi bekliyorken CPU'nun durumu.
+// The CPU's state while waiting for keyboard input via INT 21h AH=01/0A.
 export type PendingInput =
   | { kind: 'char' }
   | { kind: 'string'; bufferAddr: number; maxLen: number }

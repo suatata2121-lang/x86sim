@@ -28,7 +28,7 @@ export function CodeEditor({
               key={lineNo}
               className={classes.join(' ')}
               onClick={() => onToggleBreakpoint(lineNo)}
-              title="Kesme noktasını aç/kapat"
+              title="Toggle breakpoint"
             >
               <span className={breakpoints.has(lineNo) ? 'bp-dot on' : 'bp-dot'} />
               <span className="gutter-num">{lineNo}</span>

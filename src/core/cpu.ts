@@ -90,7 +90,7 @@ export class Cpu {
     if (op.index) addr += this.getReg(op.index)
     if (op.label) {
       const info = this.dataLabels.get(op.label)
-      if (!info) throw new Error(`Tanımsız veri etiketi: ${op.label}`)
+      if (!info) throw new Error(`Undefined data label: ${op.label}`)
       addr += info.address
     }
     return addr & 0xffff
@@ -118,7 +118,7 @@ export class Cpu {
         if (info) return info.address
         const idx = this.labels.get(op.name)
         if (idx !== undefined) return idx
-        throw new Error(`Tanımsız etiket: ${op.name}`)
+        throw new Error(`Undefined label: ${op.name}`)
       }
     }
   }
@@ -126,7 +126,7 @@ export class Cpu {
   private writeOperand(op: Operand, value: number, isWord: boolean) {
     if (op.kind === 'reg') { this.setReg(op.name, isWord ? value & 0xffff : value & 0xff); return }
     if (op.kind === 'mem') { this.writeMem(op, value, isWord); return }
-    throw new Error('Hedef bir yazmaç veya bellek adresi olmalı')
+    throw new Error('Destination must be a register or memory address')
   }
 
   private setArithFlags(result: number, isWord: boolean) {
@@ -149,11 +149,11 @@ export class Cpu {
   private jumpToLabel(op: Operand) {
     if (op.kind === 'label') {
       const idx = this.labels.get(op.name)
-      if (idx === undefined) throw new Error(`Tanımsız etiket: ${op.name}`)
+      if (idx === undefined) throw new Error(`Undefined label: ${op.name}`)
       this.ip = idx
       return
     }
-    throw new Error('Atlama hedefi bir etiket olmalı')
+    throw new Error('Jump target must be a label')
   }
 
   step() {
@@ -221,17 +221,17 @@ export class Cpu {
       }
       case 'DIV': {
         const value = this.readOperand(op1, isWord)
-        if (value === 0) throw new Error('Sıfıra bölme hatası (DIV)')
+        if (value === 0) throw new Error('Division by zero (DIV)')
         if (isWord) {
           const dividend = this.regs.DX * 0x10000 + this.regs.AX
           const quotient = Math.floor(dividend / value)
-          if (quotient > 0xffff) throw new Error('Bölme taşması (DIV): sonuç 16 bit yazmaca sığmıyor')
+          if (quotient > 0xffff) throw new Error('Division overflow (DIV): result does not fit in a 16-bit register')
           this.regs.AX = quotient & 0xffff
           this.regs.DX = (dividend % value) & 0xffff
         } else {
           const dividend = this.getReg('AX')
           const quotient = Math.floor(dividend / value)
-          if (quotient > 0xff) throw new Error('Bölme taşması (DIV): sonuç 8 bit yazmaca sığmıyor')
+          if (quotient > 0xff) throw new Error('Division overflow (DIV): result does not fit in an 8-bit register')
           this.setReg('AL', quotient & 0xff)
           this.setReg('AH', (dividend % value) & 0xff)
         }
@@ -334,8 +334,9 @@ export class Cpu {
       case 'HLT': this.halted = true; break
     }
 
-    // AH=01/0A klavye girişi istedi: bu komutu tamamlamadan (ip'yi ilerletmeden)
-    // dur; provideInput() çağrıldığında tamamlanıp ip ilerletilecek.
+    // AH=01/0A requested keyboard input: stop without completing this instruction
+    // (without advancing ip); it will be completed and ip advanced once
+    // provideInput() is called.
     if (this.waitingForInput) return
 
     this.ip = nextIp
@@ -366,9 +367,9 @@ export class Cpu {
     }
   }
 
-  // AH=01/0A ile beklemeye giren bir INT'i, kullanıcının sağladığı metinle
-  // tamamlar: AL'ye ya da bellekteki tampona yazar, ardından komutu bitirip
-  // (ip'yi ilerletip) yürütmenin devam edebilmesini sağlar.
+  // Completes an INT that entered a waiting state via AH=01/0A, using the
+  // user-supplied text: writes it to AL or to the buffer in memory, then
+  // finishes the instruction (advancing ip) so execution can continue.
   provideInput(text: string) {
     const req = this.waitingForInput
     if (!req) return
@@ -392,10 +393,10 @@ export class Cpu {
     if (this.ip >= this.instructions.length) this.halted = true
   }
 
-  // breakpoints: kaynak dosyasındaki satır numaraları. O satıra gelen bir komutu
-  // ÇALIŞTIRMADAN ÖNCE durur (adım adım çalıştırma bu kontrolü es geçer). Devam
-  // ederken, o an durulan satırın kendisinde tekrar durmamak için ilk komut her
-  // zaman çalıştırılır.
+  // breakpoints: line numbers in the source file. Stops BEFORE executing an
+  // instruction on that line (single-stepping skips this check). On resume,
+  // the first instruction always runs so it doesn't immediately re-break on
+  // the line it's already stopped at.
   run(maxSteps = 100000, breakpoints?: Set<number>) {
     this.hitBreakpoint = false
     let first = true

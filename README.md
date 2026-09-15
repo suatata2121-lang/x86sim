@@ -1,68 +1,68 @@
 # x86sim
 
-Tarayıcı tabanlı, [emu8086](https://emu8086-microprocessor-emulator.en.softonic.com/)'dan ilham alan bir 8086 assembly simülatörü. React + TypeScript + Vite ile geliştiriliyor.
+A browser-based 8086 assembly simulator inspired by [emu8086](https://emu8086-microprocessor-emulator.en.softonic.com/). Built with React + TypeScript + Vite.
 
-**Canlı demo:** https://suatata2121-lang.github.io/x86sim/
+**Live demo:** https://suatata2121-lang.github.io/x86sim/
 
-## Durum
+## Status
 
-Erken aşama. Şu an çalışan:
+Early stage. Currently working:
 
-- Bir assembler (`src/core/assembler.ts`): etiketler, yorumlar, `DB`/`DW` veri direktifleri, bellek operandları — taban (`BX`/`BP`), indeks (`SI`/`DI`), etiket ve sabit ofsetin herhangi bir birleşimi (`[BX]`, `[SI+4]`, `[MSG]`, `[BX+SI]`, `[TABLE+BX+SI+2]`, `BYTE/WORD PTR`) —, işlenen sayısı/türü ve tanımsız-etiket doğrulaması (derleme zamanında hata verir). Hatalar satır **ve sütun** bilgisiyle gelir; bilinmeyen bir komut yazınca ("MOVE" gibi) en yakın gerçek komut önerilir.
-- Bir 8086 CPU çekirdeği (`src/core/cpu.ts`): 16/8-bit yazmaçlar, bayraklar, 64K düz bellek, veri etiketlerinin belleğe yerleştirilmesi, `INT 21h` desteği (AH=01 karakter oku, AH=02 karakter yazdır, AH=09 `$`-sonlandırmalı string yazdır, AH=0Ah tamponlu satır oku, AH=4Ch çıkış)
-- Desteklenen komutlar: `MOV ADD SUB INC DEC CMP MUL DIV AND OR XOR NOT SHL SHR JMP JE JNE JG JL JGE JLE LOOP PUSH POP CALL RET INT NOP HLT` (kaynak/hedef olarak yazmaç, sayı ya da bellek adresi)
-- Adım adım / tam çalıştırma, yazmaç ve bayrak görünümü, derleme + çalışma zamanı hata gösterimi olan minimal bir arayüz
-- Bir bellek görüntüleyici (`src/components/MemoryView.tsx`): 16x16 hex dump + ASCII, adrese/SP'ye/veri etiketlerine atlama
-- Kesme noktaları (breakpoint): editörün kenar şeridinden (`src/components/CodeEditor.tsx`) satıra tıklayarak aç/kapat; "Çalıştır" o satıra gelmeden hemen önce durur, tekrar "Çalıştır"a basınca devam eder
-- Klavye girişi: `INT 21h AH=01` (tek karakter) ve `AH=0Ah` (tamponlu satır) programı beklemeye alır, arayüzde bir giriş kutusu çıkar; kullanıcı "Gönder"e basınca (veya Enter'a) yürütme kaldığı yerden devam eder
-- Örnek program kütüphanesi (`src/examples.ts`): editörün üstündeki açılır listeden 10 hazır program (Merhaba Dünya, aritmetik, döngü, bellek adresleme, bit işlemleri, çarpma/bölme, alt program, koşullu atlama, klavye girişi, taban+indeks adresleme) "Yükle" ile editöre aktarılabilir
-- Hata konumlandırma: hatalı satır editörün kenar şeridinde kırmızı vurgulanır; hata listesindeki her madde, hatanın tam yerini `^` işaretiyle gösteren küçük bir satır önizlemesi içerir
+- An assembler (`src/core/assembler.ts`): labels, comments, `DB`/`DW` data directives, memory operands — any combination of a base (`BX`/`BP`), an index (`SI`/`DI`), a label, and a constant offset (`[BX]`, `[SI+4]`, `[MSG]`, `[BX+SI]`, `[TABLE+BX+SI+2]`, `BYTE/WORD PTR`) —, operand count/type checking, and undefined-label validation (reported at assemble time). Errors come with a line **and column**; an unknown instruction (like "MOVE") gets a "did you mean" suggestion for the closest real one.
+- An 8086 CPU core (`src/core/cpu.ts`): 16/8-bit registers, flags, a flat 64K memory, data labels placed into memory, `INT 21h` support (AH=01 read character, AH=02 print character, AH=09 print `$`-terminated string, AH=0Ah read a buffered line, AH=4Ch exit)
+- Supported instructions: `MOV ADD SUB INC DEC CMP MUL DIV AND OR XOR NOT SHL SHR JMP JE JNE JG JL JGE JLE LOOP PUSH POP CALL RET INT NOP HLT` (source/destination can be a register, a number, or a memory address)
+- A minimal UI with step/run, register and flag views, and assemble-time + runtime error display
+- A memory viewer (`src/components/MemoryView.tsx`): a 16x16 hex dump + ASCII, jump to an address/SP/data label
+- Breakpoints: click a line in the editor's gutter (`src/components/CodeEditor.tsx`) to toggle one; "Run" stops right before reaching that line, and resumes on the next "Run"
+- Keyboard input: `INT 21h AH=01` (single character) and `AH=0Ah` (buffered line) pause the program; an input box appears in the UI, and execution resumes once the user hits "Send" (or Enter)
+- An example program library (`src/examples.ts`): 10 ready-made programs (Hello World, arithmetic, a loop, memory addressing, bitwise ops, multiplication/division, a subroutine, a conditional jump, keyboard input, base+index addressing) can be loaded into the editor via the dropdown above it
+- Error locating: the offending line is highlighted red in the editor's gutter; each item in the error list includes a small line preview with a `^` marker at the exact spot
 
-### Bilinen sınırlamalar
+### Known limitations
 
-- Bellek operandında en fazla bir taban (`BX` veya `BP`) VE en fazla bir indeks (`SI` veya `DI`) yazmacı aynı anda kullanılabilir; iki taban (`[BX+BP]`) ya da iki indeks (`[SI+DI]`) birlikte kullanılamaz — gerçek 8086'da da bu kombinasyonlar yoktur.
-- Bellek işleneninin boyutu (`BYTE`/`WORD PTR` verilmediğinde) bir yazmaçtan çıkarılamıyorsa varsayılan olarak word (16-bit) kabul edilir; MASM'deki gibi "boyut belirsiz" hatası verilmez.
-- Segment yazmaçları (`DS/ES/SS/CS`) yok; bellek düz (flat) 64K olarak modelleniyor.
-- `SHL`/`SHR` çok bitlik kaydırmalarda `OF` bayrağını her zaman `false` yapar (gerçek 8086'da `OF` yalnızca 1 bitlik kaydırmada tanımlıdır); `CF` doğru hesaplanır.
-- `CALL`/`RET` yalnızca bu programın kendi etiketleri arasında çalışır (gerçek bellek adresleri değil, komut dizisindeki indeks döner); iç içe alt programlar için yeterlidir ama gerçek 8086 CS:IP semantiğini birebir modellemez.
-- `INT 21h AH=0Ah` tampona sonundaki `0Dh` (Enter) baytını yazmaz, yalnızca girilen karakterleri ve gerçek uzunluğu (`buffer[1]`) yazar; gerçek DOS'un aksine ilk bayttaki maksimum değeri (`buffer[0]`) doğrudan "en fazla okunacak karakter" olarak kullanır (CR için 1 eksiltmez).
-- Tanımsız etiket hatalarının sütun konumu (derleme sonrası çapraz-satır kontrolünde bulunduğu için) satırda basit bir metin araması ile bulunur; aynı isim satırda başka bir yerde de geçiyorsa (örn. başka bir kelimenin parçası olarak) işaretçi yanlış yere denk gelebilir.
+- A memory operand can use at most one base (`BX` or `BP`) AND at most one index (`SI` or `DI`) register at the same time; two bases (`[BX+BP]`) or two indexes (`[SI+DI]`) together are rejected — real 8086 doesn't have those combinations either.
+- When a memory operand's size can't be inferred from a register (no `BYTE`/`WORD PTR` given), it defaults to word (16-bit); unlike MASM, this doesn't raise an "operand size is ambiguous" error.
+- No segment registers (`DS/ES/SS/CS`); memory is modeled as a flat 64K.
+- `SHL`/`SHR` always leave `OF` as `false` for multi-bit shifts (real 8086 only defines `OF` for a 1-bit shift); `CF` is computed correctly.
+- `CALL`/`RET` only work between this program's own labels (they push/pop an instruction-index, not a real memory address); good enough for nested subroutines, but doesn't model real 8086 CS:IP semantics exactly.
+- `INT 21h AH=0Ah` doesn't write the trailing `0Dh` (Enter) byte into the buffer — only the entered characters and the actual length (`buffer[1]`); unlike real DOS, it uses the first byte's value (`buffer[0]`) directly as "max characters to read" (it doesn't subtract 1 for the CR).
+- The column for an undefined-label error (found during a post-assembly cross-line check) is located with a simple text search on the line; if the same name appears elsewhere on that line (e.g. as part of another word), the marker can land in the wrong place.
 
-## Yapılacaklar (yol haritası)
+## Roadmap
 
-- [x] Veri segmenti / `DB`, `DW` direktifleri ve bellek üzerinden adresleme
-- [x] Bellek görüntüleyici (hex dump) arayüzü
-- [x] Eksik komutlar: `MUL DIV AND OR XOR NOT SHL SHR CALL RET`
-- [x] `INT 21h` AH=09 (string yazdırma)
-- [x] `INT 21h` AH=01/0A (klavye girişi)
-- [x] Breakpoint desteği
-- [x] Assembler hata mesajlarının iyileştirilmesi (kolon/karakter konumu)
-- [x] Örnek program kütüphanesi
-- [x] `[BX+SI]` tarzı taban+indeks adresleme
+- [x] Data segment / `DB`, `DW` directives and memory addressing
+- [x] Memory viewer (hex dump) UI
+- [x] Missing instructions: `MUL DIV AND OR XOR NOT SHL SHR CALL RET`
+- [x] `INT 21h` AH=09 (print string)
+- [x] `INT 21h` AH=01/0A (keyboard input)
+- [x] Breakpoint support
+- [x] Better assembler error messages (column/character position)
+- [x] Example program library
+- [x] `[BX+SI]`-style base+index addressing
 
-## Geliştirme
+## Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Dağıtım
+## Deployment
 
-`main` dalına yapılan her push, `.github/workflows/deploy.yml` ile otomatik olarak build edilip GitHub Pages'e (`https://suatata2121-lang.github.io/x86sim/`) yayınlanır. `vite.config.ts`'teki `base: '/x86sim/'` ayarı, bu alt yol altında çalışacak şekilde varlık yollarını ayarlar.
+Every push to `main` is automatically built and published to GitHub Pages (`https://suatata2121-lang.github.io/x86sim/`) by `.github/workflows/deploy.yml`. The `base: '/x86sim/'` setting in `vite.config.ts` makes the built asset paths work under that subpath.
 
-## Yapı
+## Structure
 
 ```
 src/
   core/
-    types.ts        # ortak tipler (Instruction, Operand, Flags, ...)
-    assembler.ts     # kaynak kod -> Instruction[] çevirici
-    cpu.ts            # CPU durumu ve komut yürütme
+    types.ts        # shared types (Instruction, Operand, Flags, ...)
+    assembler.ts     # source code -> Instruction[] converter
+    cpu.ts            # CPU state and instruction execution
   components/
-    RegisterView.tsx # yazmaç/bayrak paneli
-    MemoryView.tsx   # bellek hex dump / gezinme paneli
-    CodeEditor.tsx   # satır numaralı editör + breakpoint kenar şeridi
-  examples.ts         # hazır örnek program kütüphanesi
-  App.tsx             # editör + kontroller + üst düzey akış
+    RegisterView.tsx # register/flag panel
+    MemoryView.tsx   # memory hex dump / navigation panel
+    CodeEditor.tsx   # line-numbered editor + breakpoint gutter
+  examples.ts         # built-in example program library
+  App.tsx             # editor + controls + top-level flow
 ```

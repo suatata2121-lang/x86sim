@@ -62,21 +62,21 @@ export function MemoryView({
 
   return (
     <div className="panel">
-      <h3>Bellek</h3>
+      <h3>Memory</h3>
       <div className="mem-toolbar">
-        <button onClick={() => setBase(clampBase(base - PAGE_SIZE))}>◀ Önceki</button>
-        <button onClick={() => setBase(clampBase(base + PAGE_SIZE))}>Sonraki ▶</button>
-        <button onClick={() => gotoAddress(sp)}>SP'ye git</button>
+        <button onClick={() => setBase(clampBase(base - PAGE_SIZE))}>◀ Prev</button>
+        <button onClick={() => setBase(clampBase(base + PAGE_SIZE))}>Next ▶</button>
+        <button onClick={() => gotoAddress(sp)}>Go to SP</button>
         <input
           className="mem-jump-input"
-          placeholder="adres (örn. 100h)"
+          placeholder="address (e.g. 100h)"
           value={jumpText}
           onChange={(e) => { setJumpText(e.target.value); setJumpError(false) }}
           onKeyDown={(e) => { if (e.key === 'Enter') handleJump() }}
         />
-        <button onClick={handleJump}>Git</button>
+        <button onClick={handleJump}>Go</button>
       </div>
-      {jumpError && <p className="status error">Geçersiz adres: "{jumpText}"</p>}
+      {jumpError && <p className="status error">Invalid address: "{jumpText}"</p>}
       {dataLabels.size > 0 && (
         <div className="mem-labels">
           {[...dataLabels.entries()].map(([name, info]) => (
@@ -90,7 +90,7 @@ export function MemoryView({
         <table className="mem-table">
           <thead>
             <tr>
-              <th>Adres</th>
+              <th>Address</th>
               {Array.from({ length: COLS }, (_, c) => (
                 <th key={c}>{toHex(c, 1)}</th>
               ))}

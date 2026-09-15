@@ -8,10 +8,10 @@ export interface Example {
 export const EXAMPLES: Example[] = [
   {
     id: 'hello',
-    title: 'Merhaba Dünya',
-    description: 'En basit örnek: bir DB string tanımlar ve INT 21h AH=09 ile ekrana yazdırır.',
-    source: `; Merhaba Dunya - en basit ornek
-MSG DB 'Merhaba, Dunya!$'
+    title: 'Hello, World',
+    description: 'The simplest example: defines a DB string and prints it with INT 21h AH=09.',
+    source: `; Hello, World - the simplest example
+MSG DB 'Hello, World!$'
 
 MOV AH, 9
 MOV DX, MSG
@@ -23,14 +23,14 @@ INT 21h
   },
   {
     id: 'arithmetic',
-    title: 'Aritmetik İşlemler',
-    description: 'MOV, ADD, SUB ile temel yazmaç aritmetiği. "Adım" ile izleyerek AX üzerindeki değişimi gör.',
-    source: `; Temel aritmetik: iki sayiyi toplar ve cikarir
+    title: 'Arithmetic',
+    description: 'Basic register arithmetic with MOV, ADD, SUB. Use "Step" to watch AX change.',
+    source: `; Basic arithmetic: adds and subtracts two numbers
 MOV AX, 25
 MOV BX, 17
 ADD AX, BX      ; AX = 42
 SUB AX, 5       ; AX = 37
-MOV CX, AX      ; sonucu CX'e kopyala
+MOV CX, AX      ; copy the result into CX
 
 MOV AH, 4Ch
 INT 21h
@@ -38,9 +38,9 @@ INT 21h
   },
   {
     id: 'counting-loop',
-    title: 'Sayaç Döngüsü',
-    description: 'LOOP komutuyla 1\'den 5\'e kadar rakamları ekrana basar.',
-    source: `; 1'den 5'e kadar sayilari ekrana basar
+    title: 'Counting Loop',
+    description: 'Prints the digits 1 to 5 using the LOOP instruction.',
+    source: `; Prints the numbers 1 through 5
 MOV CX, 5
 MOV DL, '1'
 COUNTLOOP:
@@ -55,10 +55,10 @@ INT 21h
   },
   {
     id: 'array-sum',
-    title: 'Dizi Toplama (Bellek Adresleme)',
-    description: 'DB ile bir bayt dizisi ve bir string tanımlar; [NUMS+SI] ile diziyi dolaşıp toplar, sonucu string ile birlikte yazdırır.',
-    source: `; Bir dizideki baytlari toplar; veri segmenti + bellek adresleme ornegi
-MSG DB 'Sonuc: $'
+    title: 'Array Sum (Memory Addressing)',
+    description: 'Defines a byte array and a string with DB; walks the array with [NUMS+SI] to sum it, then prints the result together with the string.',
+    source: `; Sums the bytes in an array; a data-segment + memory-addressing example
+MSG DB 'Result: $'
 NUMS DB 10, 20, 30, 40, 5
 
 MOV AH, 9
@@ -81,14 +81,14 @@ INT 21h
   },
   {
     id: 'bitwise',
-    title: 'Bit İşlemleri',
-    description: 'AND, OR, XOR, NOT, SHL, SHR komutlarını sırayla uygular; "Adım" ile AL/BL üzerindeki değişimi izle.',
-    source: `; AND/OR/XOR/NOT/SHL/SHR ornekleri
+    title: 'Bitwise Operations',
+    description: 'Applies AND, OR, XOR, NOT, SHL, SHR in sequence; use "Step" to watch AL/BL change.',
+    source: `; AND/OR/XOR/NOT/SHL/SHR examples
 MOV AL, 0F0h
 AND AL, 0FFh    ; AL = F0h
 OR AL, 0Fh      ; AL = FFh
 XOR AL, 0FFh    ; AL = 00h
-MOV BL, AL      ; BL = 00h (kontrol icin)
+MOV BL, AL      ; BL = 00h (for verification)
 
 MOV AL, 05h
 SHL AL, 1       ; AL = 0Ah
@@ -101,15 +101,15 @@ INT 21h
   },
   {
     id: 'muldiv',
-    title: 'Çarpma ve Bölme',
-    description: 'MUL ile 6*7, ardından DIV ile 42/5 (bölüm ve kalan AL/AH\'de).',
-    source: `; Carpma ve bolme: 6*7=42, sonra 42/5 (bolum 8, kalan 2)
+    title: 'Multiplication and Division',
+    description: 'MUL computes 6*7, then DIV computes 42/5 (quotient and remainder end up in AL/AH).',
+    source: `; Multiplication and division: 6*7=42, then 42/5 (quotient 8, remainder 2)
 MOV AL, 6
 MOV BL, 7
 MUL BL          ; AX = 42
 
 MOV BL, 5
-DIV BL          ; AL = bolum (8), AH = kalan (2)
+DIV BL          ; AL = quotient (8), AH = remainder (2)
 
 MOV AH, 4Ch
 INT 21h
@@ -117,9 +117,9 @@ INT 21h
   },
   {
     id: 'call-ret',
-    title: 'Alt Program (CALL/RET)',
-    description: 'ADDFIVE adlı bir alt programı CALL ile üç kez çağırır, RET ile geri döner.',
-    source: `; ADDFIVE alt programini uc kez cagirir (CALL/RET)
+    title: 'Subroutine (CALL/RET)',
+    description: 'Calls a subroutine named ADDFIVE three times with CALL, returning with RET.',
+    source: `; Calls the ADDFIVE subroutine three times (CALL/RET)
 MOV AX, 0
 CALL ADDFIVE
 CALL ADDFIVE
@@ -135,18 +135,18 @@ RET
   },
   {
     id: 'max-of-two',
-    title: 'Maksimumu Bulma',
-    description: 'CMP ve JG ile iki sayıdan büyüğünü bulur; koşullu atlamaya iyi bir giriş.',
-    source: `; Iki sayidan buyugunu bulur (CMP + kosullu atlama)
+    title: 'Finding the Maximum',
+    description: 'Finds the larger of two numbers using CMP and JG; a good introduction to conditional jumps.',
+    source: `; Finds the larger of two numbers (CMP + conditional jump)
 MOV AX, 37
 MOV BX, 52
 CMP AX, BX
-JG AXBUYUK
-MOV CX, BX      ; BX buyukse CX = BX
-JMP SONUC
-AXBUYUK:
-MOV CX, AX      ; AX buyukse CX = AX
-SONUC:
+JG GREATER
+MOV CX, BX      ; if BX is larger, CX = BX
+JMP DONE
+GREATER:
+MOV CX, AX      ; if AX is larger, CX = AX
+DONE:
 
 MOV AH, 4Ch
 INT 21h
@@ -154,16 +154,16 @@ INT 21h
   },
   {
     id: 'keyboard-echo',
-    title: 'Klavye Girişi',
-    description: 'INT 21h AH=0Ah ile en fazla 10 karakterlik bir satır okur, sonra tek tek AH=02 ile geri yazdırır.',
-    source: `; Klavyeden en fazla 10 karakterlik bir satir okur, sonra ekrana geri yazdirir
+    title: 'Keyboard Input',
+    description: 'Reads a line of up to 10 characters with INT 21h AH=0Ah, then echoes it back one character at a time with AH=02.',
+    source: `; Reads a line of up to 10 characters from the keyboard, then echoes it back
 BUF DB 10, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 
 MOV DX, BUF
 MOV AH, 0Ah
 INT 21h
 
-MOV CL, [BUF+1]   ; DOS'un yazdigi gercek uzunluk
+MOV CL, [BUF+1]   ; the actual length DOS wrote
 MOV CH, 0
 MOV SI, 0
 PRINTLOOP:
@@ -182,14 +182,14 @@ INT 21h
   },
   {
     id: 'base-index',
-    title: 'Taban+İndeks Adresleme',
-    description: '[TABLE+BX+SI] ile bir tabloya taban (BX/BP) ve indeks (SI/DI) yazmaçlarını aynı anda kullanarak erişir.',
-    source: `; Taban+indeks adresleme: [TABLE+BX+SI] ile bir tabloya erisir
-; TABLE 3 satir x 2 sutunluk gibi dusunulebilir: her satir 2 bayt
+    title: 'Base+Index Addressing',
+    description: 'Accesses a table via [TABLE+BX+SI], using a base (BX/BP) and an index (SI/DI) register at the same time.',
+    source: `; Base+index addressing: accesses a table via [TABLE+BX+SI]
+; Think of TABLE as 3 rows x 2 columns: each row is 2 bytes
 TABLE DB 10, 20, 30, 40, 50, 60
 
-MOV BX, 4       ; 3. satirin (0 tabanli: satir 2) baslangic offseti
-MOV SI, 1       ; o satirin 2. sutunu
+MOV BX, 4       ; start offset of row 3 (0-based: row 2)
+MOV SI, 1       ; column 2 of that row
 MOV AL, [TABLE+BX+SI]   ; TABLE[4+1] = TABLE[5] = 60
 
 MOV AH, 4Ch
