@@ -12,7 +12,7 @@ const MNEMONICS: Mnemonic[] = [
   'MOV', 'ADD', 'SUB', 'INC', 'DEC', 'CMP',
   'MUL', 'DIV', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR',
   'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE',
-  'LOOP', 'PUSH', 'POP', 'CALL', 'RET', 'INT', 'NOP', 'HLT',
+  'LOOP', 'PUSH', 'POP', 'CALL', 'RET', 'IN', 'OUT', 'INT', 'NOP', 'HLT',
 ]
 
 const JUMP_MNEMONICS = new Set<Mnemonic>(['JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'LOOP', 'CALL'])
@@ -254,6 +254,8 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
   POP: [['reg', 'mem']],
   CALL: [['label']],
   RET: [],
+  IN: [['reg'], ['reg', 'imm']],
+  OUT: [['reg', 'imm'], ['reg']],
   JMP: [['label']],
   JE: [['label']],
   JNE: [['label']],
@@ -338,6 +340,42 @@ function validateOperands(
       length: mnemonicLen,
     })
     return false
+  }
+  if (mnemonic === 'IN' || mnemonic === 'OUT') {
+    const regIndex = mnemonic === 'IN' ? 0 : 1
+    const portIndex = mnemonic === 'IN' ? 1 : 0
+    const regOp = ops[regIndex]
+    const portOp = ops[portIndex]
+    if (regOp.kind !== 'reg' || (regOp.name !== 'AL' && regOp.name !== 'AX')) {
+      const entry = opEntries[regIndex]
+      errors.push({
+        line: lineNo,
+        message: `${mnemonic} can only be used with AL or AX`,
+        column: entry.offset + 1,
+        length: entry.text.length,
+      })
+      return false
+    }
+    if (portOp.kind === 'reg' && portOp.name !== 'DX') {
+      const entry = opEntries[portIndex]
+      errors.push({
+        line: lineNo,
+        message: `${mnemonic} port must be the DX register or a number from 0 to 255`,
+        column: entry.offset + 1,
+        length: entry.text.length,
+      })
+      return false
+    }
+    if (portOp.kind === 'imm' && (portOp.value < 0 || portOp.value > 255)) {
+      const entry = opEntries[portIndex]
+      errors.push({
+        line: lineNo,
+        message: `${mnemonic} port number must be between 0 and 255`,
+        column: entry.offset + 1,
+        length: entry.text.length,
+      })
+      return false
+    }
   }
   return true
 }

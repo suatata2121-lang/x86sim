@@ -297,6 +297,162 @@ textarea {
   font-family: 'Cascadia Code', 'Consolas', monospace;
 }
 
+.devices-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.device-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  padding: 0.6rem;
+}
+
+.device-title {
+  font-size: 0.75rem;
+  color: #a0a0a0;
+  text-align: center;
+}
+
+.device-port {
+  display: block;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.7rem;
+  color: #666;
+}
+
+/* Traffic light */
+.tl-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #111;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.tl-lamp {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2a1414;
+  opacity: 0.5;
+  transition: background 0.15s, opacity 0.15s, box-shadow 0.15s;
+}
+
+.tl-lamp.on {
+  opacity: 1;
+}
+
+.tl-red.on {
+  background: #ff3b3b;
+  box-shadow: 0 0 12px 3px #ff3b3b;
+}
+
+.tl-yellow.on {
+  background: #ffd93b;
+  box-shadow: 0 0 12px 3px #ffd93b;
+}
+
+.tl-green.on {
+  background: #3bff6a;
+  box-shadow: 0 0 12px 3px #3bff6a;
+}
+
+/* Stepper motor */
+.motor-dial {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #111;
+  border: 1px solid #3a3a3a;
+}
+
+.motor-pointer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 28px;
+  background: #6fb8ff;
+  transform-origin: bottom center;
+  margin-left: -2px;
+  margin-top: -28px;
+  border-radius: 2px;
+  transition: transform 0.2s ease-out;
+}
+
+.motor-hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #6fb8ff;
+}
+
+/* Seven-segment display */
+.seven-seg-bg {
+  fill: #111;
+}
+
+.seg {
+  fill: #3a1414;
+  transition: fill 0.1s;
+}
+
+.seg.on {
+  fill: #ff4d4d;
+}
+
+/* Thermometer */
+.thermometer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.therm-tube {
+  width: 16px;
+  height: 80px;
+  border-radius: 8px;
+  background: #111;
+  border: 1px solid #3a3a3a;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.therm-fill {
+  width: 100%;
+  background: linear-gradient(#ff8a3b, #ff3b3b);
+  transition: height 0.2s ease-out;
+}
+
+.therm-bulb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ff3b3b;
+  margin-top: -4px;
+}
+
+.therm-label {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: #d4d4d4;
+}
+
 .mem-toolbar {
   display: flex;
   flex-wrap: wrap;

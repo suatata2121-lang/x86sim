@@ -1,14 +1,16 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { assemble } from './core/assembler'
 import { Cpu } from './core/cpu'
 import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
 import { RegisterView } from './components/RegisterView'
 import { MemoryView } from './components/MemoryView'
 import { CodeEditor } from './components/CodeEditor'
+import { DevicesView } from './components/Devices'
 import { EXAMPLES } from './examples'
 import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
+const ANIMATE_INTERVAL_MS = 150
 
 export default function App() {
   const [source, setSource] = useState(EXAMPLES.find((e) => e.id === DEFAULT_EXAMPLE_ID)!.source)
@@ -26,8 +28,46 @@ export default function App() {
   const [hitBreakpoint, setHitBreakpoint] = useState(false)
   const [waitingForInput, setWaitingForInput] = useState<PendingInput | null>(null)
   const [inputValue, setInputValue] = useState('')
+  const [isAnimating, setIsAnimating] = useState(false)
+  const [cpuGeneration, setCpuGeneration] = useState(0)
+  const animTimerRef = useRef<number | null>(null)
 
-  const canRun = assembled && !halted && !waitingForInput
+  const canRun = assembled && !halted && !waitingForInput && !isAnimating
+
+  useEffect(() => {
+    return () => {
+      if (animTimerRef.current !== null) window.clearInterval(animTimerRef.current)
+    }
+  }, [])
+
+  function stopAnimation() {
+    if (animTimerRef.current !== null) {
+      window.clearInterval(animTimerRef.current)
+      animTimerRef.current = null
+    }
+    setIsAnimating(false)
+  }
+
+  function handleAnimate() {
+    setIsAnimating(true)
+    animTimerRef.current = window.setInterval(() => {
+      const cpu = cpuRef.current
+      try {
+        cpu.step()
+        setRuntimeError(null)
+      } catch (e) {
+        setRuntimeError(e instanceof Error ? e.message : String(e))
+        stopAnimation()
+        syncState()
+        return
+      }
+      const line = cpu.instructions[cpu.ip]?.line
+      if (cpu.halted || cpu.waitingForInput || (breakpoints.size > 0 && line !== undefined && breakpoints.has(line))) {
+        stopAnimation()
+      }
+      syncState()
+    }, ANIMATE_INTERVAL_MS)
+  }
 
   function toggleBreakpoint(line: number) {
     setBreakpoints((prev) => {
@@ -51,6 +91,7 @@ export default function App() {
   }
 
   function handleAssemble() {
+    stopAnimation()
     const { instructions, data, errors } = assemble(source)
     setErrors(errors)
     if (errors.length > 0) {
@@ -60,6 +101,7 @@ export default function App() {
     cpuRef.current.load(instructions, data)
     setAssembled(true)
     setRuntimeError(null)
+    setCpuGeneration((g) => g + 1)
     syncState()
   }
 
@@ -84,13 +126,16 @@ export default function App() {
   }
 
   function handleReset() {
+    stopAnimation()
     cpuRef.current.reset()
     setRuntimeError(null)
     setInputValue('')
+    setCpuGeneration((g) => g + 1)
     syncState()
   }
 
   function handleLoadExample() {
+    stopAnimation()
     const example = EXAMPLES.find((e) => e.id === selectedExampleId)
     if (!example) return
     setSource(example.source)
@@ -100,6 +145,7 @@ export default function App() {
     setBreakpoints(new Set())
     setInputValue('')
     cpuRef.current = new Cpu()
+    setCpuGeneration((g) => g + 1)
     syncState()
   }
 
@@ -131,7 +177,7 @@ export default function App() {
                 <option key={ex.id} value={ex.id}>{ex.title}</option>
               ))}
             </select>
-            <button onClick={handleLoadExample}>Load</button>
+            <button onClick={handleLoadExample} disabled={isAnimating}>Load</button>
           </div>
           <p className="example-description">
             {EXAMPLES.find((e) => e.id === selectedExampleId)?.description}
@@ -145,12 +191,15 @@ export default function App() {
             errorLines={new Set(errors.map((e) => e.line))}
           />
           <div className="toolbar">
-            <button onClick={handleAssemble}>Assemble</button>
+            <button onClick={handleAssemble} disabled={isAnimating}>Assemble</button>
             <button onClick={handleStep} disabled={!canRun}>Step</button>
             <button onClick={handleRun} disabled={!canRun}>Run</button>
-            <button onClick={handleReset} disabled={!assembled}>Reset</button>
+            {isAnimating
+              ? <button onClick={stopAnimation}>⏹ Stop</button>
+              : <button onClick={handleAnimate} disabled={!canRun}>▶ Animate</button>}
+            <button onClick={handleReset} disabled={!assembled || isAnimating}>Reset</button>
             {breakpoints.size > 0 && (
-              <button onClick={() => setBreakpoints(new Set())}>Clear breakpoints</button>
+              <button onClick={() => setBreakpoints(new Set())} disabled={isAnimating}>Clear breakpoints</button>
             )}
           </div>
           {errors.length > 0 && (
@@ -210,6 +259,7 @@ export default function App() {
         </section>
         <aside>
           <RegisterView regs={regs} flags={flags} />
+          <DevicesView key={cpuGeneration} ports={cpuRef.current.ports} />
           <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
         </aside>
       </main>

@@ -196,4 +196,118 @@ MOV AH, 4Ch
 INT 21h
 `,
   },
+  {
+    id: 'traffic-light',
+    title: 'Virtual Device: Traffic Light',
+    description: 'Cycles a virtual traffic light (port 40h) through red, red+yellow, green, yellow forever. Use "Animate" to watch it change, "Stop" to end it.',
+    source: `; Cycles a virtual traffic light connected to port 40h.
+; bit0 = red, bit1 = yellow, bit2 = green
+MOV DX, 40h
+
+CYCLE:
+MOV AL, 1        ; red
+OUT DX, AL
+CALL DELAY
+
+MOV AL, 3         ; red + yellow
+OUT DX, AL
+CALL DELAY
+
+MOV AL, 4         ; green
+OUT DX, AL
+CALL DELAY
+
+MOV AL, 2         ; yellow
+OUT DX, AL
+CALL DELAY
+
+JMP CYCLE
+
+DELAY:
+MOV CX, 5
+DELAYLOOP:
+LOOP DELAYLOOP
+RET
+`,
+  },
+  {
+    id: 'stepper-motor',
+    title: 'Virtual Device: Stepper Motor',
+    description: 'Spins a virtual stepper motor (port 41h) through three full rotations by writing a 4-step coil pattern.',
+    source: `; Rotates a virtual stepper motor connected to port 41h through a
+; 4-step coil sequence - each full pass through it is one 360 degree turn.
+MOV DX, 41h
+MOV CX, 3        ; three full rotations
+
+TURN:
+MOV AL, 03h
+OUT DX, AL
+MOV AL, 06h
+OUT DX, AL
+MOV AL, 0Ch
+OUT DX, AL
+MOV AL, 09h
+OUT DX, AL
+LOOP TURN
+
+MOV AH, 4Ch
+INT 21h
+`,
+  },
+  {
+    id: 'seven-segment',
+    title: 'Virtual Device: 7-Segment Display',
+    description: 'Counts 0 through 9 on a virtual 7-segment display (port 42h) by writing each digit\'s segment pattern.',
+    source: `; Counts 0-9 on a virtual 7-segment display connected to port 42h.
+; Each byte below is the standard a-g segment bit pattern for one digit.
+DIGITS DB 3Fh, 06h, 5Bh, 4Fh, 66h, 6Dh, 7Dh, 07h, 7Fh, 6Fh
+
+MOV DX, 42h
+MOV CX, 10
+MOV SI, 0
+
+COUNTLOOP:
+MOV AL, [DIGITS+SI]
+OUT DX, AL
+INC SI
+CALL DELAY
+LOOP COUNTLOOP
+
+MOV AH, 4Ch
+INT 21h
+
+DELAY:
+MOV BX, 3
+DELAYLOOP:
+DEC BX
+JNE DELAYLOOP
+RET
+`,
+  },
+  {
+    id: 'thermometer',
+    title: 'Virtual Device: Thermometer',
+    description: 'Sweeps a virtual thermometer (port 43h) from 0 to 20 degrees, one degree at a time.',
+    source: `; Sweeps a virtual thermometer connected to port 43h from 0 to 20 degrees.
+MOV DX, 43h
+MOV AL, 0
+MOV CX, 21
+
+TEMPLOOP:
+OUT DX, AL
+INC AL
+CALL DELAY
+LOOP TEMPLOOP
+
+MOV AH, 4Ch
+INT 21h
+
+DELAY:
+MOV BX, 2
+DELAYLOOP:
+DEC BX
+JNE DELAYLOOP
+RET
+`,
+  },
 ]

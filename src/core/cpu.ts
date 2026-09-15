@@ -16,6 +16,9 @@ export class Cpu {
   regs: Record<Reg16, number> = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP }
   flags: Flags = { ZF: false, SF: false, CF: false, OF: false }
   memory = new Uint8Array(MEMORY_SIZE)
+  // Virtual I/O ports for IN/OUT, driving the virtual device views (traffic
+  // light, stepper motor, 7-segment display, thermometer — see Devices.tsx).
+  ports = new Uint8Array(256)
   instructions: Instruction[] = []
   data: DataDeclaration[] = []
   labels = new Map<string, number>()
@@ -43,6 +46,7 @@ export class Cpu {
     this.regs = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP }
     this.flags = { ZF: false, SF: false, CF: false, OF: false }
     this.memory.fill(0)
+    this.ports.fill(0)
     for (const d of this.data) {
       for (let i = 0; i < d.bytes.length; i++) this.memory[(d.address + i) & 0xffff] = d.bytes[i]
     }
@@ -328,6 +332,25 @@ export class Cpu {
         const value = this.memory[sp] | (this.memory[(sp + 1) & 0xffff] << 8)
         this.writeOperand(op1, value, true)
         this.regs.SP = (sp + 2) & 0xffff
+        break
+      }
+      case 'IN': {
+        if (op1.kind !== 'reg') break
+        const isWordIn = op1.name === 'AX'
+        const port = op2.kind === 'imm' ? op2.value : this.getReg('DX')
+        const value = isWordIn
+          ? this.ports[port & 0xff] | (this.ports[(port + 1) & 0xff] << 8)
+          : this.ports[port & 0xff]
+        this.setReg(op1.name, value)
+        break
+      }
+      case 'OUT': {
+        if (op2.kind !== 'reg') break
+        const isWordOut = op2.name === 'AX'
+        const port = op1.kind === 'imm' ? op1.value : this.getReg('DX')
+        const value = this.getReg(op2.name)
+        this.ports[port & 0xff] = value & 0xff
+        if (isWordOut) this.ports[(port + 1) & 0xff] = (value >> 8) & 0xff
         break
       }
       case 'INT': this.handleInterrupt(this.readOperand(op1, true)); break
