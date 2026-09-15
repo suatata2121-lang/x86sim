@@ -27,6 +27,7 @@ export function RegisterView({ regs, flags }: { regs: Record<Reg16, number>; fla
         <span className={flags.SF ? 'flag on' : 'flag'}>SF</span>
         <span className={flags.CF ? 'flag on' : 'flag'}>CF</span>
         <span className={flags.OF ? 'flag on' : 'flag'}>OF</span>
+        <span className={flags.DF ? 'flag on' : 'flag'}>DF</span>
       </div>
     </div>
   )

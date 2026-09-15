@@ -14,7 +14,7 @@ const INITIAL_SP = 0xfffe
 
 export class Cpu {
   regs: Record<Reg16, number> = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP }
-  flags: Flags = { ZF: false, SF: false, CF: false, OF: false }
+  flags: Flags = { ZF: false, SF: false, CF: false, OF: false, DF: false }
   memory = new Uint8Array(MEMORY_SIZE)
   // Virtual I/O ports for IN/OUT, driving the virtual device views (traffic
   // light, stepper motor, 7-segment display, thermometer — see Devices.tsx).
@@ -44,7 +44,7 @@ export class Cpu {
 
   reset() {
     this.regs = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP }
-    this.flags = { ZF: false, SF: false, CF: false, OF: false }
+    this.flags = { ZF: false, SF: false, CF: false, OF: false, DF: false }
     this.memory.fill(0)
     this.ports.fill(0)
     for (const d of this.data) {
@@ -160,6 +160,35 @@ export class Cpu {
     throw new Error('Jump target must be a label')
   }
 
+  // Byte string ops (MOVSB/STOSB/LODSB/CMPSB/SCASB): operate implicitly on
+  // memory[SI]/memory[DI], advancing SI and/or DI by +1 (DF=0) or -1 (DF=1)
+  // afterward. No segment registers, so SI/DI are used as absolute addresses.
+  private execStringOp(mnemonic: 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB') {
+    switch (mnemonic) {
+      case 'MOVSB':
+        this.memory[this.regs.DI & 0xffff] = this.memory[this.regs.SI & 0xffff]
+        break
+      case 'STOSB':
+        this.memory[this.regs.DI & 0xffff] = this.getReg('AL')
+        break
+      case 'LODSB':
+        this.setReg('AL', this.memory[this.regs.SI & 0xffff])
+        break
+      case 'CMPSB':
+        this.setArithFlags(this.memory[this.regs.SI & 0xffff] - this.memory[this.regs.DI & 0xffff], false)
+        break
+      case 'SCASB':
+        this.setArithFlags(this.getReg('AL') - this.memory[this.regs.DI & 0xffff], false)
+        break
+    }
+    const delta = this.flags.DF ? -1 : 1
+    if (mnemonic === 'MOVSB' || mnemonic === 'CMPSB') this.regs.SI = (this.regs.SI + delta) & 0xffff
+    if (mnemonic === 'MOVSB' || mnemonic === 'STOSB' || mnemonic === 'CMPSB' || mnemonic === 'SCASB') {
+      this.regs.DI = (this.regs.DI + delta) & 0xffff
+    }
+    if (mnemonic === 'LODSB') this.regs.SI = (this.regs.SI + delta) & 0xffff
+  }
+
   step() {
     if (this.halted || this.waitingForInput) return
     if (this.ip < 0 || this.ip >= this.instructions.length) {
@@ -264,6 +293,24 @@ export class Cpu {
         this.writeOperand(op1, result, isWord)
         break
       }
+      case 'XCHG': {
+        const a = this.readOperand(op1, isWord)
+        const b = this.readOperand(op2, isWord)
+        this.writeOperand(op1, b, isWord)
+        this.writeOperand(op2, a, isWord)
+        break
+      }
+      case 'NEG': {
+        const result = -this.readOperand(op1, isWord)
+        this.writeOperand(op1, result, isWord)
+        this.setArithFlags(result, isWord)
+        break
+      }
+      case 'TEST': {
+        const result = this.readOperand(op1, isWord) & this.readOperand(op2, isWord)
+        this.setLogicalFlags(result, isWord)
+        break
+      }
       case 'SHL': {
         const size = isWord ? 16 : 8
         const mask = isWord ? 0xffff : 0xff
@@ -313,6 +360,11 @@ export class Cpu {
       case 'JL': if (this.flags.SF !== this.flags.OF) { this.jumpToLabel(op1); nextIp = this.ip }; break
       case 'JGE': if (this.flags.SF === this.flags.OF) { this.jumpToLabel(op1); nextIp = this.ip }; break
       case 'JLE': if (this.flags.ZF || this.flags.SF !== this.flags.OF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JA': if (!this.flags.CF && !this.flags.ZF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JAE': if (!this.flags.CF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JB': if (this.flags.CF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JBE': if (this.flags.CF || this.flags.ZF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JCXZ': if (this.getReg('CX') === 0) { this.jumpToLabel(op1); nextIp = this.ip }; break
       case 'LOOP': {
         const cx = (this.getReg('CX') - 1) & 0xffff
         this.setReg('CX', cx)
@@ -353,6 +405,23 @@ export class Cpu {
         if (isWordOut) this.ports[(port + 1) & 0xff] = (value >> 8) & 0xff
         break
       }
+      case 'MOVSB': case 'STOSB': case 'LODSB': case 'CMPSB': case 'SCASB': {
+        if (instr.rep) {
+          let iterations = 0
+          while (this.getReg('CX') !== 0 && iterations < 0x10000) {
+            this.execStringOp(instr.mnemonic)
+            this.setReg('CX', (this.getReg('CX') - 1) & 0xffff)
+            iterations++
+            if (instr.rep === 'REPE' && !this.flags.ZF) break
+            if (instr.rep === 'REPNE' && this.flags.ZF) break
+          }
+        } else {
+          this.execStringOp(instr.mnemonic)
+        }
+        break
+      }
+      case 'CLD': this.flags.DF = false; break
+      case 'STD': this.flags.DF = true; break
       case 'INT': this.handleInterrupt(this.readOperand(op1, true)); break
       case 'HLT': this.halted = true; break
     }

@@ -1,4 +1,4 @@
-import type { AssembleError, BaseReg, DataDeclaration, IndexReg, Instruction, Mnemonic, Operand, RegName } from './types'
+import type { AssembleError, BaseReg, DataDeclaration, IndexReg, Instruction, Mnemonic, Operand, RegName, RepPrefix } from './types'
 
 const REGISTERS: RegName[] = [
   'AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP',
@@ -11,11 +11,21 @@ const INDEX_REGS: IndexReg[] = ['SI', 'DI']
 const MNEMONICS: Mnemonic[] = [
   'MOV', 'ADD', 'SUB', 'INC', 'DEC', 'CMP',
   'MUL', 'DIV', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR',
-  'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE',
+  'XCHG', 'NEG', 'TEST',
+  'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE', 'JCXZ',
   'LOOP', 'PUSH', 'POP', 'CALL', 'RET', 'IN', 'OUT', 'INT', 'NOP', 'HLT',
+  'MOVSB', 'STOSB', 'LODSB', 'CMPSB', 'SCASB', 'CLD', 'STD',
 ]
 
-const JUMP_MNEMONICS = new Set<Mnemonic>(['JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'LOOP', 'CALL'])
+const STRING_MNEMONICS = new Set<Mnemonic>(['MOVSB', 'STOSB', 'LODSB', 'CMPSB', 'SCASB'])
+
+const JUMP_MNEMONICS = new Set<Mnemonic>([
+  'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE', 'JCXZ', 'LOOP', 'CALL',
+])
+
+const REP_PREFIXES: Record<string, RepPrefix> = {
+  REP: 'REP', REPE: 'REPE', REPZ: 'REPE', REPNE: 'REPNE', REPNZ: 'REPNE',
+}
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -256,6 +266,9 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
   RET: [],
   IN: [['reg'], ['reg', 'imm']],
   OUT: [['reg', 'imm'], ['reg']],
+  XCHG: [['reg', 'mem'], ['reg', 'mem']],
+  NEG: [['reg', 'mem']],
+  TEST: [['reg', 'mem'], ['reg', 'imm', 'mem']],
   JMP: [['label']],
   JE: [['label']],
   JNE: [['label']],
@@ -263,10 +276,22 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
   JL: [['label']],
   JGE: [['label']],
   JLE: [['label']],
+  JA: [['label']],
+  JAE: [['label']],
+  JB: [['label']],
+  JBE: [['label']],
+  JCXZ: [['label']],
   LOOP: [['label']],
   INT: [['imm']],
   NOP: [],
   HLT: [],
+  MOVSB: [],
+  STOSB: [],
+  LODSB: [],
+  CMPSB: [],
+  SCASB: [],
+  CLD: [],
+  STD: [],
 }
 
 const OPERAND_KIND_LABEL: Record<Operand['kind'], string> = {
@@ -438,6 +463,20 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
       }
     }
 
+    let rep: RepPrefix | undefined
+    const repMatch = work.match(/^(REP|REPE|REPZ|REPNE|REPNZ)\s+(.*)$/i)
+    if (repMatch) {
+      const repCol = offset + 1
+      const repToken = repMatch[1].toUpperCase()
+      rep = REP_PREFIXES[repToken]
+      offset += repMatch[0].length - repMatch[2].length
+      work = repMatch[2].replace(/\s+$/, '')
+      if (work.length === 0) {
+        errors.push({ line: lineNo, message: `${repToken} must be followed by a string instruction`, column: repCol, length: repMatch[1].length })
+        continue
+      }
+    }
+
     const parts = work.split(/\s+/)
     const mnemonicToken = parts[0].toUpperCase()
     if (!MNEMONICS.includes(mnemonicToken as Mnemonic)) {
@@ -449,6 +488,15 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
       continue
     }
     const mnemonic = mnemonicToken as Mnemonic
+    if (rep && !STRING_MNEMONICS.has(mnemonic)) {
+      errors.push({
+        line: lineNo,
+        message: `REP/REPE/REPNE can only be used with a string instruction (MOVSB, STOSB, LODSB, CMPSB, SCASB)`,
+        column: offset + 1,
+        length: mnemonic.length,
+      })
+      continue
+    }
     const afterMnemonic = work.slice(parts[0].length)
     const opsLeadWs = afterMnemonic.length - afterMnemonic.trimStart().length
     const opsText = afterMnemonic.trim()
@@ -458,7 +506,7 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
 
     if (!validateOperands(mnemonic, opsText, ops, opEntries, lineNo, offset + 1, mnemonic.length, errors)) continue
 
-    instructions.push({ mnemonic, ops, label, line: lineNo, raw: originalLine.trim() })
+    instructions.push({ mnemonic, ops, label, rep, line: lineNo, raw: originalLine.trim() })
   }
 
   const codeLabelNames = new Set(instructions.filter((instr) => instr.label).map((instr) => instr.label!))

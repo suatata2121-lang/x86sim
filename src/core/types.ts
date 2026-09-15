@@ -13,6 +13,8 @@ export interface Flags {
   SF: boolean
   CF: boolean
   OF: boolean
+  /** Direction flag: false = SI/DI count up during string ops, true = count down. */
+  DF: boolean
 }
 
 export type Operand =
@@ -24,13 +26,19 @@ export type Operand =
 export type Mnemonic =
   | 'MOV' | 'ADD' | 'SUB' | 'INC' | 'DEC' | 'CMP'
   | 'MUL' | 'DIV' | 'AND' | 'OR' | 'XOR' | 'NOT' | 'SHL' | 'SHR'
-  | 'JMP' | 'JE' | 'JNE' | 'JG' | 'JL' | 'JGE' | 'JLE'
+  | 'XCHG' | 'NEG' | 'TEST'
+  | 'JMP' | 'JE' | 'JNE' | 'JG' | 'JL' | 'JGE' | 'JLE' | 'JA' | 'JAE' | 'JB' | 'JBE' | 'JCXZ'
   | 'LOOP' | 'PUSH' | 'POP' | 'CALL' | 'RET' | 'IN' | 'OUT' | 'INT' | 'NOP' | 'HLT'
+  | 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB' | 'CLD' | 'STD'
+
+// A REP/REPE/REPNE prefix on a string instruction (MOVSB/STOSB/LODSB/CMPSB/SCASB).
+export type RepPrefix = 'REP' | 'REPE' | 'REPNE'
 
 export interface Instruction {
   mnemonic: Mnemonic
   ops: Operand[]
   label?: string
+  rep?: RepPrefix
   line: number
   raw: string
 }

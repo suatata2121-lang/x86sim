@@ -310,4 +310,53 @@ JNE DELAYLOOP
 RET
 `,
   },
+  {
+    id: 'string-copy',
+    title: 'String Copy (REP MOVSB)',
+    description: 'Copies a string into a separate buffer with REP MOVSB, then prints the copy to prove the bytes were actually moved.',
+    source: `; Copies a string using REP MOVSB, then prints the copy from a
+; separate buffer to prove the bytes were actually moved.
+SRC DB 'Copied!$'
+DST DB ?, ?, ?, ?, ?, ?, ?, ?
+
+MOV SI, SRC
+MOV DI, DST
+MOV CX, 8
+CLD              ; DF=0: SI/DI count up
+REP MOVSB
+
+MOV DX, DST
+MOV AH, 9
+INT 21h
+
+MOV AH, 4Ch
+INT 21h
+`,
+  },
+  {
+    id: 'xchg-neg-test',
+    title: 'XCHG, NEG, TEST, Unsigned Jumps',
+    description: 'Swaps two registers with XCHG, negates a value with NEG, checks a bit with TEST, and compares unsigned with JA.',
+    source: `; Demonstrates XCHG, NEG, TEST, and an unsigned conditional jump (JA)
+MOV AX, 5
+MOV BX, 250
+XCHG AX, BX      ; AX=250, BX=5
+
+CMP AX, BX
+JA ABOVE         ; unsigned: 250 > 5, so this jumps
+MOV CX, 0        ; (not taken)
+JMP CHECKNEG
+ABOVE:
+MOV CX, 1        ; CX=1 confirms AX was above BX
+CHECKNEG:
+
+MOV DX, 7
+NEG DX           ; DX = -7, stored as 0FFF9h (two's complement)
+
+TEST AX, 1       ; AX (250) is even, so this sets ZF without changing AX
+
+MOV AH, 4Ch
+INT 21h
+`,
+  },
 ]
