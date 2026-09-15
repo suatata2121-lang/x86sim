@@ -461,6 +461,73 @@ aside {
 
 /* Theme-aware again from here on. */
 
+.bus-diagram {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.bus-line {
+  stroke: var(--border-strong);
+  stroke-width: 3;
+}
+
+.bus-box {
+  fill: var(--bg-panel-alt);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.bus-box-cpu {
+  stroke: var(--accent-border);
+}
+
+.bus-label {
+  fill: var(--text-dim);
+  font-size: 9px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  text-anchor: middle;
+}
+
+.bus-label-title {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.bus-subbox {
+  fill: var(--bg-button);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.bus-subbox.on {
+  animation: bus-subbox-pulse 0.5s ease-out;
+}
+
+@keyframes bus-subbox-pulse {
+  0% { fill: var(--accent-border); }
+  100% { fill: var(--bg-button); }
+}
+
+.bus-sublabel {
+  fill: var(--text-dimmer);
+  font-size: 7px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.bus-pulse {
+  fill: #6fb8ff;
+}
+
+.bus-detail {
+  margin-top: 0.4rem;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
 .mem-toolbar {
   display: flex;
   flex-wrap: wrap;

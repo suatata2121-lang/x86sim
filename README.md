@@ -22,6 +22,7 @@ Early stage. Currently working:
 - Error locating: the offending line is highlighted red in the editor's gutter; each item in the error list includes a small line preview with a `^` marker at the exact spot
 - A light/dark theme toggle (top right) that persists across reloads (`localStorage`); the four virtual device panels intentionally keep a fixed dark "hardware housing" look in either theme
 - Tabbed editing: open several programs at once, each with its own source and breakpoints. "Load in new tab" opens a library example without discarding what you were working on; closing the last tab is blocked (there's always at least one open)
+- A data bus diagram (`src/components/DataBusView.tsx`) showing Memory / CPU (Registers + ALU + IP) / I/O Ports as three connected blocks; after each step, a small pulse animates along the relevant line (Memory↔CPU for a memory access, CPU↔I/O for `IN`/`OUT`/`INT`) or lights up the matching sub-block (ALU for arithmetic/logic, REG for a plain `MOV`/`XCHG`, IP for a jump/`CALL`/`RET`/`LOOP`) with a text line naming what just happened. `Cpu.lastInstruction` (the instruction step() most recently fetched, even one still waiting on keyboard input) drives it; the classification itself is a pure function of an instruction's mnemonic and operand kinds
 
 ### Virtual devices
 
@@ -52,6 +53,7 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - Adding CodeMirror grew the production JS bundle substantially (~190KB gzipped); it isn't code-split, so the whole editor loads up front.
 - Switching tabs remounts the editor (so each tab gets its own undo history instead of one shared history across all of them), which means cursor position and scroll offset aren't remembered when you come back to a tab — only the text and breakpoints are.
 - Tabs aren't renameable or persisted; closing the browser tab loses all open programs except whatever's in `localStorage` for the theme choice. There's no save-to-disk / open-from-disk yet.
+- The data bus diagram shows *what kind* of transfer just happened (memory read/write, ALU, I/O, register move, control flow), not the actual values or addresses involved, and it's a simplified 3-block model — no separate address bus / control bus, no segment registers, and a `REP`-prefixed string instruction only shows one pulse for the whole loop rather than one per byte.
 
 ## Roadmap
 
@@ -68,7 +70,7 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - [x] More instructions: `XCHG NEG TEST JA JAE JB JBE JCXZ`, byte string ops (`MOVSB STOSB LODSB CMPSB SCASB`) with `REP`/`REPE`/`REPNE`, `CLD`/`STD`
 - [x] A modern code editor (CodeMirror 6) with real syntax highlighting, replacing the plain textarea
 - [x] UI: light/dark theme toggle, multi-file/tabbed editing
-- [ ] Data-bus animations showing register/memory/ALU data flow as each instruction executes
+- [x] Data-bus animations showing register/memory/ALU data flow as each instruction executes
 
 ## Development
 
@@ -95,6 +97,7 @@ src/
     CodeEditor.tsx   # CodeMirror 6 editor: breakpoint gutter, current-line/error-line highlighting
     asmLanguage.ts   # hand-written CodeMirror tokenizer for this assembly dialect
     Devices.tsx      # virtual I/O device views (traffic light, motor, 7-seg, thermometer)
+    DataBusView.tsx  # Memory/CPU/I/O bus diagram + per-instruction classifier
   examples.ts         # built-in example program library
   App.tsx             # editor + controls + top-level flow
 ```

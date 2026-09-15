@@ -29,6 +29,10 @@ export class Cpu {
   waitingForInput: PendingInput | null = null
   output: string[] = []
   steps = 0
+  // The instruction step() most recently fetched (set even if it threw or is
+  // still waiting on keyboard input) — lets the UI show what the CPU is/was
+  // doing without re-deriving it from ip, which may already point elsewhere.
+  lastInstruction: Instruction | null = null
 
   load(instructions: Instruction[], data: DataDeclaration[] = []) {
     this.instructions = instructions
@@ -56,6 +60,7 @@ export class Cpu {
     this.waitingForInput = null
     this.output = []
     this.steps = 0
+    this.lastInstruction = null
   }
 
   private isReg8(name: RegName): name is Reg8 {
@@ -196,6 +201,7 @@ export class Cpu {
       return
     }
     const instr = this.instructions[this.ip]
+    this.lastInstruction = instr
     const [op1, op2] = instr.ops
     const isWord = (op1 && this.operandSize(op1)) === 'byte' || (op2 && this.operandSize(op2)) === 'byte'
       ? false

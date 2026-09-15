@@ -6,6 +6,7 @@ import { RegisterView } from './components/RegisterView'
 import { MemoryView } from './components/MemoryView'
 import { CodeEditor } from './components/CodeEditor'
 import { DevicesView } from './components/Devices'
+import { DataBusView } from './components/DataBusView'
 import { EXAMPLES } from './examples'
 import './App.css'
 
@@ -362,6 +363,11 @@ export default function App() {
         </section>
         <aside>
           <RegisterView regs={regs} flags={flags} />
+          <DataBusView
+            key={cpuGeneration}
+            lastInstruction={cpuRef.current.lastInstruction}
+            steps={cpuRef.current.steps}
+          />
           <DevicesView key={cpuGeneration} ports={cpuRef.current.ports} />
           <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
         </aside>
