@@ -20,6 +20,8 @@ Early stage. Currently working:
 - Byte string instructions `MOVSB`/`STOSB`/`LODSB`/`CMPSB`/`SCASB`, optionally prefixed with `REP`/`REPE`/`REPNE` to repeat while `CX != 0` (and, for `REPE`/`REPNE`, while `ZF` keeps matching); `CLD`/`STD` set the direction `SI`/`DI` move in
 - An example program library (`src/examples.ts`): 16 ready-made programs (Hello World, arithmetic, a loop, memory addressing, bitwise ops, multiplication/division, a subroutine, a conditional jump, keyboard input, base+index addressing, one per virtual device, a `REP MOVSB` string copy, and `XCHG`/`NEG`/`TEST`/unsigned-jump) can be loaded into the editor via the dropdown above it
 - Error locating: the offending line is highlighted red in the editor's gutter; each item in the error list includes a small line preview with a `^` marker at the exact spot
+- A light/dark theme toggle (top right) that persists across reloads (`localStorage`); the four virtual device panels intentionally keep a fixed dark "hardware housing" look in either theme
+- Tabbed editing: open several programs at once, each with its own source and breakpoints. "Load in new tab" opens a library example without discarding what you were working on; closing the last tab is blocked (there's always at least one open)
 
 ### Virtual devices
 
@@ -48,6 +50,8 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - Only the byte forms of the string instructions exist (`MOVSB` etc.); there's no `MOVSW`/`STOSW`/`LODSW`/`CMPSW`/`SCASW`. `REP`-prefixed string instructions run their entire loop within a single "Step", rather than stopping after each iteration.
 - The editor's syntax highlighting is a small hand-written tokenizer (`src/components/asmLanguage.ts`), not a full parser — it colors things by lexical pattern (is this word a known mnemonic/register/directive?) rather than validating structure, so it can occasionally color a token in a way that doesn't match how the assembler will actually interpret that line. Breakpoint/error-line highlighting is recomputed from the plain source text on every keystroke rather than tracked as live document positions, so it's simple but doesn't shift a breakpoint's line if you insert lines above it before re-assembling.
 - Adding CodeMirror grew the production JS bundle substantially (~190KB gzipped); it isn't code-split, so the whole editor loads up front.
+- Switching tabs remounts the editor (so each tab gets its own undo history instead of one shared history across all of them), which means cursor position and scroll offset aren't remembered when you come back to a tab — only the text and breakpoints are.
+- Tabs aren't renameable or persisted; closing the browser tab loses all open programs except whatever's in `localStorage` for the theme choice. There's no save-to-disk / open-from-disk yet.
 
 ## Roadmap
 
@@ -63,7 +67,7 @@ Four fixed I/O ports, each driving a small animated view in the sidebar. Write w
 - [x] Virtual device control (`IN`/`OUT`): traffic light, stepper motor, 7-segment display, thermometer
 - [x] More instructions: `XCHG NEG TEST JA JAE JB JBE JCXZ`, byte string ops (`MOVSB STOSB LODSB CMPSB SCASB`) with `REP`/`REPE`/`REPNE`, `CLD`/`STD`
 - [x] A modern code editor (CodeMirror 6) with real syntax highlighting, replacing the plain textarea
-- [ ] UI: light/dark theme toggle, multi-file/tabbed editing
+- [x] UI: light/dark theme toggle, multi-file/tabbed editing
 - [ ] Data-bus animations showing register/memory/ALU data flow as each instruction executes
 
 ## Development

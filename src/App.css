@@ -3,12 +3,34 @@
   margin: 0 auto;
   padding: 1.5rem;
   font-family: system-ui, sans-serif;
-  color: #e6e6e6;
+  color: var(--text);
+}
+
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 header p {
-  color: #a0a0a0;
+  color: var(--text-dim);
   margin-top: -0.5rem;
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-button);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-button-hover);
 }
 
 main {
@@ -28,37 +50,106 @@ aside {
   min-width: 240px;
 }
 
+.tabs-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--bg-button);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.tab:hover {
+  background: var(--bg-button-hover);
+}
+
+.tab.active {
+  background: var(--bg-panel-alt);
+  color: var(--text);
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tab-close {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+}
+
+.tab-close:hover {
+  opacity: 1;
+}
+
+.tab-new {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tab-new:hover {
+  background: var(--bg-button-hover);
+  color: var(--text);
+}
+
 .examples-bar {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.4rem;
+  margin: 0.6rem 0 0.4rem;
 }
 
 .examples-bar select {
   flex: 1;
   padding: 0.4rem 0.6rem;
   border-radius: 4px;
-  border: 1px solid #444;
-  background: #2a2a2a;
-  color: #e6e6e6;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-button);
+  color: var(--text);
 }
 
 .examples-bar button {
   padding: 0.4rem 0.9rem;
   border-radius: 4px;
-  border: 1px solid #444;
-  background: #2a2a2a;
-  color: #e6e6e6;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-button);
+  color: var(--text);
   cursor: pointer;
 }
 
 .examples-bar button:hover {
-  background: #3a3a3a;
+  background: var(--bg-button-hover);
 }
 
 .example-description {
   font-size: 0.85rem;
-  color: #a0a0a0;
+  color: var(--text-dim);
   margin: 0 0 0.6rem;
 }
 
@@ -66,14 +157,15 @@ aside {
   display: flex;
   gap: 0.5rem;
   margin: 0.75rem 0;
+  flex-wrap: wrap;
 }
 
 .toolbar button {
   padding: 0.4rem 0.9rem;
   border-radius: 4px;
-  border: 1px solid #444;
-  background: #2a2a2a;
-  color: #e6e6e6;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-button);
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -83,12 +175,12 @@ aside {
 }
 
 .toolbar button:not(:disabled):hover {
-  background: #3a3a3a;
+  background: var(--bg-button-hover);
 }
 
 .panel {
-  background: #232323;
-  border: 1px solid #3a3a3a;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.75rem 1rem;
   margin-top: 0.75rem;
@@ -97,7 +189,7 @@ aside {
 .panel h3 {
   margin-top: 0;
   font-size: 0.9rem;
-  color: #a0a0a0;
+  color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -113,30 +205,31 @@ aside {
 }
 
 .reg-table td:first-child {
-  color: #a0a0a0;
+  color: var(--text-dim);
 }
 
 .flags {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .flag {
   padding: 0.15rem 0.5rem;
   border-radius: 4px;
-  background: #2a2a2a;
-  color: #666;
+  background: var(--bg-button);
+  color: var(--text-dimmer);
   font-size: 0.8rem;
   font-family: monospace;
 }
 
 .flag.on {
-  background: #2f6f2f;
-  color: #d4ffd4;
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .errors {
-  color: #ff8080;
+  color: var(--error-text-strong);
   font-size: 0.9rem;
   padding-left: 1.2rem;
   margin: 0.5rem 0;
@@ -149,9 +242,9 @@ aside {
 .error-preview {
   margin: 0.2rem 0 0;
   padding: 0.3rem 0.5rem;
-  background: #2a1414;
+  background: var(--error-bg-soft);
   border-radius: 4px;
-  color: #ffb3b3;
+  color: var(--error-text);
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.85rem;
   overflow-x: auto;
@@ -159,16 +252,16 @@ aside {
 
 .status {
   font-size: 0.9rem;
-  color: #a0a0a0;
+  color: var(--text-dim);
 }
 
 .status.error {
-  color: #ff8080;
+  color: var(--error-text-strong);
 }
 
 .input-request {
-  border-color: #7a5a1f;
-  background: #2a2213;
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
 }
 
 .input-request-row {
@@ -181,23 +274,23 @@ aside {
   flex: 1;
   padding: 0.4rem 0.6rem;
   border-radius: 4px;
-  border: 1px solid #7a5a1f;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  border: 1px solid var(--warning-border);
+  background: var(--bg-panel-alt);
+  color: var(--text);
   font-family: 'Cascadia Code', 'Consolas', monospace;
 }
 
 .input-request-row button {
   padding: 0.4rem 0.9rem;
   border-radius: 4px;
-  border: 1px solid #7a5a1f;
-  background: #4a3a1f;
-  color: #ffd699;
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg-strong);
+  color: var(--warning-text);
   cursor: pointer;
 }
 
 .input-request-row button:hover {
-  background: #5a4626;
+  filter: brightness(1.1);
 }
 
 .output {
@@ -225,7 +318,7 @@ aside {
 
 .device-title {
   font-size: 0.75rem;
-  color: #a0a0a0;
+  color: var(--text-dim);
   text-align: center;
 }
 
@@ -233,8 +326,12 @@ aside {
   display: block;
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.7rem;
-  color: #666;
+  color: var(--text-dimmer);
 }
+
+/* The four device panels intentionally keep a fixed dark "hardware housing"
+   look regardless of the app theme, like a physical device's LCD/plastic
+   casing would. Everything below this point is NOT theme-aware on purpose. */
 
 /* Traffic light */
 .tl-body {
@@ -362,6 +459,8 @@ aside {
   color: #d4d4d4;
 }
 
+/* Theme-aware again from here on. */
+
 .mem-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -373,24 +472,24 @@ aside {
 .mem-toolbar button {
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
-  border: 1px solid #444;
-  background: #2a2a2a;
-  color: #e6e6e6;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-button);
+  color: var(--text);
   cursor: pointer;
   font-size: 0.8rem;
 }
 
 .mem-toolbar button:hover {
-  background: #3a3a3a;
+  background: var(--bg-button-hover);
 }
 
 .mem-jump-input {
   width: 8rem;
   padding: 0.25rem 0.4rem;
   border-radius: 4px;
-  border: 1px solid #444;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel-alt);
+  color: var(--text);
   font-family: monospace;
 }
 
@@ -404,16 +503,16 @@ aside {
 .mem-label-btn {
   padding: 0.15rem 0.5rem;
   border-radius: 4px;
-  border: 1px solid #3a5a7a;
-  background: #1f3040;
-  color: #9fd0ff;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
   cursor: pointer;
   font-size: 0.75rem;
   font-family: monospace;
 }
 
 .mem-label-btn:hover {
-  background: #2a4256;
+  filter: brightness(1.15);
 }
 
 .mem-table-wrap {
@@ -434,27 +533,27 @@ aside {
 }
 
 .mem-table thead th {
-  color: #808080;
+  color: var(--text-faint);
   font-weight: normal;
 }
 
 .mem-addr {
-  color: #808080;
+  color: var(--text-faint);
   text-align: right !important;
 }
 
 .mem-byte {
-  color: #d4d4d4;
+  color: var(--text);
 }
 
 .mem-sp {
-  background: #4a3a1f;
-  color: #ffd699;
+  background: var(--warning-bg-strong);
+  color: var(--warning-text);
 }
 
 .mem-data {
-  background: #1f3040;
-  color: #9fd0ff;
+  background: var(--accent-bg);
+  color: var(--accent-text);
 }
 
 .mem-sp.mem-data {
@@ -463,7 +562,7 @@ aside {
 }
 
 .mem-ascii {
-  color: #808080;
+  color: var(--text-faint);
   text-align: left !important;
   padding-left: 0.6rem !important;
 }

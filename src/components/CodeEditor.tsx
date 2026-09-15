@@ -6,7 +6,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
 import { asmLanguage } from './asmLanguage'
 
-const asmHighlightStyle = HighlightStyle.define([
+const asmHighlightStyleDark = HighlightStyle.define([
   { tag: t.comment, color: '#6a9955', fontStyle: 'italic' },
   { tag: t.string, color: '#ce9178' },
   { tag: t.number, color: '#b5cea8' },
@@ -17,48 +17,77 @@ const asmHighlightStyle = HighlightStyle.define([
   { tag: t.variableName, color: '#9cdcfe' },
 ])
 
-const editorTheme = EditorView.theme(
-  {
-    '&': {
-      backgroundColor: '#1e1e1e',
-      color: '#d4d4d4',
-      fontSize: '14px',
-      border: '1px solid #3a3a3a',
-      borderRadius: '6px',
+const asmHighlightStyleLight = HighlightStyle.define([
+  { tag: t.comment, color: '#008000', fontStyle: 'italic' },
+  { tag: t.string, color: '#a31515' },
+  { tag: t.number, color: '#098658' },
+  { tag: t.keyword, color: '#0000ff', fontWeight: 'bold' },
+  { tag: t.atom, color: '#267f99' },
+  { tag: t.meta, color: '#af00db' },
+  { tag: t.definition(t.variableName), color: '#795e26', fontWeight: 'bold' },
+  { tag: t.variableName, color: '#001080' },
+])
+
+function makeEditorTheme(dark: boolean) {
+  const c = dark
+    ? {
+        bg: '#1e1e1e', fg: '#d4d4d4', border: '#3a3a3a',
+        gutterBg: '#181818', gutterFg: '#666',
+        currentLine: '#2a3f2a', errorLine: '#4a1f1f',
+        bpDotBorder: '#555', bpDotOn: '#e05555',
+      }
+    : {
+        bg: '#ffffff', fg: '#1a1a1a', border: '#d5d5d5',
+        gutterBg: '#f0f0f0', gutterFg: '#888888',
+        currentLine: '#d9f2d9', errorLine: '#fbdcdc',
+        bpDotBorder: '#aaaaaa', bpDotOn: '#d13b3b',
+      }
+  return EditorView.theme(
+    {
+      '&': {
+        backgroundColor: c.bg,
+        color: c.fg,
+        fontSize: '14px',
+        border: `1px solid ${c.border}`,
+        borderRadius: '6px',
+      },
+      '&.cm-focused': { outline: 'none' },
+      '.cm-content': {
+        fontFamily: "'Cascadia Code', 'Consolas', monospace",
+        caretColor: c.fg,
+      },
+      '.cm-gutters': {
+        backgroundColor: c.gutterBg,
+        color: c.gutterFg,
+        border: 'none',
+      },
+      '.cm-activeLine': { backgroundColor: 'transparent' },
+      '.cm-line.cm-current-line': { backgroundColor: c.currentLine },
+      '.cm-line.cm-error-line': { backgroundColor: c.errorLine },
+      '.cm-breakpoint-gutter': { width: '14px' },
+      '.cm-breakpoint-gutter .cm-gutterElement': {
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      '.cm-bp-dot': {
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        border: `1px solid ${c.bpDotBorder}`,
+      },
+      '.cm-bp-dot.on': {
+        background: c.bpDotOn,
+        borderColor: c.bpDotOn,
+      },
     },
-    '&.cm-focused': { outline: 'none' },
-    '.cm-content': {
-      fontFamily: "'Cascadia Code', 'Consolas', monospace",
-      caretColor: '#d4d4d4',
-    },
-    '.cm-gutters': {
-      backgroundColor: '#181818',
-      color: '#666',
-      border: 'none',
-    },
-    '.cm-activeLine': { backgroundColor: 'transparent' },
-    '.cm-line.cm-current-line': { backgroundColor: '#2a3f2a' },
-    '.cm-line.cm-error-line': { backgroundColor: '#4a1f1f' },
-    '.cm-breakpoint-gutter': { width: '14px' },
-    '.cm-breakpoint-gutter .cm-gutterElement': {
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    '.cm-bp-dot': {
-      width: '8px',
-      height: '8px',
-      borderRadius: '50%',
-      border: '1px solid #555',
-    },
-    '.cm-bp-dot.on': {
-      background: '#e05555',
-      borderColor: '#e05555',
-    },
-  },
-  { dark: true },
-)
+    { dark },
+  )
+}
+
+const editorThemeDark = makeEditorTheme(true)
+const editorThemeLight = makeEditorTheme(false)
 
 function makeBreakpointMarker(on: boolean) {
   return new (class extends GutterMarker {
@@ -129,6 +158,7 @@ export function CodeEditor({
   onToggleBreakpoint,
   currentLine,
   errorLines,
+  theme = 'dark',
 }: {
   value: string
   onChange: (value: string) => void
@@ -136,16 +166,17 @@ export function CodeEditor({
   onToggleBreakpoint: (line: number) => void
   currentLine: number | null
   errorLines?: Set<number>
+  theme?: 'light' | 'dark'
 }) {
   const extensions = useMemo(
     () => [
       asmLanguage,
-      syntaxHighlighting(asmHighlightStyle),
+      syntaxHighlighting(theme === 'dark' ? asmHighlightStyleDark : asmHighlightStyleLight),
       buildBreakpointGutter(value, breakpoints, onToggleBreakpoint),
       buildLineHighlights(value, currentLine, errorLines),
-      editorTheme,
+      theme === 'dark' ? editorThemeDark : editorThemeLight,
     ],
-    [value, breakpoints, onToggleBreakpoint, currentLine, errorLines],
+    [value, breakpoints, onToggleBreakpoint, currentLine, errorLines, theme],
   )
 
   return (

@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>x86sim</title>
+    <script>
+      // Applied before any CSS loads, so a saved light-theme preference
+      // doesn't flash dark for a moment on first paint.
+      try {
+        if (localStorage.getItem('x86sim-theme') === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light')
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

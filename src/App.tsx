@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { assemble } from './core/assembler'
 import { Cpu } from './core/cpu'
 import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
@@ -11,9 +11,28 @@ import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
 const ANIMATE_INTERVAL_MS = 150
+const THEME_STORAGE_KEY = 'x86sim-theme'
+
+interface Tab {
+  id: string
+  title: string
+  source: string
+  breakpoints: Set<number>
+}
+
+let nextTabId = 1
+function newTabId() {
+  return `tab-${nextTabId++}`
+}
+
+function makeTab(title: string, source: string): Tab {
+  return { id: newTabId(), title, source, breakpoints: new Set() }
+}
 
 export default function App() {
-  const [source, setSource] = useState(EXAMPLES.find((e) => e.id === DEFAULT_EXAMPLE_ID)!.source)
+  const initialExample = EXAMPLES.find((e) => e.id === DEFAULT_EXAMPLE_ID)!
+  const [tabs, setTabs] = useState<Tab[]>(() => [makeTab(initialExample.title, initialExample.source)])
+  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id)
   const [selectedExampleId, setSelectedExampleId] = useState(DEFAULT_EXAMPLE_ID)
   const [errors, setErrors] = useState<AssembleError[]>([])
   const cpuRef = useRef(new Cpu())
@@ -24,21 +43,39 @@ export default function App() {
   const [assembled, setAssembled] = useState(false)
   const [currentLine, setCurrentLine] = useState<number | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
-  const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
   const [hitBreakpoint, setHitBreakpoint] = useState(false)
   const [waitingForInput, setWaitingForInput] = useState<PendingInput | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [isAnimating, setIsAnimating] = useState(false)
   const [cpuGeneration, setCpuGeneration] = useState(0)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (
+    window.localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark'
+  ))
   const animTimerRef = useRef<number | null>(null)
 
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0]
+  const source = activeTab.source
+  const breakpoints = activeTab.breakpoints
   const canRun = assembled && !halted && !waitingForInput && !isAnimating
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  }, [theme])
 
   useEffect(() => {
     return () => {
       if (animTimerRef.current !== null) window.clearInterval(animTimerRef.current)
     }
   }, [])
+
+  function toggleTheme() {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+  }
+
+  function updateTab(id: string, patch: Partial<Tab>) {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+  }
 
   function stopAnimation() {
     if (animTimerRef.current !== null) {
@@ -70,12 +107,10 @@ export default function App() {
   }
 
   function toggleBreakpoint(line: number) {
-    setBreakpoints((prev) => {
-      const next = new Set(prev)
-      if (next.has(line)) next.delete(line)
-      else next.add(line)
-      return next
-    })
+    const next = new Set(activeTab.breakpoints)
+    if (next.has(line)) next.delete(line)
+    else next.add(line)
+    updateTab(activeTabId, { breakpoints: next })
   }
 
   function syncState() {
@@ -88,6 +123,20 @@ export default function App() {
     setWaitingForInput(cpu.waitingForInput)
     const instr = cpu.instructions[cpu.ip]
     setCurrentLine(instr ? instr.line : null)
+  }
+
+  // Starts a fresh execution session for whatever tab is now active: a new
+  // Cpu (so no stale registers/memory/ports leak across tabs), cleared
+  // errors/output, and a bumped cpuGeneration so the devices panel (which
+  // keeps its own per-run state, like the stepper motor's angle) remounts.
+  function resetExecutionState() {
+    cpuRef.current = new Cpu()
+    setErrors([])
+    setAssembled(false)
+    setRuntimeError(null)
+    setInputValue('')
+    setCpuGeneration((g) => g + 1)
+    syncState()
   }
 
   function handleAssemble() {
@@ -138,15 +187,38 @@ export default function App() {
     stopAnimation()
     const example = EXAMPLES.find((e) => e.id === selectedExampleId)
     if (!example) return
-    setSource(example.source)
-    setErrors([])
-    setAssembled(false)
-    setRuntimeError(null)
-    setBreakpoints(new Set())
-    setInputValue('')
-    cpuRef.current = new Cpu()
-    setCpuGeneration((g) => g + 1)
-    syncState()
+    const tab = makeTab(example.title, example.source)
+    setTabs((prev) => [...prev, tab])
+    setActiveTabId(tab.id)
+    resetExecutionState()
+  }
+
+  function handleNewTab() {
+    stopAnimation()
+    const tab = makeTab('Untitled', '; New program\n')
+    setTabs((prev) => [...prev, tab])
+    setActiveTabId(tab.id)
+    resetExecutionState()
+  }
+
+  function handleSwitchTab(id: string) {
+    if (id === activeTabId) return
+    stopAnimation()
+    setActiveTabId(id)
+    resetExecutionState()
+  }
+
+  function handleCloseTab(id: string, e: MouseEvent) {
+    e.stopPropagation()
+    if (tabs.length === 1) return
+    const idx = tabs.findIndex((t) => t.id === id)
+    const remaining = tabs.filter((t) => t.id !== id)
+    setTabs(remaining)
+    if (id === activeTabId) {
+      stopAnimation()
+      setActiveTabId(remaining[Math.max(0, idx - 1)].id)
+      resetExecutionState()
+    }
   }
 
   function handleSubmitInput() {
@@ -163,11 +235,38 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <h1>x86sim</h1>
-        <p>A browser-based 8086 assembly simulator inspired by emu8086.</p>
+        <div>
+          <h1>x86sim</h1>
+          <p>A browser-based 8086 assembly simulator inspired by emu8086.</p>
+        </div>
+        <button className="theme-toggle" onClick={toggleTheme}>
+          {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+        </button>
       </header>
       <main>
         <section className="editor-panel">
+          <div className="tabs-bar">
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                className={tab.id === activeTabId ? 'tab active' : 'tab'}
+                onClick={() => handleSwitchTab(tab.id)}
+              >
+                <span className="tab-title">{tab.title}</span>
+                {tabs.length > 1 && (
+                  <button
+                    className="tab-close"
+                    onClick={(e) => handleCloseTab(tab.id, e)}
+                    title="Close tab"
+                    aria-label={`Close ${tab.title}`}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            <button className="tab-new" onClick={handleNewTab} title="New tab">+</button>
+          </div>
           <div className="examples-bar">
             <select
               value={selectedExampleId}
@@ -177,18 +276,20 @@ export default function App() {
                 <option key={ex.id} value={ex.id}>{ex.title}</option>
               ))}
             </select>
-            <button onClick={handleLoadExample} disabled={isAnimating}>Load</button>
+            <button onClick={handleLoadExample} disabled={isAnimating}>Load in new tab</button>
           </div>
           <p className="example-description">
             {EXAMPLES.find((e) => e.id === selectedExampleId)?.description}
           </p>
           <CodeEditor
+            key={activeTabId}
             value={source}
-            onChange={setSource}
+            onChange={(v) => updateTab(activeTabId, { source: v })}
             breakpoints={breakpoints}
             onToggleBreakpoint={toggleBreakpoint}
             currentLine={currentLine}
             errorLines={new Set(errors.map((e) => e.line))}
+            theme={theme}
           />
           <div className="toolbar">
             <button onClick={handleAssemble} disabled={isAnimating}>Assemble</button>
@@ -199,7 +300,9 @@ export default function App() {
               : <button onClick={handleAnimate} disabled={!canRun}>▶ Animate</button>}
             <button onClick={handleReset} disabled={!assembled || isAnimating}>Reset</button>
             {breakpoints.size > 0 && (
-              <button onClick={() => setBreakpoints(new Set())} disabled={isAnimating}>Clear breakpoints</button>
+              <button onClick={() => updateTab(activeTabId, { breakpoints: new Set() })} disabled={isAnimating}>
+                Clear breakpoints
+              </button>
             )}
           </div>
           {errors.length > 0 && (
