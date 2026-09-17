@@ -1,4 +1,5 @@
-import type { DataDeclaration, Flags, Instruction, Operand, PendingInput, Reg16, Reg8, RegName } from './types'
+import type { DataDeclaration, Flags, Instruction, Mnemonic, Operand, PendingInput, Reg16, Reg8, RegName } from './types'
+import { instructionCycles } from './cycles'
 
 const REG16: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'DS', 'ES', 'SS', 'CS']
 
@@ -11,6 +12,33 @@ const REG8_PARENT: Record<Reg8, { parent: Reg16; high: boolean }> = {
 
 const MEMORY_SIZE = 0x10000
 const INITIAL_SP = 0xfffe
+
+export interface MnemonicProfile {
+  count: number
+  cycles: number
+}
+
+// Everything step()/run()/provideInput() can mutate — i.e. everything needed
+// to fully rewind the Cpu to an earlier point via restore(). Deliberately
+// excludes instructions/data/labels/dataLabels: those are set once by load()
+// and never change during execution, so there's nothing to snapshot there.
+export interface CpuSnapshot {
+  regs: Record<Reg16, number>
+  flags: Flags
+  memory: Uint8Array
+  ports: Uint8Array
+  ip: number
+  halted: boolean
+  hitBreakpoint: boolean
+  waitingForInput: PendingInput | null
+  output: string[]
+  steps: number
+  lastInstruction: Instruction | null
+  cycles: number
+  profile: Map<Mnemonic, MnemonicProfile>
+  peakStackBytes: number
+  memoryWrites: Set<number>
+}
 
 export class Cpu {
   regs: Record<Reg16, number> = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP, DS: 0, ES: 0, SS: 0, CS: 0 }
@@ -29,6 +57,15 @@ export class Cpu {
   waitingForInput: PendingInput | null = null
   output: string[] = []
   steps = 0
+  // Profiler state (see ProfilerView.tsx): idealized total clock cycles spent,
+  // a per-mnemonic breakdown of that cost, the deepest the stack has grown
+  // (in bytes below the initial SP), and the distinct memory addresses
+  // written outside the declared .DATA segment (PUSH/CALL stack writes don't
+  // count here — they're covered by peakStackBytes instead).
+  cycles = 0
+  profile = new Map<Mnemonic, MnemonicProfile>()
+  peakStackBytes = 0
+  memoryWrites = new Set<number>()
   // The instruction step() most recently fetched (set even if it threw or is
   // still waiting on keyboard input) — lets the UI show what the CPU is/was
   // doing without re-deriving it from ip, which may already point elsewhere.
@@ -61,6 +98,62 @@ export class Cpu {
     this.output = []
     this.steps = 0
     this.lastInstruction = null
+    this.cycles = 0
+    this.profile.clear()
+    this.peakStackBytes = 0
+    this.memoryWrites.clear()
+  }
+
+  // Captures everything step()/run()/provideInput() can mutate, for the
+  // Step Back UI feature — restore() later rewinds to exactly this point.
+  snapshot(): CpuSnapshot {
+    return {
+      regs: { ...this.regs },
+      flags: { ...this.flags },
+      memory: this.memory.slice(),
+      ports: this.ports.slice(),
+      ip: this.ip,
+      halted: this.halted,
+      hitBreakpoint: this.hitBreakpoint,
+      waitingForInput: this.waitingForInput ? { ...this.waitingForInput } : null,
+      output: [...this.output],
+      steps: this.steps,
+      lastInstruction: this.lastInstruction,
+      cycles: this.cycles,
+      profile: new Map([...this.profile].map(([m, p]) => [m, { ...p }])),
+      peakStackBytes: this.peakStackBytes,
+      memoryWrites: new Set(this.memoryWrites),
+    }
+  }
+
+  restore(snap: CpuSnapshot) {
+    this.regs = { ...snap.regs }
+    this.flags = { ...snap.flags }
+    this.memory.set(snap.memory)
+    this.ports.set(snap.ports)
+    this.ip = snap.ip
+    this.halted = snap.halted
+    this.hitBreakpoint = snap.hitBreakpoint
+    this.waitingForInput = snap.waitingForInput ? { ...snap.waitingForInput } : null
+    this.output = [...snap.output]
+    this.steps = snap.steps
+    this.lastInstruction = snap.lastInstruction
+    this.cycles = snap.cycles
+    this.profile = new Map([...snap.profile].map(([m, p]) => [m, { ...p }]))
+    this.peakStackBytes = snap.peakStackBytes
+    this.memoryWrites = new Set(snap.memoryWrites)
+  }
+
+  private trackWrite(addr: number) {
+    this.memoryWrites.add(addr & 0xffff)
+  }
+
+  private recordCycles(mnemonic: Mnemonic, cost: number) {
+    this.cycles += cost
+    const entry = this.profile.get(mnemonic)
+    if (entry) { entry.count += 1; entry.cycles += cost }
+    else this.profile.set(mnemonic, { count: 1, cycles: cost })
+    this.peakStackBytes = Math.max(this.peakStackBytes, Math.max(0, INITIAL_SP - this.regs.SP))
   }
 
   private isReg8(name: RegName): name is Reg8 {
@@ -114,7 +207,11 @@ export class Cpu {
   private writeMem(op: Operand & { kind: 'mem' }, value: number, isWord: boolean) {
     const addr = this.effectiveAddress(op)
     this.memory[addr] = value & 0xff
-    if (isWord) this.memory[(addr + 1) & 0xffff] = (value >> 8) & 0xff
+    this.trackWrite(addr)
+    if (isWord) {
+      this.memory[(addr + 1) & 0xffff] = (value >> 8) & 0xff
+      this.trackWrite(addr + 1)
+    }
   }
 
   private readOperand(op: Operand, isWord: boolean): number {
@@ -172,9 +269,11 @@ export class Cpu {
     switch (mnemonic) {
       case 'MOVSB':
         this.memory[this.regs.DI & 0xffff] = this.memory[this.regs.SI & 0xffff]
+        this.trackWrite(this.regs.DI)
         break
       case 'STOSB':
         this.memory[this.regs.DI & 0xffff] = this.getReg('AL')
+        this.trackWrite(this.regs.DI)
         break
       case 'LODSB':
         this.setReg('AL', this.memory[this.regs.SI & 0xffff])
@@ -207,6 +306,8 @@ export class Cpu {
       ? false
       : true
     let nextIp = this.ip + 1
+    let repIterations: number | undefined
+    let shiftCount: number | undefined
 
     switch (instr.mnemonic) {
       case 'NOP': break
@@ -317,11 +418,21 @@ export class Cpu {
         this.setLogicalFlags(result, isWord)
         break
       }
+      case 'LEA': {
+        // Loads the address op2 refers to, never the value stored there --
+        // op2.kind==='mem' computes it from base/index/disp like a normal
+        // memory access would, and 'label' already resolves to an address
+        // (see readOperand), so no special-casing is needed there.
+        const addr = op2.kind === 'mem' ? this.effectiveAddress(op2) : this.readOperand(op2, true)
+        this.writeOperand(op1, addr, true)
+        break
+      }
       case 'SHL': {
         const size = isWord ? 16 : 8
         const mask = isWord ? 0xffff : 0xff
         const value = this.readOperand(op1, isWord)
         const count = Math.min(this.readOperand(op2, false), 31)
+        shiftCount = count
         const result = count === 0 ? value : (value << count) & mask
         if (count > 0) this.flags.CF = count <= size && ((value >> (size - count)) & 1) === 1
         this.writeOperand(op1, result, isWord)
@@ -334,6 +445,7 @@ export class Cpu {
         const mask = isWord ? 0xffff : 0xff
         const value = this.readOperand(op1, isWord)
         const count = Math.min(this.readOperand(op2, false), 31)
+        shiftCount = count
         const result = count === 0 ? value : (value >>> count) & mask
         if (count > 0) this.flags.CF = ((value >> (count - 1)) & 1) === 1
         this.writeOperand(op1, result, isWord)
@@ -421,6 +533,7 @@ export class Cpu {
             if (instr.rep === 'REPE' && !this.flags.ZF) break
             if (instr.rep === 'REPNE' && this.flags.ZF) break
           }
+          repIterations = iterations
         } else {
           this.execStringOp(instr.mnemonic)
         }
@@ -436,6 +549,9 @@ export class Cpu {
     // (without advancing ip); it will be completed and ip advanced once
     // provideInput() is called.
     if (this.waitingForInput) return
+
+    const taken = nextIp !== this.ip + 1
+    this.recordCycles(instr.mnemonic, instructionCycles(instr, op1, op2, isWord, { taken, repCount: repIterations, shiftCount }))
 
     this.ip = nextIp
     this.steps += 1
@@ -479,13 +595,16 @@ export class Cpu {
     } else {
       const trimmed = text.slice(0, req.maxLen)
       this.memory[(req.bufferAddr + 1) & 0xffff] = trimmed.length & 0xff
+      this.trackWrite(req.bufferAddr + 1)
       for (let i = 0; i < trimmed.length; i++) {
         this.memory[(req.bufferAddr + 2 + i) & 0xffff] = trimmed.charCodeAt(i) & 0xff
+        this.trackWrite(req.bufferAddr + 2 + i)
       }
       this.output.push(trimmed + '\n')
     }
 
     this.waitingForInput = null
+    this.recordCycles('INT', 51)
     this.ip += 1
     this.steps += 1
     if (this.ip >= this.instructions.length) this.halted = true

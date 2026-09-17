@@ -30,7 +30,7 @@ export type Operand =
 export type Mnemonic =
   | 'MOV' | 'ADD' | 'SUB' | 'INC' | 'DEC' | 'CMP'
   | 'MUL' | 'DIV' | 'AND' | 'OR' | 'XOR' | 'NOT' | 'SHL' | 'SHR'
-  | 'XCHG' | 'NEG' | 'TEST'
+  | 'XCHG' | 'NEG' | 'TEST' | 'LEA'
   | 'JMP' | 'JE' | 'JNE' | 'JG' | 'JL' | 'JGE' | 'JLE' | 'JA' | 'JAE' | 'JB' | 'JBE' | 'JCXZ'
   | 'LOOP' | 'PUSH' | 'POP' | 'CALL' | 'RET' | 'IN' | 'OUT' | 'INT' | 'NOP' | 'HLT'
   | 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB' | 'CLD' | 'STD'

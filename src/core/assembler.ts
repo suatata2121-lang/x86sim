@@ -11,7 +11,7 @@ const INDEX_REGS: IndexReg[] = ['SI', 'DI']
 const MNEMONICS: Mnemonic[] = [
   'MOV', 'ADD', 'SUB', 'INC', 'DEC', 'CMP',
   'MUL', 'DIV', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR',
-  'XCHG', 'NEG', 'TEST',
+  'XCHG', 'NEG', 'TEST', 'LEA',
   'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE', 'JCXZ',
   'LOOP', 'PUSH', 'POP', 'CALL', 'RET', 'IN', 'OUT', 'INT', 'NOP', 'HLT',
   'MOVSB', 'STOSB', 'LODSB', 'CMPSB', 'SCASB', 'CLD', 'STD',
@@ -27,6 +27,15 @@ const REP_PREFIXES: Record<string, RepPrefix> = {
   REP: 'REP', REPE: 'REPE', REPZ: 'REPE', REPNE: 'REPNE', REPNZ: 'REPNE',
 }
 
+// Common Intel-syntax synonyms for jumps this simulator already implements
+// under their other name — same opcode/flag test, just named after a
+// different flag (zero vs. "equal", carry vs. "below"). Resolved to the
+// canonical mnemonic before anything else sees it, so the rest of the
+// pipeline (execution, cycle costing, profiler) only ever deals with one name.
+const MNEMONIC_ALIASES: Partial<Record<string, Mnemonic>> = {
+  JZ: 'JE', JNZ: 'JNE', JC: 'JB', JNC: 'JAE',
+}
+
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 function isRegister(token: string): token is RegName {
@@ -37,6 +46,8 @@ function parseImmediate(token: string): number | null {
   const t = token.trim()
   if (/^[0-9][0-9a-f]*h$/i.test(t)) return parseInt(t.slice(0, -1), 16)
   if (/^0x[0-9a-f]+$/i.test(t)) return parseInt(t, 16)
+  if (/^[01]+b$/i.test(t)) return parseInt(t.slice(0, -1), 2)
+  if (/^[0-7]+[oq]$/i.test(t)) return parseInt(t.slice(0, -1), 8)
   if (/^-?[0-9]+$/.test(t)) return parseInt(t, 10)
   if (/^'.'$/.test(t)) return t.charCodeAt(1)
   // MASM's built-in "segment address of the data group" symbol. This
@@ -123,6 +134,12 @@ function parseMemOperand(inner: string): MemParts | null {
 function parseOperand(token: string): Operand {
   let t = token.trim()
 
+  // MASM's OFFSET keyword explicitly asks for a label's address -- which is
+  // already what a bare label operand means in this simulator (see the
+  // 'label' operand kind below), so it's simply stripped and ignored.
+  const offsetMatch = t.match(/^OFFSET\s+(.+)$/i)
+  if (offsetMatch) t = offsetMatch[1].trim()
+
   let size: 'byte' | 'word' | undefined
   const sizeMatch = t.match(/^(BYTE|WORD)\s+PTR\s+(.*)$/i)
   if (sizeMatch) {
@@ -132,6 +149,15 @@ function parseOperand(token: string): Operand {
 
   if (t.startsWith('[') && t.endsWith(']')) {
     const mem = parseMemOperand(t.slice(1, -1))
+    if (mem) return { kind: 'mem', base: mem.base, index: mem.index, label: mem.label, disp: mem.disp, size }
+    return { kind: 'label', name: token.trim() }
+  }
+  // MASM/TASM's alternate array-indexing notation -- "label[reg]" (and
+  // "label[reg+disp]") means the same thing as "[label+reg]"; both put an
+  // element's address by adding the index register to the label's address.
+  const suffixMatch = t.match(/^([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]$/)
+  if (suffixMatch) {
+    const mem = parseMemOperand(`${suffixMatch[1]}+${suffixMatch[2]}`)
     if (mem) return { kind: 'mem', base: mem.base, index: mem.index, label: mem.label, disp: mem.disp, size }
     return { kind: 'label', name: token.trim() }
   }
@@ -273,6 +299,10 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
   XCHG: [['reg', 'mem'], ['reg', 'mem']],
   NEG: [['reg', 'mem']],
   TEST: [['reg', 'mem'], ['reg', 'imm', 'mem']],
+  // LEA's source is always "the address of ..." -- either a bracketed memory
+  // expression ([SI+4]) or a bare data label (STR1, which this simulator
+  // already parses as its address rather than dereferencing it).
+  LEA: [['reg'], ['mem', 'label']],
   JMP: [['label']],
   JE: [['label']],
   JNE: [['label']],
@@ -437,6 +467,11 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
     if (/^\.(MODEL|STACK|DATA|CODE|CONST|DOSSEG|STARTUP)\b/i.test(work)) continue
     if (/^ASSUME\b/i.test(work)) continue
     if (/^END(\s+[A-Za-z_][A-Za-z0-9_]*)?$/i.test(work)) continue
+    // ORG sets the load offset of what follows (e.g. ORG 100h for a .COM-style
+    // program). This simulator has a single flat, always-zero-based memory
+    // model with no relocation, so there's nothing for it to actually do —
+    // recognized and skipped like the other boilerplate directives above.
+    if (/^ORG\b/i.test(work)) continue
 
     // "NAME PROC ..." starts a procedure — treated exactly like a standalone
     // "NAME:" label line (a NOP with that label attached) so CALLs to it
@@ -508,7 +543,8 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
     }
 
     const parts = work.split(/\s+/)
-    const mnemonicToken = parts[0].toUpperCase()
+    const rawMnemonicToken = parts[0].toUpperCase()
+    const mnemonicToken = MNEMONIC_ALIASES[rawMnemonicToken] ?? rawMnemonicToken
     if (!MNEMONICS.includes(mnemonicToken as Mnemonic)) {
       const suggestion = suggestMnemonic(mnemonicToken)
       const message = suggestion

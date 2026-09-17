@@ -56,10 +56,26 @@ function makeEditorTheme(dark: boolean) {
         fontFamily: "'Cascadia Code', 'Consolas', monospace",
         caretColor: c.fg,
       },
+      '.cm-scroller': {
+        // CodeMirror's scroller defaults to flex-grow: 0, so on a short file
+        // it only takes up as much of the editor box as its content needs —
+        // leaving the minHeight-driven remainder plain, with no gutter
+        // background/numbers. Growing it to fill the box lets the gutters
+        // (stretched via align-items below) extend all the way down too.
+        flexGrow: 1,
+      },
       '.cm-gutters': {
         backgroundColor: c.gutterBg,
         color: c.gutterFg,
         border: 'none',
+        // Overrides the base theme's `height: 100%` (a percentage that can't
+        // resolve because the editor's own height comes from `min-height`,
+        // not `height` — so it silently computes as `auto`, content-sized).
+        // `height: auto` + `align-self: stretch` sizes the gutter off the
+        // flex algorithm instead, which works regardless of how the
+        // scroller's own height was determined.
+        height: 'auto',
+        alignSelf: 'stretch',
       },
       '.cm-activeLine': { backgroundColor: 'transparent' },
       '.cm-line.cm-current-line': { backgroundColor: c.currentLine },
@@ -184,6 +200,11 @@ export function CodeEditor({
       value={value}
       onChange={onChange}
       extensions={extensions}
+      // Without this, react-codemirror silently adds its own default
+      // *light* theme extension (background, colors, ...) alongside ours —
+      // it doesn't fully override ours, so e.g. the editor's own background
+      // stayed white even when editorThemeDark set it to a dark color.
+      theme="none"
       minHeight="320px"
       maxHeight="600px"
       basicSetup={{

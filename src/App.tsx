@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { assemble } from './core/assembler'
-import { Cpu } from './core/cpu'
+import { Cpu, type CpuSnapshot } from './core/cpu'
 import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
 import { RegisterView } from './components/RegisterView'
 import { MemoryView } from './components/MemoryView'
@@ -8,12 +8,33 @@ import { CodeEditor } from './components/CodeEditor'
 import { DevicesView } from './components/Devices'
 import { DataBusView } from './components/DataBusView'
 import { StackView } from './components/StackView'
+import { ProfilerView } from './components/ProfilerView'
+import { GraderView } from './components/GraderView'
+import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { EXAMPLES } from './examples'
+import { CURRICULUM, type Assignment } from './curriculum'
+import { gradeSource, type GradeReport } from './core/grader'
 import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
 const ANIMATE_INTERVAL_MS = 150
+const MAX_STEP_HISTORY = 200
 const THEME_STORAGE_KEY = 'x86sim-theme'
+const COMPLETED_ASSIGNMENTS_KEY = 'x86sim-completed-assignments'
+const ALL_ASSIGNMENTS: Assignment[] = CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments))
+const BLANK_SOURCE = '; Write your code here.\n; Need inspiration? Check the Examples or Learn tabs on the left.\n\n'
+
+type SourceMode = 'new' | 'examples' | 'learn'
+
+type AsideTab = 'registers' | 'stack' | 'devices' | 'databus' | 'memory' | 'profiler'
+const ASIDE_TABS: { id: AsideTab; label: string }[] = [
+  { id: 'registers', label: 'Registers' },
+  { id: 'stack', label: 'Stack' },
+  { id: 'devices', label: 'Devices' },
+  { id: 'databus', label: 'Data Bus' },
+  { id: 'memory', label: 'Memory' },
+  { id: 'profiler', label: 'Profiler' },
+]
 
 interface Tab {
   id: string
@@ -31,11 +52,25 @@ function makeTab(title: string, source: string): Tab {
   return { id: newTabId(), title, source, breakpoints: new Set() }
 }
 
+function loadCompletedAssignments(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(COMPLETED_ASSIGNMENTS_KEY)
+    return raw ? new Set(JSON.parse(raw)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
 export default function App() {
-  const initialExample = EXAMPLES.find((e) => e.id === DEFAULT_EXAMPLE_ID)!
-  const [tabs, setTabs] = useState<Tab[]>(() => [makeTab(initialExample.title, initialExample.source)])
+  const [tabs, setTabs] = useState<Tab[]>(() => [makeTab('Untitled', BLANK_SOURCE)])
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id)
+  const [mode, setMode] = useState<SourceMode>('new')
+  const [asideTab, setAsideTab] = useState<AsideTab>('registers')
   const [selectedExampleId, setSelectedExampleId] = useState(DEFAULT_EXAMPLE_ID)
+  const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null)
+  const [completedAssignments, setCompletedAssignments] = useState<Set<string>>(loadCompletedAssignments)
+  const learnNav = useLearnNav()
+  const [gradeReport, setGradeReport] = useState<GradeReport | null>(null)
   const [errors, setErrors] = useState<AssembleError[]>([])
   const cpuRef = useRef(new Cpu())
   const [regs, setRegs] = useState<Record<Reg16, number>>(cpuRef.current.regs)
@@ -54,6 +89,8 @@ export default function App() {
     window.localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark'
   ))
   const animTimerRef = useRef<number | null>(null)
+  const stepHistoryRef = useRef<CpuSnapshot[]>([])
+  const [canStepBack, setCanStepBack] = useState(false)
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0]
   const source = activeTab.source
@@ -70,6 +107,30 @@ export default function App() {
       if (animTimerRef.current !== null) window.clearInterval(animTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COMPLETED_ASSIGNMENTS_KEY, JSON.stringify([...completedAssignments]))
+    } catch {
+      // ignore (e.g. private browsing with storage disabled)
+    }
+  }, [completedAssignments])
+
+  // Records one undo point before an action (Step, one Animate tick, or a
+  // whole Run) mutates the Cpu, so Step Back can later rewind past it. Capped
+  // at MAX_STEP_HISTORY entries (each snapshot copies the 64KB memory array,
+  // so this is bounded rather than growing for the life of a long session).
+  function pushHistory() {
+    const history = stepHistoryRef.current
+    history.push(cpuRef.current.snapshot())
+    if (history.length > MAX_STEP_HISTORY) history.shift()
+    setCanStepBack(true)
+  }
+
+  function clearHistory() {
+    stepHistoryRef.current = []
+    setCanStepBack(false)
+  }
 
   function toggleTheme() {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
@@ -91,6 +152,7 @@ export default function App() {
     setIsAnimating(true)
     animTimerRef.current = window.setInterval(() => {
       const cpu = cpuRef.current
+      pushHistory()
       try {
         cpu.step()
         setRuntimeError(null)
@@ -137,6 +199,8 @@ export default function App() {
     setAssembled(false)
     setRuntimeError(null)
     setInputValue('')
+    setGradeReport(null)
+    clearHistory()
     setCpuGeneration((g) => g + 1)
     syncState()
   }
@@ -152,11 +216,13 @@ export default function App() {
     cpuRef.current.load(instructions, data)
     setAssembled(true)
     setRuntimeError(null)
+    clearHistory()
     setCpuGeneration((g) => g + 1)
     syncState()
   }
 
   function handleStep() {
+    pushHistory()
     try {
       cpuRef.current.step()
       setRuntimeError(null)
@@ -166,7 +232,19 @@ export default function App() {
     syncState()
   }
 
+  // Rewinds to the undo point recorded just before the last Step, Animate
+  // tick, or Run — see pushHistory().
+  function handleStepBack() {
+    const prev = stepHistoryRef.current.pop()
+    if (!prev) return
+    cpuRef.current.restore(prev)
+    setRuntimeError(null)
+    setCanStepBack(stepHistoryRef.current.length > 0)
+    syncState()
+  }
+
   function handleRun() {
+    pushHistory()
     try {
       cpuRef.current.run(100000, breakpoints)
       setRuntimeError(null)
@@ -181,6 +259,7 @@ export default function App() {
     cpuRef.current.reset()
     setRuntimeError(null)
     setInputValue('')
+    clearHistory()
     setCpuGeneration((g) => g + 1)
     syncState()
   }
@@ -195,11 +274,34 @@ export default function App() {
     resetExecutionState()
   }
 
-  function handleNewTab() {
+  function handleSelectAssignment(assignment: Assignment) {
     stopAnimation()
-    const tab = makeTab('Untitled', '; New program\n')
+    const tab = makeTab(assignment.title, assignment.starterSource)
     setTabs((prev) => [...prev, tab])
     setActiveTabId(tab.id)
+    setActiveAssignmentId(assignment.id)
+    resetExecutionState()
+  }
+
+  // Grades the editor's current source against the active assignment's test
+  // cases. Runs in its own throwaway Cpu instances (see grader.ts) so it
+  // never touches cpuRef — the manual Step/Run/Animate session is untouched.
+  function handleRunTests() {
+    const assignment = ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)
+    if (!assignment) return
+    const report = gradeSource(source, assignment.testCases)
+    setGradeReport(report)
+    if (report.assembled && report.totalCount > 0 && report.passedCount === report.totalCount) {
+      setCompletedAssignments((prev) => (prev.has(assignment.id) ? prev : new Set(prev).add(assignment.id)))
+    }
+  }
+
+  function handleNewTab() {
+    stopAnimation()
+    const tab = makeTab('Untitled', BLANK_SOURCE)
+    setTabs((prev) => [...prev, tab])
+    setActiveTabId(tab.id)
+    setMode('new')
     resetExecutionState()
   }
 
@@ -224,6 +326,7 @@ export default function App() {
   }
 
   function handleSubmitInput() {
+    pushHistory()
     try {
       cpuRef.current.provideInput(inputValue)
       setInputValue('')
@@ -269,33 +372,71 @@ export default function App() {
             ))}
             <button className="tab-new" onClick={handleNewTab} title="New tab">+</button>
           </div>
-          <div className="examples-bar">
-            <select
-              value={selectedExampleId}
-              onChange={(e) => setSelectedExampleId(e.target.value)}
-            >
-              {EXAMPLES.map((ex) => (
-                <option key={ex.id} value={ex.id}>{ex.title}</option>
-              ))}
-            </select>
-            <button onClick={handleLoadExample} disabled={isAnimating}>Load in new tab</button>
+          <div className="editor-row">
+            <div className="mode-sidebar">
+              <div className="mode-tabs mode-tabs-vertical">
+                <button className={mode === 'new' ? 'mode-tab active' : 'mode-tab'} onClick={() => setMode('new')}>New</button>
+                <button className={mode === 'examples' ? 'mode-tab active' : 'mode-tab'} onClick={() => setMode('examples')}>Examples</button>
+                <button className={mode === 'learn' ? 'mode-tab active' : 'mode-tab'} onClick={() => setMode('learn')}>Learn</button>
+              </div>
+              {mode === 'new' && (
+                <div className="mode-panel">
+                  <p className="example-description">Start from a blank file, or pick one from Examples or Learn.</p>
+                  <button onClick={handleNewTab} disabled={isAnimating}>New blank tab</button>
+                </div>
+              )}
+              {mode === 'examples' && (
+                <div className="mode-panel">
+                  <div className="examples-bar">
+                    <select
+                      value={selectedExampleId}
+                      onChange={(e) => setSelectedExampleId(e.target.value)}
+                    >
+                      {EXAMPLES.map((ex) => (
+                        <option key={ex.id} value={ex.id}>{ex.title}</option>
+                      ))}
+                    </select>
+                    <button onClick={handleLoadExample} disabled={isAnimating}>Load in new tab</button>
+                  </div>
+                  <p className="example-description">
+                    {EXAMPLES.find((e) => e.id === selectedExampleId)?.description}
+                  </p>
+                </div>
+              )}
+              {mode === 'learn' && (
+                <LearnSidebar
+                  nav={learnNav}
+                  activeAssignmentId={activeAssignmentId}
+                  completedIds={completedAssignments}
+                  onSelectAssignment={handleSelectAssignment}
+                />
+              )}
+            </div>
+            <div className="editor-col">
+              {mode === 'learn' && (
+                <LearnDetail
+                  nav={learnNav}
+                  activeAssignmentId={activeAssignmentId}
+                  completedIds={completedAssignments}
+                />
+              )}
+              <CodeEditor
+                key={activeTabId}
+                value={source}
+                onChange={(v) => updateTab(activeTabId, { source: v })}
+                breakpoints={breakpoints}
+                onToggleBreakpoint={toggleBreakpoint}
+                currentLine={currentLine}
+                errorLines={new Set(errors.map((e) => e.line))}
+                theme={theme}
+              />
+            </div>
           </div>
-          <p className="example-description">
-            {EXAMPLES.find((e) => e.id === selectedExampleId)?.description}
-          </p>
-          <CodeEditor
-            key={activeTabId}
-            value={source}
-            onChange={(v) => updateTab(activeTabId, { source: v })}
-            breakpoints={breakpoints}
-            onToggleBreakpoint={toggleBreakpoint}
-            currentLine={currentLine}
-            errorLines={new Set(errors.map((e) => e.line))}
-            theme={theme}
-          />
           <div className="toolbar">
             <button onClick={handleAssemble} disabled={isAnimating}>Assemble</button>
-            <button onClick={handleStep} disabled={!canRun}>Step</button>
+            <button onClick={handleRunTests} disabled={isAnimating || !activeAssignmentId}>Run Tests</button>
+            <button onClick={handleStepBack} disabled={!canStepBack || isAnimating} title="Undo the last Step/Animate tick/Run">⏪ Step Back</button>
+            <button onClick={handleStep} disabled={!canRun}>Step ▶</button>
             <button onClick={handleRun} disabled={!canRun}>Run</button>
             {isAnimating
               ? <button onClick={stopAnimation}>⏹ Stop</button>
@@ -307,6 +448,12 @@ export default function App() {
               </button>
             )}
           </div>
+          {activeAssignmentId && (
+            <p className="status">
+              Testing against: {ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.title}
+              {completedAssignments.has(activeAssignmentId) ? ' ✓ completed' : ''}
+            </p>
+          )}
           {errors.length > 0 && (
             <ul className="errors">
               {errors.map((e, i) => {
@@ -361,25 +508,54 @@ export default function App() {
             <h3>Output</h3>
             <pre className="output">{output || '(no output yet)'}</pre>
           </div>
+          {gradeReport && <GraderView report={gradeReport} />}
         </section>
         <aside>
-          <RegisterView regs={regs} flags={flags} />
-          <DataBusView
-            key={`bus-${cpuGeneration}`}
-            lastInstruction={cpuRef.current.lastInstruction}
-            steps={cpuRef.current.steps}
-          />
-          <StackView
-            key={`stack-${cpuGeneration}`}
-            memory={cpuRef.current.memory}
-            data={cpuRef.current.data}
-            sp={regs.SP}
-            bp={regs.BP}
-            lastInstructionMnemonic={cpuRef.current.lastInstruction?.mnemonic ?? null}
-            steps={cpuRef.current.steps}
-          />
-          <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} />
-          <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
+          <div className="mode-tabs aside-tabs">
+            {ASIDE_TABS.map((t) => (
+              <button
+                key={t.id}
+                className={asideTab === t.id ? 'mode-tab active' : 'mode-tab'}
+                onClick={() => setAsideTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {asideTab === 'registers' && <RegisterView regs={regs} flags={flags} />}
+          {asideTab === 'databus' && (
+            <DataBusView
+              key={`bus-${cpuGeneration}`}
+              lastInstruction={cpuRef.current.lastInstruction}
+              steps={cpuRef.current.steps}
+            />
+          )}
+          {asideTab === 'stack' && (
+            <StackView
+              key={`stack-${cpuGeneration}`}
+              memory={cpuRef.current.memory}
+              data={cpuRef.current.data}
+              sp={regs.SP}
+              bp={regs.BP}
+              lastInstructionMnemonic={cpuRef.current.lastInstruction?.mnemonic ?? null}
+              steps={cpuRef.current.steps}
+            />
+          )}
+          {asideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} />}
+          {asideTab === 'memory' && (
+            <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
+          )}
+          {asideTab === 'profiler' && (
+            <ProfilerView
+              cycles={cpuRef.current.cycles}
+              profile={cpuRef.current.profile}
+              steps={cpuRef.current.steps}
+              peakStackBytes={cpuRef.current.peakStackBytes}
+              memoryWrites={cpuRef.current.memoryWrites}
+              data={cpuRef.current.data}
+              instructionCount={cpuRef.current.instructions.length}
+            />
+          )}
         </aside>
       </main>
     </div>
