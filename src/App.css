@@ -182,6 +182,14 @@ aside {
   overflow-y: auto;
 }
 
+/* The Hardware section hides the code editor/toolbar/output/aside entirely
+   (see hardwareMode in App.tsx), so its detail panel doesn't need to leave
+   room for them below -- let it use the full available height instead. */
+.learn-detail-panel-wide {
+  max-height: none;
+  overflow-y: visible;
+}
+
 .mode-tabs {
   display: flex;
   gap: 0.4rem;
@@ -332,6 +340,72 @@ aside {
 
 .instr-notes li {
   margin-bottom: 0.3rem;
+}
+
+.hw-playground {
+  margin: 0.6rem 0;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel-alt);
+}
+
+.hw-playground-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.hw-playground-controls button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-button);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.hw-playground-controls button:hover:not(:disabled) {
+  background: var(--bg-button-hover);
+}
+
+.hw-playground-controls button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.hw-playground-status {
+  margin-left: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.hw-playground-visual {
+  margin-bottom: 0.5rem;
+}
+
+.hw-playground-source {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  border-radius: 4px;
+  background: var(--bg-button);
+  border: 1px solid var(--border);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.75rem;
+  overflow-x: auto;
+}
+
+.hw-playground-line {
+  white-space: pre;
+  color: var(--text-dim);
+}
+
+.hw-playground-line.current {
+  color: var(--text);
+  background: var(--accent-bg);
 }
 
 .learn-stage-title {
@@ -529,6 +603,16 @@ aside .panel {
 .reg-binary {
   color: var(--text-dim);
   letter-spacing: 0.05em;
+}
+
+.reg-flags-row td {
+  border-top: 1px solid var(--border);
+  padding-top: 0.35rem;
+}
+
+.reg-halves {
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 .flags {
@@ -944,11 +1028,71 @@ aside .panel {
   stroke: var(--accent-border);
 }
 
+.bus-box.on {
+  fill: var(--accent-border);
+  transition: fill 0.15s ease-out;
+}
+
+.bus-flow-arrow {
+  font-size: 16px;
+  font-weight: bold;
+  text-anchor: middle;
+  fill: var(--accent-border);
+  opacity: 0;
+}
+
+.bus-flow-arrow.on {
+  opacity: 1;
+}
+
 .bus-label {
   fill: var(--text-dim);
   font-size: 9px;
   font-family: 'Cascadia Code', 'Consolas', monospace;
   text-anchor: middle;
+}
+
+.bus-lane-label {
+  fill: var(--text-faint);
+  font-size: 8px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  letter-spacing: 0.05em;
+}
+
+.seg-center {
+  text-anchor: middle;
+}
+
+.hw-eq-value {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: bold;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  text-anchor: middle;
+}
+
+.hw-eq-op {
+  fill: var(--accent-border);
+  font-size: 14px;
+  font-weight: bold;
+  text-anchor: middle;
+}
+
+.bus-value-label {
+  font-size: 11px;
+  font-weight: bold;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  text-anchor: middle;
+  fill: var(--accent-text);
+  opacity: 0;
+}
+
+.bus-value-label.ctrl {
+  fill: var(--warning-text);
+}
+
+.bus-value-label.on {
+  opacity: 1;
 }
 
 .bus-label-title {
@@ -964,12 +1108,8 @@ aside .panel {
 }
 
 .bus-subbox.on {
-  animation: bus-subbox-pulse 0.5s ease-out;
-}
-
-@keyframes bus-subbox-pulse {
-  0% { fill: var(--accent-border); }
-  100% { fill: var(--bg-button); }
+  fill: var(--accent-border);
+  transition: fill 0.15s ease-out;
 }
 
 .bus-sublabel {

@@ -20,6 +20,17 @@ function Pulse({ x1, x2, y, reverse, both }: { x1: number; x2: number; y: number
   )
 }
 
+// Which way the arrow between two boxes should point for a given lane:
+// '→' means left-to-right (the first box's direction to the second), '←' the
+// reverse, '↔' both (e.g. PUSH/POP/CALL/RET/string ops, which move data both
+// ways depending on the exact instruction).
+function arrowFor(lane: string, readLane: string, writeLane: string, bothLane: string): '→' | '←' | '↔' | null {
+  if (lane === readLane) return '→'
+  if (lane === writeLane) return '←'
+  if (lane === bothLane) return '↔'
+  return null
+}
+
 export function DataBusView({ lastInstruction, steps }: { lastInstruction: Instruction | null; steps: number }) {
   const { lane, detail } = classifyDataFlow(lastInstruction)
 
@@ -29,6 +40,15 @@ export function DataBusView({ lastInstruction, steps }: { lastInstruction: Instr
   const ioX2 = 334
   const y = 60
 
+  const memOn = lane === 'mem-read' || lane === 'mem-write' || lane === 'mem-both'
+  const ioOn = lane === 'io-in' || lane === 'io-out'
+  // Memory sits left of the CPU, so a memory READ (data moving into the CPU)
+  // is drawn left-to-right; a WRITE (data leaving the CPU) is right-to-left.
+  const memArrow = arrowFor(lane, 'mem-read', 'mem-write', 'mem-both')
+  // I/O sits right of the CPU, so OUT (leaving the CPU) is left-to-right and
+  // IN (entering the CPU) is right-to-left -- the opposite mapping from memory.
+  const ioArrow = arrowFor(lane, 'io-out', 'io-in', '')
+
   return (
     <div className="panel">
       <h3>Data Bus</h3>
@@ -36,7 +56,7 @@ export function DataBusView({ lastInstruction, steps }: { lastInstruction: Instr
         <line x1={memX1} y1={y} x2={cpuLeftX} y2={y} className="bus-line" />
         <line x1={cpuRightX} y1={y} x2={ioX2} y2={y} className="bus-line" />
 
-        <rect x="8" y="35" width="70" height="50" rx="6" className="bus-box" />
+        <rect key={`mem-${steps}`} x="8" y="35" width="70" height="50" rx="6" className={memOn ? 'bus-box on' : 'bus-box'} />
         <text x="43" y="64" className="bus-label">MEMORY</text>
 
         <rect x="150" y="15" width="112" height="90" rx="6" className="bus-box bus-box-cpu" />
@@ -48,9 +68,20 @@ export function DataBusView({ lastInstruction, steps }: { lastInstruction: Instr
         <rect key={`ctl-${steps}`} x="160" y="72" width="92" height="22" rx="4" className={lane === 'control' ? 'bus-subbox on' : 'bus-subbox'} />
         <text x="206" y="88" className="bus-sublabel">IP / CONTROL</text>
 
-        <rect x="334" y="35" width="58" height="50" rx="6" className="bus-box" />
+        <rect key={`io-${steps}`} x="334" y="35" width="58" height="50" rx="6" className={ioOn ? 'bus-box on' : 'bus-box'} />
         <text x="363" y="58" className="bus-label">I/O</text>
         <text x="363" y="72" className="bus-label">PORTS</text>
+
+        {memArrow && (
+          <text key={`mem-arrow-${steps}`} x={(memX1 + cpuLeftX) / 2} y={y - 10} className="bus-flow-arrow on">
+            {memArrow}
+          </text>
+        )}
+        {ioArrow && (
+          <text key={`io-arrow-${steps}`} x={(cpuRightX + ioX2) / 2} y={y - 10} className="bus-flow-arrow on">
+            {ioArrow}
+          </text>
+        )}
 
         {lane === 'mem-read' && <Pulse key={steps} x1={memX1} x2={cpuLeftX} y={y} />}
         {lane === 'mem-write' && <Pulse key={steps} x1={memX1} x2={cpuLeftX} y={y} reverse />}

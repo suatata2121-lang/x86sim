@@ -70,6 +70,14 @@ export class Cpu {
   // still waiting on keyboard input) — lets the UI show what the CPU is/was
   // doing without re-deriving it from ip, which may already point elsewhere.
   lastInstruction: Instruction | null = null
+  // Visualization-only instrumentation for the Address/Data/Control bus demo
+  // (BusArchitectureView): the literal address/value a memory or port access
+  // most recently carried. Not part of CpuSnapshot -- purely cosmetic, so a
+  // stale value after Step Back is harmless (the next step overwrites it).
+  lastAddress: number | null = null
+  lastMemValue: number | null = null
+  lastPort: number | null = null
+  lastPortValue: number | null = null
 
   load(instructions: Instruction[], data: DataDeclaration[] = []) {
     this.instructions = instructions
@@ -200,8 +208,10 @@ export class Cpu {
 
   private readMem(op: Operand & { kind: 'mem' }, isWord: boolean): number {
     const addr = this.effectiveAddress(op)
-    if (!isWord) return this.memory[addr]
-    return this.memory[addr] | (this.memory[(addr + 1) & 0xffff] << 8)
+    const value = !isWord ? this.memory[addr] : this.memory[addr] | (this.memory[(addr + 1) & 0xffff] << 8)
+    this.lastAddress = addr
+    this.lastMemValue = value
+    return value
   }
 
   private writeMem(op: Operand & { kind: 'mem' }, value: number, isWord: boolean) {
@@ -212,6 +222,8 @@ export class Cpu {
       this.memory[(addr + 1) & 0xffff] = (value >> 8) & 0xff
       this.trackWrite(addr + 1)
     }
+    this.lastAddress = addr
+    this.lastMemValue = value & (isWord ? 0xffff : 0xff)
   }
 
   private readOperand(op: Operand, isWord: boolean): number {
@@ -512,6 +524,8 @@ export class Cpu {
           ? this.ports[port & 0xff] | (this.ports[(port + 1) & 0xff] << 8)
           : this.ports[port & 0xff]
         this.setReg(op1.name, value)
+        this.lastPort = port & 0xff
+        this.lastPortValue = value
         break
       }
       case 'OUT': {
@@ -521,6 +535,8 @@ export class Cpu {
         const value = this.getReg(op2.name)
         this.ports[port & 0xff] = value & 0xff
         if (isWordOut) this.ports[(port + 1) & 0xff] = (value >> 8) & 0xff
+        this.lastPort = port & 0xff
+        this.lastPortValue = value
         break
       }
       case 'MOVSB': case 'STOSB': case 'LODSB': case 'CMPSB': case 'SCASB': {

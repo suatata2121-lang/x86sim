@@ -337,6 +337,13 @@ export default function App() {
     syncState()
   }
 
+  // The Hardware section's demos are fully self-contained (their own isolated
+  // Cpu, their own read-only source view, their own controls) -- none of the
+  // main editor/toolbar/output/aside inspects or affects them, so hide that
+  // whole code-writing UI while it's open and let the Hardware content use
+  // the freed-up space instead.
+  const hardwareMode = mode === 'learn' && learnNav.section === 'hardware'
+
   return (
     <div className="app">
       <header>
@@ -350,28 +357,30 @@ export default function App() {
       </header>
       <main>
         <section className="editor-panel">
-          <div className="tabs-bar">
-            {tabs.map((tab) => (
-              <div
-                key={tab.id}
-                className={tab.id === activeTabId ? 'tab active' : 'tab'}
-                onClick={() => handleSwitchTab(tab.id)}
-              >
-                <span className="tab-title">{tab.title}</span>
-                {tabs.length > 1 && (
-                  <button
-                    className="tab-close"
-                    onClick={(e) => handleCloseTab(tab.id, e)}
-                    title="Close tab"
-                    aria-label={`Close ${tab.title}`}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-            <button className="tab-new" onClick={handleNewTab} title="New tab">+</button>
-          </div>
+          {!hardwareMode && (
+            <div className="tabs-bar">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className={tab.id === activeTabId ? 'tab active' : 'tab'}
+                  onClick={() => handleSwitchTab(tab.id)}
+                >
+                  <span className="tab-title">{tab.title}</span>
+                  {tabs.length > 1 && (
+                    <button
+                      className="tab-close"
+                      onClick={(e) => handleCloseTab(tab.id, e)}
+                      title="Close tab"
+                      aria-label={`Close ${tab.title}`}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button className="tab-new" onClick={handleNewTab} title="New tab">+</button>
+            </div>
+          )}
           <div className="editor-row">
             <div className="mode-sidebar">
               <div className="mode-tabs mode-tabs-vertical">
@@ -420,96 +429,103 @@ export default function App() {
                   completedIds={completedAssignments}
                 />
               )}
-              <CodeEditor
-                key={activeTabId}
-                value={source}
-                onChange={(v) => updateTab(activeTabId, { source: v })}
-                breakpoints={breakpoints}
-                onToggleBreakpoint={toggleBreakpoint}
-                currentLine={currentLine}
-                errorLines={new Set(errors.map((e) => e.line))}
-                theme={theme}
-              />
-            </div>
-          </div>
-          <div className="toolbar">
-            <button onClick={handleAssemble} disabled={isAnimating}>Assemble</button>
-            <button onClick={handleRunTests} disabled={isAnimating || !activeAssignmentId}>Run Tests</button>
-            <button onClick={handleStepBack} disabled={!canStepBack || isAnimating} title="Undo the last Step/Animate tick/Run">⏪ Step Back</button>
-            <button onClick={handleStep} disabled={!canRun}>Step ▶</button>
-            <button onClick={handleRun} disabled={!canRun}>Run</button>
-            {isAnimating
-              ? <button onClick={stopAnimation}>⏹ Stop</button>
-              : <button onClick={handleAnimate} disabled={!canRun}>▶ Animate</button>}
-            <button onClick={handleReset} disabled={!assembled || isAnimating}>Reset</button>
-            {breakpoints.size > 0 && (
-              <button onClick={() => updateTab(activeTabId, { breakpoints: new Set() })} disabled={isAnimating}>
-                Clear breakpoints
-              </button>
-            )}
-          </div>
-          {activeAssignmentId && (
-            <p className="status">
-              Testing against: {ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.title}
-              {completedAssignments.has(activeAssignmentId) ? ' ✓ completed' : ''}
-            </p>
-          )}
-          {errors.length > 0 && (
-            <ul className="errors">
-              {errors.map((e, i) => {
-                const lineText = source.split('\n')[e.line - 1] ?? ''
-                return (
-                  <li key={i}>
-                    <div>
-                      Line {e.line}{e.column ? `, Column ${e.column}` : ''}: {e.message}
-                    </div>
-                    {e.column && (
-                      <pre className="error-preview">
-                        {lineText + '\n' + ' '.repeat(e.column - 1) + '^'.repeat(Math.max(1, e.length ?? 1))}
-                      </pre>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {assembled && (
-            <p className="status">
-              {halted
-                ? 'Program halted.'
-                : hitBreakpoint
-                  ? `⏸ Paused at breakpoint: line ${currentLine ?? '-'}`
-                  : `Next line: ${currentLine ?? '-'}`}
-            </p>
-          )}
-          {runtimeError && <p className="status error">Runtime error: {runtimeError}</p>}
-          {waitingForInput && (
-            <div className="panel input-request">
-              <h3>Waiting for keyboard input</h3>
-              <p className="status">
-                {waitingForInput.kind === 'char'
-                  ? 'The program is reading a character (INT 21h, AH=01h).'
-                  : `The program is reading a line of up to ${waitingForInput.maxLen} characters (INT 21h, AH=0Ah).`}
-              </p>
-              <div className="input-request-row">
-                <input
-                  autoFocus
-                  className="input-request-field"
-                  value={inputValue}
-                  maxLength={waitingForInput.kind === 'string' ? waitingForInput.maxLen : 1}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitInput() }}
+              {!hardwareMode && (
+                <CodeEditor
+                  key={activeTabId}
+                  value={source}
+                  onChange={(v) => updateTab(activeTabId, { source: v })}
+                  breakpoints={breakpoints}
+                  onToggleBreakpoint={toggleBreakpoint}
+                  currentLine={currentLine}
+                  errorLines={new Set(errors.map((e) => e.line))}
+                  theme={theme}
                 />
-                <button onClick={handleSubmitInput}>Send</button>
-              </div>
+              )}
             </div>
-          )}
-          <div className="panel">
-            <h3>Output</h3>
-            <pre className="output">{output || '(no output yet)'}</pre>
           </div>
-          {gradeReport && <GraderView report={gradeReport} />}
+          {!hardwareMode && (
+            <>
+              <div className="toolbar">
+                <button onClick={handleAssemble} disabled={isAnimating}>Assemble</button>
+                <button onClick={handleRunTests} disabled={isAnimating || !activeAssignmentId}>Run Tests</button>
+                <button onClick={handleStepBack} disabled={!canStepBack || isAnimating} title="Undo the last Step/Animate tick/Run">⏪ Step Back</button>
+                <button onClick={handleStep} disabled={!canRun}>Step ▶</button>
+                <button onClick={handleRun} disabled={!canRun}>Run</button>
+                {isAnimating
+                  ? <button onClick={stopAnimation}>⏹ Stop</button>
+                  : <button onClick={handleAnimate} disabled={!canRun}>▶ Animate</button>}
+                <button onClick={handleReset} disabled={!assembled || isAnimating}>Reset</button>
+                {breakpoints.size > 0 && (
+                  <button onClick={() => updateTab(activeTabId, { breakpoints: new Set() })} disabled={isAnimating}>
+                    Clear breakpoints
+                  </button>
+                )}
+              </div>
+              {activeAssignmentId && (
+                <p className="status">
+                  Testing against: {ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.title}
+                  {completedAssignments.has(activeAssignmentId) ? ' ✓ completed' : ''}
+                </p>
+              )}
+              {errors.length > 0 && (
+                <ul className="errors">
+                  {errors.map((e, i) => {
+                    const lineText = source.split('\n')[e.line - 1] ?? ''
+                    return (
+                      <li key={i}>
+                        <div>
+                          Line {e.line}{e.column ? `, Column ${e.column}` : ''}: {e.message}
+                        </div>
+                        {e.column && (
+                          <pre className="error-preview">
+                            {lineText + '\n' + ' '.repeat(e.column - 1) + '^'.repeat(Math.max(1, e.length ?? 1))}
+                          </pre>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {assembled && (
+                <p className="status">
+                  {halted
+                    ? 'Program halted.'
+                    : hitBreakpoint
+                      ? `⏸ Paused at breakpoint: line ${currentLine ?? '-'}`
+                      : `Next line: ${currentLine ?? '-'}`}
+                </p>
+              )}
+              {runtimeError && <p className="status error">Runtime error: {runtimeError}</p>}
+              {waitingForInput && (
+                <div className="panel input-request">
+                  <h3>Waiting for keyboard input</h3>
+                  <p className="status">
+                    {waitingForInput.kind === 'char'
+                      ? 'The program is reading a character (INT 21h, AH=01h).'
+                      : `The program is reading a line of up to ${waitingForInput.maxLen} characters (INT 21h, AH=0Ah).`}
+                  </p>
+                  <div className="input-request-row">
+                    <input
+                      autoFocus
+                      className="input-request-field"
+                      value={inputValue}
+                      maxLength={waitingForInput.kind === 'string' ? waitingForInput.maxLen : 1}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitInput() }}
+                    />
+                    <button onClick={handleSubmitInput}>Send</button>
+                  </div>
+                </div>
+              )}
+              <div className="panel">
+                <h3>Output</h3>
+                <pre className="output">{output || '(no output yet)'}</pre>
+              </div>
+              {gradeReport && <GraderView report={gradeReport} />}
+            </>
+          )}
         </section>
+        {!hardwareMode && (
         <aside>
           <div className="mode-tabs aside-tabs">
             {ASIDE_TABS.map((t) => (
@@ -557,6 +573,7 @@ export default function App() {
             />
           )}
         </aside>
+        )}
       </main>
     </div>
   )

@@ -1,12 +1,15 @@
 import { useState, type ReactNode } from 'react'
 import { CURRICULUM, type Assignment, type Stage, type Task } from '../curriculum'
 import { INSTRUCTION_REFERENCE, type InstructionCategory, type InstructionDoc } from '../instructionReference'
+import { HARDWARE_REFERENCE, type HardwareCategory, type HardwareTopic } from '../hardwareReference'
+import { HardwarePlayground } from './HardwarePlayground'
+import { SegmentedAddressingView } from './SegmentedAddressingView'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
   return { done: assignments.filter((a) => completedIds.has(a.id)).length, total: assignments.length }
 }
 
-type LearnSection = 'curriculum' | 'reference'
+type LearnSection = 'curriculum' | 'reference' | 'hardware'
 
 // Navigation state is lifted out of the rendered panels so the clickable
 // lists (LearnSidebar, shown under the Learn tab) and their explanations
@@ -23,6 +26,10 @@ export interface LearnNav {
   setCategoryId: (id: string | null) => void
   mnemonic: string | null
   setMnemonic: (m: string | null) => void
+  hwCategoryId: string | null
+  setHwCategoryId: (id: string | null) => void
+  hwTopicId: string | null
+  setHwTopicId: (id: string | null) => void
 }
 
 export function useLearnNav(): LearnNav {
@@ -31,7 +38,12 @@ export function useLearnNav(): LearnNav {
   const [taskId, setTaskId] = useState<string | null>(null)
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [mnemonic, setMnemonic] = useState<string | null>(null)
-  return { section, setSection, stageId, setStageId, taskId, setTaskId, categoryId, setCategoryId, mnemonic, setMnemonic }
+  const [hwCategoryId, setHwCategoryId] = useState<string | null>(null)
+  const [hwTopicId, setHwTopicId] = useState<string | null>(null)
+  return {
+    section, setSection, stageId, setStageId, taskId, setTaskId, categoryId, setCategoryId, mnemonic, setMnemonic,
+    hwCategoryId, setHwCategoryId, hwTopicId, setHwTopicId,
+  }
 }
 
 function LearnAccordionSection({
@@ -189,10 +201,58 @@ function ReferenceNav({ nav }: { nav: LearnNav }) {
   )
 }
 
+function HardwareNav({ nav }: { nav: LearnNav }) {
+  const category: HardwareCategory | null = HARDWARE_REFERENCE.find((c) => c.id === nav.hwCategoryId) ?? null
+
+  // Category list (top level of the hardware section)
+  if (!category) {
+    return (
+      <ul className="learn-list">
+        {HARDWARE_REFERENCE.map((c) => (
+          <li key={c.id}>
+            <button className="learn-item" onClick={() => nav.setHwCategoryId(c.id)}>
+              <span className="learn-item-title">{c.title}</span>
+              <span className="learn-item-progress">{c.topics.length}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  // Topic list (within a category)
+  return (
+    <>
+      <button
+        className="learn-back"
+        onClick={() => { nav.setHwCategoryId(null); nav.setHwTopicId(null) }}
+      >
+        ← Categories
+      </button>
+      <h4 className="learn-stage-title">{category.title}</h4>
+      <ul className="learn-lesson-list">
+        {category.topics.map((t) => {
+          const isActive = t.id === nav.hwTopicId
+          return (
+            <li key={t.id}>
+              <button
+                className={isActive ? 'learn-lesson active' : 'learn-lesson'}
+                onClick={() => nav.setHwTopicId(t.id)}
+              >
+                {t.title}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar: shown under the Learn tab (narrow column). Only navigation --
-// two stacked accordion sections (Instruction Reference on top, Curriculum
-// below), each expanding to show its own back button and clickable list.
+// three stacked accordion sections (Instruction Reference, Curriculum,
+// Hardware), each expanding to show its own back button and clickable list.
 // ---------------------------------------------------------------------------
 
 export function LearnSidebar({
@@ -227,6 +287,13 @@ export function LearnSidebar({
           onSelectAssignment={onSelectAssignment}
         />
       </LearnAccordionSection>
+      <LearnAccordionSection
+        title="Hardware"
+        isOpen={nav.section === 'hardware'}
+        onToggle={() => nav.setSection('hardware')}
+      >
+        <HardwareNav nav={nav} />
+      </LearnAccordionSection>
     </div>
   )
 }
@@ -249,6 +316,45 @@ export function LearnDetail({
   const task: Task | null = stage?.tasks.find((t) => t.id === nav.taskId) ?? null
   const category: InstructionCategory | null = INSTRUCTION_REFERENCE.find((c) => c.id === nav.categoryId) ?? null
   const instruction: InstructionDoc | null = category?.instructions.find((i) => i.mnemonics.includes(nav.mnemonic ?? '')) ?? null
+  const hwCategory: HardwareCategory | null = HARDWARE_REFERENCE.find((c) => c.id === nav.hwCategoryId) ?? null
+  const hwTopic: HardwareTopic | null = hwCategory?.topics.find((t) => t.id === nav.hwTopicId) ?? null
+
+  if (nav.section === 'hardware') {
+    if (!hwCategory) {
+      return (
+        <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
+          <p className="example-description">
+            How the 8086 works inside (CPU, buses, stack) and how it talks to the outside world (ports,
+            interrupts, support chips). Pick a category on the left to get started.
+          </p>
+        </div>
+      )
+    }
+
+    if (!hwTopic) {
+      return (
+        <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
+          <h4 className="learn-stage-title">{hwCategory.title}</h4>
+          <p className="example-description">Pick a topic on the left to read about it.</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
+        <h4 className="learn-stage-title">{hwTopic.title}</h4>
+        <p className="example-description">{hwTopic.summary}</p>
+        {hwTopic.content.map((p, idx) => <p key={idx} className="example-description">{p}</p>)}
+        {hwTopic.demo && <HardwarePlayground source={hwTopic.demo.source} visual={hwTopic.demo.visual} />}
+        {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
+        {hwTopic.notes && (
+          <ul className="instr-notes">
+            {hwTopic.notes.map((n, idx) => <li key={idx}>{n}</li>)}
+          </ul>
+        )}
+      </div>
+    )
+  }
 
   if (nav.section === 'reference') {
     if (!category) {
