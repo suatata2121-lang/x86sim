@@ -10,6 +10,7 @@ import { DataBusView } from './components/DataBusView'
 import { StackView } from './components/StackView'
 import { ProfilerView } from './components/ProfilerView'
 import { GraderView } from './components/GraderView'
+import { FeedbackDialog } from './components/FeedbackDialog'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { EXAMPLES } from './examples'
 import { CURRICULUM, type Assignment } from './curriculum'
@@ -88,6 +89,7 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (
     window.localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark'
   ))
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const animTimerRef = useRef<number | null>(null)
   const stepHistoryRef = useRef<CpuSnapshot[]>([])
   const [canStepBack, setCanStepBack] = useState(false)
@@ -351,10 +353,16 @@ export default function App() {
           <h1>x86sim</h1>
           <p>A browser-based 8086 assembly simulator inspired by emu8086.</p>
         </div>
-        <button className="theme-toggle" onClick={toggleTheme}>
-          {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-        </button>
+        <div className="header-actions">
+          <button className="theme-toggle" onClick={() => setFeedbackOpen(true)} title="Report a bug or suggest an improvement">
+            💬 Feedback
+          </button>
+          <button className="theme-toggle" onClick={toggleTheme}>
+            {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+          </button>
+        </div>
       </header>
+      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} currentSource={source} />}
       <main>
         <section className="editor-panel">
           {!hardwareMode && (
