@@ -11,6 +11,7 @@
 // independent of whatever the user has open in the main editor tabs.
 
 import type { HardwareVisual } from './components/HardwarePlayground'
+import type { PipelineScenario } from './core/biuEu'
 
 export interface HardwareTopic {
   id: string
@@ -22,6 +23,11 @@ export interface HardwareTopic {
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
   staticDiagram?: 'segmented-addressing'
+  // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
+  // core/biuEu.ts) instead of a Cpu demo -- the main Cpu runs whole
+  // instructions atomically and has no notion of bus cycles or the prefetch
+  // queue. More than one scenario gets a picker above the simulation.
+  pipeline?: PipelineScenario[]
   notes?: string[]
 }
 
@@ -60,6 +66,74 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'MOV CX, [RESULT] ; mem-read: and read back into another register\n' +
             'HLT\n',
         },
+      },
+      {
+        id: 'biu-eu',
+        title: 'BIU & EU: The 8086\'s Two Units',
+        summary: 'The 8086 is split into a Bus Interface Unit and an Execution Unit that work at the same time.',
+        content: [
+          'Inside the 8086 there are really two processors cooperating. The Bus Interface Unit (BIU) does ' +
+            'everything that involves the outside world: it holds the segment registers (CS, DS, SS, ES) and IP, ' +
+            'computes 20-bit physical addresses with its own address adder (Σ: segment × 10h + offset), runs ' +
+            'bus cycles, and keeps a 6-byte instruction queue topped up with the next bytes of code.',
+          'The Execution Unit (EU) never touches the bus. It takes instruction bytes from the front of the ' +
+            'queue, decodes them in its control unit, and executes them using the general registers (AX-DX, SP, ' +
+            'BP, SI, DI), the ALU, and FLAGS. When an instruction needs a value from memory, the EU computes the ' +
+            'offset and asks the BIU to do the actual read or write.',
+          'Because the two units are independent, fetching and executing overlap: while the EU is busy with one ' +
+            'instruction, the BIU is already fetching the next ones. This is a simple form of pipelining, and it ' +
+            'is why the 8086 is faster than a CPU like the 8085 that strictly fetches, then executes.',
+          'Every bus cycle takes 4 clocks, T1-T4: T1 puts the address on the bus, T2-T3 give the memory time to ' +
+            'respond, and T4 completes the transfer. With a 16-bit data bus, one code fetch brings in 2 bytes. ' +
+            'Press Clock +1 a few times and watch both timeline rows fill in at the same time. Colors link each ' +
+            'instruction\'s bytes in the listing, the queue, and the EU row.',
+        ],
+        pipeline: ['overlap'],
+        notes: [
+          'Clock counts are the best-case figures from Intel\'s 8086 timing table, and the model leaves out ' +
+            'wait states and odd-address penalties. It is meant to show the overlap, not to be cycle-exact.',
+          'The rest of this simulator runs each instruction as one atomic step and has no BIU/EU split -- ' +
+            'this view is a separate model built just for these topics.',
+        ],
+      },
+      {
+        id: 'prefetch-queue',
+        title: 'The 6-Byte Instruction Queue',
+        summary: 'How the queue lets the BIU work ahead of the EU, and what happens when it runs empty or full.',
+        content: [
+          'The BIU starts a new code fetch whenever at least 2 of the 6 queue bytes are free and the bus is not ' +
+            'needed for anything else. Each fetch costs 4 clocks and delivers 2 bytes, so the BIU can supply at ' +
+            'most one byte every 2 clocks.',
+          '"Queue runs empty": when the EU executes short, fast instructions (2-byte register moves that take ' +
+            'only 2 clocks), it consumes bytes faster than the BIU can bring them in. The queue drains and the EU ' +
+            'has to wait for bytes (red cells in the EU row). Overlap still helps, just less.',
+          '"Queue fills up": during a slow instruction such as MUL (about 70 clocks), the BIU fills all 6 ' +
+            'bytes and then has nothing left to do -- it sits idle in Ti states until the EU takes the next ' +
+            'instruction and frees space. The following instructions then start immediately, because their ' +
+            'bytes are already waiting in the queue.',
+        ],
+        pipeline: ['starve', 'full'],
+        notes: [
+          'The 8088 (used in the original IBM PC) has the same EU but an 8-bit external data bus and only a ' +
+            '4-byte queue, so each fetch brings 1 byte and the "queue runs empty" case happens far more often.',
+        ],
+      },
+      {
+        id: 'pipeline-stalls',
+        title: 'When the Overlap Breaks: Memory Operands & Jumps',
+        summary: 'Memory operands compete with prefetching for the bus, and jumps throw prefetched bytes away.',
+        content: [
+          '"Memory operands": there is only one bus. When an instruction like MOV AX, [0200h] needs data, the EU ' +
+            'computes the offset and requests a data bus cycle. That request has priority over prefetching, but ' +
+            'a fetch already in progress cannot be interrupted, so the EU may have to wait for it to finish before ' +
+            'its own 4-clock read or write even starts. Watch the Σ adder switch from CS to DS for these cycles.',
+          '"Jump flushes the queue": the BIU always fetches the bytes that follow the current instruction, ' +
+            'because it does not know a jump is coming. When JMP executes, those bytes are useless. The queue is ' +
+            'emptied, the BIU restarts fetching at the target address, and the EU has to wait until the first ' +
+            'target instruction arrives. That refill is why taken jumps, CALL, RET, and LOOP are relatively slow ' +
+            'on the 8086 -- and why a conditional jump that is not taken is cheap.',
+        ],
+        pipeline: ['memory', 'jump'],
       },
       {
         id: 'register-file',
