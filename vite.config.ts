@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// GitHub Pages serves a project site under "<user>.github.io/<repo>/",
-// so the built assets need to know about this subpath.
+// Served from the custom domain simx86.com (see public/CNAME), i.e. from the root,
+// so the built assets use absolute paths from "/".
 export default defineConfig({
-  base: '/x86sim/',
+  base: '/',
   plugins: [react()],
 })

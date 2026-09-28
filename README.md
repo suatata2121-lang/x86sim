@@ -2,7 +2,7 @@
 
 A browser-based 8086 assembly simulator inspired by [emu8086](https://emu8086-microprocessor-emulator.en.softonic.com/). Built with React + TypeScript + Vite.
 
-**Live demo:** https://suatata2121-lang.github.io/x86sim/
+**Live demo:** https://simx86.com/
 
 ## Status
 
@@ -87,7 +87,7 @@ npm run dev
 
 ## Deployment
 
-Every push to `main` is automatically built and published to GitHub Pages (`https://suatata2121-lang.github.io/x86sim/`) by `.github/workflows/deploy.yml`. The `base: '/x86sim/'` setting in `vite.config.ts` makes the built asset paths work under that subpath.
+Every push to `main` is automatically built and published to GitHub Pages at the custom domain `https://simx86.com/` by `.github/workflows/deploy.yml`. `public/CNAME` holds the domain and `vite.config.ts` uses `base: '/'` since the site is served from the domain root.
 
 ## Structure
 
