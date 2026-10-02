@@ -3,11 +3,17 @@ import type { StringStream } from '@codemirror/language'
 
 const MNEMONICS = new Set([
   'MOV', 'ADD', 'SUB', 'INC', 'DEC', 'CMP',
-  'MUL', 'DIV', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR',
+  'MUL', 'DIV', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR', 'SAL',
   'XCHG', 'NEG', 'TEST', 'LEA',
   'JMP', 'JE', 'JNE', 'JZ', 'JNZ', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JC', 'JNC', 'JBE', 'JCXZ',
-  'LOOP', 'PUSH', 'POP', 'CALL', 'RET', 'IN', 'OUT', 'INT', 'NOP', 'HLT',
+  'JS', 'JNS', 'JO', 'JNO', 'JP', 'JNP', 'JPE', 'JPO',
+  'LOOP', 'LOOPE', 'LOOPZ', 'LOOPNE', 'LOOPNZ', 'PUSH', 'POP', 'CALL', 'RET', 'IN', 'OUT', 'INT', 'NOP', 'HLT',
   'MOVSB', 'STOSB', 'LODSB', 'CMPSB', 'SCASB', 'CLD', 'STD',
+  'MOVSW', 'STOSW', 'LODSW', 'CMPSW', 'SCASW',
+  'ADC', 'SBB', 'ROL', 'ROR', 'RCL', 'RCR', 'IMUL', 'IDIV',
+  'CBW', 'CWD', 'STC', 'CLC', 'CMC', 'STI', 'CLI',
+  'PUSHF', 'POPF', 'LAHF', 'SAHF', 'XLATB',
+  'AAA', 'AAS', 'AAM', 'AAD', 'DAA', 'DAS',
   'REP', 'REPE', 'REPZ', 'REPNE', 'REPNZ',
 ])
 

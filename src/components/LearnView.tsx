@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { CURRICULUM, type Assignment, type Stage, type Task } from '../curriculum'
 import { INSTRUCTION_REFERENCE, type InstructionCategory, type InstructionDoc } from '../instructionReference'
 import { HARDWARE_REFERENCE, type HardwareCategory, type HardwareTopic } from '../hardwareReference'
+import { NUMBERING_REFERENCE, type NumberingCategory, type NumberingTopic } from '../numberingSystems'
 import { HardwarePlayground } from './HardwarePlayground'
 import { SegmentedAddressingView } from './SegmentedAddressingView'
 import { BiuEuView } from './BiuEuView'
@@ -10,7 +11,7 @@ function progressOf(assignments: Assignment[], completedIds: Set<string>) {
   return { done: assignments.filter((a) => completedIds.has(a.id)).length, total: assignments.length }
 }
 
-type LearnSection = 'curriculum' | 'reference' | 'hardware'
+type LearnSection = 'curriculum' | 'reference' | 'hardware' | 'numbering'
 
 // Navigation state is lifted out of the rendered panels so the clickable
 // lists (LearnSidebar, shown under the Learn tab) and their explanations
@@ -31,6 +32,10 @@ export interface LearnNav {
   setHwCategoryId: (id: string | null) => void
   hwTopicId: string | null
   setHwTopicId: (id: string | null) => void
+  numCategoryId: string | null
+  setNumCategoryId: (id: string | null) => void
+  numTopicId: string | null
+  setNumTopicId: (id: string | null) => void
 }
 
 export function useLearnNav(): LearnNav {
@@ -41,9 +46,12 @@ export function useLearnNav(): LearnNav {
   const [mnemonic, setMnemonic] = useState<string | null>(null)
   const [hwCategoryId, setHwCategoryId] = useState<string | null>(null)
   const [hwTopicId, setHwTopicId] = useState<string | null>(null)
+  const [numCategoryId, setNumCategoryId] = useState<string | null>(null)
+  const [numTopicId, setNumTopicId] = useState<string | null>(null)
   return {
     section, setSection, stageId, setStageId, taskId, setTaskId, categoryId, setCategoryId, mnemonic, setMnemonic,
     hwCategoryId, setHwCategoryId, hwTopicId, setHwTopicId,
+    numCategoryId, setNumCategoryId, numTopicId, setNumTopicId,
   }
 }
 
@@ -250,10 +258,59 @@ function HardwareNav({ nav }: { nav: LearnNav }) {
   )
 }
 
+function NumberingNav({ nav }: { nav: LearnNav }) {
+  const category: NumberingCategory | null = NUMBERING_REFERENCE.find((c) => c.id === nav.numCategoryId) ?? null
+
+  // Category list (top level of the section)
+  if (!category) {
+    return (
+      <ul className="learn-list">
+        {NUMBERING_REFERENCE.map((c) => (
+          <li key={c.id}>
+            <button className="learn-item" onClick={() => nav.setNumCategoryId(c.id)}>
+              <span className="learn-item-title">{c.title}</span>
+              <span className="learn-item-progress">{c.topics.length}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  // Topic list (within a category)
+  return (
+    <>
+      <button
+        className="learn-back"
+        onClick={() => { nav.setNumCategoryId(null); nav.setNumTopicId(null) }}
+      >
+        ← Categories
+      </button>
+      <h4 className="learn-stage-title">{category.title}</h4>
+      <ul className="learn-lesson-list">
+        {category.topics.map((t) => {
+          const isActive = t.id === nav.numTopicId
+          return (
+            <li key={t.id}>
+              <button
+                className={isActive ? 'learn-lesson active' : 'learn-lesson'}
+                onClick={() => nav.setNumTopicId(t.id)}
+              >
+                {t.title}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar: shown under the Learn tab (narrow column). Only navigation --
-// three stacked accordion sections (Instruction Reference, Curriculum,
-// Hardware), each expanding to show its own back button and clickable list.
+// four stacked accordion sections (Instruction Reference, Curriculum,
+// Hardware, Numbering Systems), each expanding to show its own back button
+// and clickable list.
 // ---------------------------------------------------------------------------
 
 export function LearnSidebar({
@@ -295,6 +352,13 @@ export function LearnSidebar({
       >
         <HardwareNav nav={nav} />
       </LearnAccordionSection>
+      <LearnAccordionSection
+        title="Numbering Systems"
+        isOpen={nav.section === 'numbering'}
+        onToggle={() => nav.setSection('numbering')}
+      >
+        <NumberingNav nav={nav} />
+      </LearnAccordionSection>
     </div>
   )
 }
@@ -319,6 +383,51 @@ export function LearnDetail({
   const instruction: InstructionDoc | null = category?.instructions.find((i) => i.mnemonics.includes(nav.mnemonic ?? '')) ?? null
   const hwCategory: HardwareCategory | null = HARDWARE_REFERENCE.find((c) => c.id === nav.hwCategoryId) ?? null
   const hwTopic: HardwareTopic | null = hwCategory?.topics.find((t) => t.id === nav.hwTopicId) ?? null
+  const numCategory: NumberingCategory | null = NUMBERING_REFERENCE.find((c) => c.id === nav.numCategoryId) ?? null
+  const numTopic: NumberingTopic | null = numCategory?.topics.find((t) => t.id === nav.numTopicId) ?? null
+
+  if (nav.section === 'numbering') {
+    if (!numCategory) {
+      return (
+        <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
+          <p className="example-description">
+            Decimal, binary, and hexadecimal -- how to convert between them, how negative numbers are
+            represented, and the number literal syntax this simulator's own assembler recognizes. Pick a
+            category on the left to get started.
+          </p>
+        </div>
+      )
+    }
+
+    if (!numTopic) {
+      return (
+        <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
+          <h4 className="learn-stage-title">{numCategory.title}</h4>
+          <p className="example-description">Pick a topic on the left to read about it.</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
+        <h4 className="learn-stage-title">{numTopic.title}</h4>
+        <p className="example-description">{numTopic.summary}</p>
+        {numTopic.content.map((p, idx) =>
+          // A paragraph containing a newline is a worked example or table (see numberingSystems.ts)
+          // rather than prose -- render it in the same monospace box the Instruction Reference uses
+          // for code examples, so its alignment survives instead of being collapsed.
+          p.includes('\n')
+            ? <pre key={idx} className="instr-example">{p}</pre>
+            : <p key={idx} className="example-description">{p}</p>
+        )}
+        {numTopic.notes && (
+          <ul className="instr-notes">
+            {numTopic.notes.map((n, idx) => <li key={idx}>{n}</li>)}
+          </ul>
+        )}
+      </div>
+    )
+  }
 
   if (nav.section === 'hardware') {
     if (!hwCategory) {

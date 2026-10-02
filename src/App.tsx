@@ -583,6 +583,12 @@ export default function App() {
         </aside>
         )}
       </main>
+      <footer className="app-footer">
+        <p>
+          Developed by Dr. Murat Adnan TAMER as part of the Microprocessors course at Haliç
+          University, Faculty of Engineering. Open source, released under the MIT License.
+        </p>
+      </footer>
     </div>
   )
 }

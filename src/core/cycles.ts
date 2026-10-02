@@ -32,7 +32,10 @@ export interface CycleContext {
   shiftCount?: number
 }
 
-const CONDITIONAL_JUMPS: Mnemonic[] = ['JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE']
+const CONDITIONAL_JUMPS: Mnemonic[] = [
+  'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE',
+  'JS', 'JNS', 'JO', 'JNO', 'JP', 'JNP',
+]
 
 export function instructionCycles(
   instr: Instruction,
@@ -53,7 +56,8 @@ export function instructionCycles(
       if (mem1) return 10 + ea1 // reg/imm -> mem
       if (mem2) return 8 + ea2 // mem -> reg
       return op2?.kind === 'imm' ? 4 : 2 // reg,imm / reg,reg
-    case 'ADD': case 'SUB': case 'AND': case 'OR': case 'XOR': case 'CMP': case 'TEST': {
+    case 'ADD': case 'SUB': case 'AND': case 'OR': case 'XOR': case 'CMP': case 'TEST':
+    case 'ADC': case 'SBB': {
       const memCost = instr.mnemonic === 'TEST' ? 9 : 16
       if (mem1) return memCost + ea1
       if (mem2) return 9 + ea2
@@ -61,11 +65,11 @@ export function instructionCycles(
     }
     case 'INC': case 'DEC': case 'NEG': case 'NOT':
       return mem1 ? 15 + ea1 : 3
-    case 'MUL':
+    case 'MUL': case 'IMUL':
       return mem1 ? (isWord ? 128 : 78) + ea1 : isWord ? 125 : 75
-    case 'DIV':
+    case 'DIV': case 'IDIV':
       return mem1 ? (isWord ? 155 : 87) + ea1 : isWord ? 153 : 85
-    case 'SHL': case 'SHR': {
+    case 'SHL': case 'SHR': case 'ROL': case 'ROR': case 'RCL': case 'RCR': {
       const count = ctx.shiftCount ?? 1
       return mem1 ? 20 + ea1 + 4 * count : 8 + 4 * count
     }
@@ -76,18 +80,29 @@ export function instructionCycles(
     case 'JMP': return 15
     case 'JCXZ': return ctx.taken ? 18 : 6
     case 'LOOP': return ctx.taken ? 17 : 5
+    case 'LOOPE': return ctx.taken ? 18 : 6
+    case 'LOOPNE': return ctx.taken ? 19 : 5
     case 'CALL': return 19
     case 'RET': return 8
     case 'PUSH': return mem1 ? 16 + ea1 : 11
     case 'POP': return mem1 ? 17 + ea1 : 8
+    case 'PUSHF': return 10
+    case 'POPF': return 8
     case 'IN': return op2?.kind === 'imm' ? 10 : 8
     case 'OUT': return op1?.kind === 'imm' ? 10 : 8
-    case 'MOVSB': return ctx.repCount !== undefined ? 9 + ctx.repCount * 17 : 18
-    case 'STOSB': return ctx.repCount !== undefined ? 9 + ctx.repCount * 10 : 11
-    case 'LODSB': return 12
-    case 'CMPSB': return ctx.repCount !== undefined ? 9 + ctx.repCount * 22 : 22
-    case 'SCASB': return ctx.repCount !== undefined ? 9 + ctx.repCount * 15 : 15
-    case 'CLD': case 'STD': return 2
+    case 'MOVSB': case 'MOVSW': return ctx.repCount !== undefined ? 9 + ctx.repCount * 17 : 18
+    case 'STOSB': case 'STOSW': return ctx.repCount !== undefined ? 9 + ctx.repCount * 10 : 11
+    case 'LODSB': case 'LODSW': return 12
+    case 'CMPSB': case 'CMPSW': return ctx.repCount !== undefined ? 9 + ctx.repCount * 22 : 22
+    case 'SCASB': case 'SCASW': return ctx.repCount !== undefined ? 9 + ctx.repCount * 15 : 15
+    case 'CLD': case 'STD': case 'STC': case 'CLC': case 'CMC': case 'STI': case 'CLI': return 2
+    case 'CBW': return 2
+    case 'CWD': return 5
+    case 'LAHF': case 'SAHF': return 4
+    case 'XLATB': return 11
+    case 'AAA': case 'AAS': case 'DAA': case 'DAS': return 4
+    case 'AAM': return 83
+    case 'AAD': return 60
     case 'HLT': return 2
     case 'INT': return 51
     case 'NOP': default: return 3

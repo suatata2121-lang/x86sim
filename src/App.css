@@ -18,6 +18,20 @@ header p {
   margin-top: -0.5rem;
 }
 
+.app-footer {
+  margin-top: 1.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.app-footer p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .theme-toggle {
   flex-shrink: 0;
   padding: 0.4rem 0.7rem;

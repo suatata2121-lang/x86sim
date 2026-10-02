@@ -13,15 +13,40 @@ const MNEMONICS: Mnemonic[] = [
   'MUL', 'DIV', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR',
   'XCHG', 'NEG', 'TEST', 'LEA',
   'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE', 'JCXZ',
-  'LOOP', 'PUSH', 'POP', 'CALL', 'RET', 'IN', 'OUT', 'INT', 'NOP', 'HLT',
+  'JS', 'JNS', 'JO', 'JNO', 'JP', 'JNP',
+  'LOOP', 'LOOPE', 'LOOPNE', 'PUSH', 'POP', 'CALL', 'RET', 'IN', 'OUT', 'INT', 'NOP', 'HLT',
   'MOVSB', 'STOSB', 'LODSB', 'CMPSB', 'SCASB', 'CLD', 'STD',
+  'MOVSW', 'STOSW', 'LODSW', 'CMPSW', 'SCASW',
+  'ADC', 'SBB', 'ROL', 'ROR', 'RCL', 'RCR', 'IMUL', 'IDIV',
+  'CBW', 'CWD', 'STC', 'CLC', 'CMC', 'STI', 'CLI',
+  'PUSHF', 'POPF', 'LAHF', 'SAHF', 'XLATB',
+  'AAA', 'AAS', 'AAM', 'AAD', 'DAA', 'DAS',
 ]
 
-const STRING_MNEMONICS = new Set<Mnemonic>(['MOVSB', 'STOSB', 'LODSB', 'CMPSB', 'SCASB'])
+const STRING_MNEMONICS = new Set<Mnemonic>([
+  'MOVSB', 'STOSB', 'LODSB', 'CMPSB', 'SCASB',
+  'MOVSW', 'STOSW', 'LODSW', 'CMPSW', 'SCASW',
+])
 
 const JUMP_MNEMONICS = new Set<Mnemonic>([
-  'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE', 'JCXZ', 'LOOP', 'CALL',
+  'JMP', 'JE', 'JNE', 'JG', 'JL', 'JGE', 'JLE', 'JA', 'JAE', 'JB', 'JBE', 'JCXZ',
+  'JS', 'JNS', 'JO', 'JNO', 'JP', 'JNP',
+  'LOOP', 'LOOPE', 'LOOPNE', 'CALL',
 ])
+
+const REG8_SET = new Set<RegName>(['AL', 'AH', 'BL', 'BH', 'CL', 'CH', 'DL', 'DH'])
+
+// Instructions that the reference ("When there are two operands, both operands must have the
+// same size (except shift and rotate instructions)") requires matching-size operands for.
+const SAME_SIZE_MNEMONICS = new Set<Mnemonic>(['MOV', 'ADD', 'SUB', 'CMP', 'AND', 'OR', 'XOR', 'TEST', 'XCHG', 'ADC', 'SBB'])
+
+// Single-operand instructions whose only operand, if it's a bracketed memory reference with no
+// data label and no explicit BYTE/WORD PTR, has no way to know its size.
+const SINGLE_SIZED_OPERAND_MNEMONICS = new Set<Mnemonic>(['INC', 'DEC', 'NOT', 'NEG', 'MUL', 'DIV', 'PUSH', 'POP', 'IMUL', 'IDIV'])
+
+// Shift/rotate family: the reference's "both operands must have the same size" exception, and --
+// when the count is a register rather than an immediate -- it must specifically be CL.
+const SHIFT_ROTATE_MNEMONICS = new Set<Mnemonic>(['SHL', 'SHR', 'ROL', 'ROR', 'RCL', 'RCR'])
 
 const REP_PREFIXES: Record<string, RepPrefix> = {
   REP: 'REP', REPE: 'REPE', REPZ: 'REPE', REPNE: 'REPNE', REPNZ: 'REPNE',
@@ -34,6 +59,11 @@ const REP_PREFIXES: Record<string, RepPrefix> = {
 // pipeline (execution, cycle costing, profiler) only ever deals with one name.
 const MNEMONIC_ALIASES: Partial<Record<string, Mnemonic>> = {
   JZ: 'JE', JNZ: 'JNE', JC: 'JB', JNC: 'JAE',
+  JPE: 'JP', JPO: 'JNP',
+  LOOPZ: 'LOOPE', LOOPNZ: 'LOOPNE',
+  // SAL is the same opcode as SHL on real hardware -- the reference lists it
+  // as a separate mnemonic, but there's nothing for it to do differently.
+  SAL: 'SHL',
 }
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -315,7 +345,15 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
   JB: [['label']],
   JBE: [['label']],
   JCXZ: [['label']],
+  JS: [['label']],
+  JNS: [['label']],
+  JO: [['label']],
+  JNO: [['label']],
+  JP: [['label']],
+  JNP: [['label']],
   LOOP: [['label']],
+  LOOPE: [['label']],
+  LOOPNE: [['label']],
   INT: [['imm']],
   NOP: [],
   HLT: [],
@@ -324,8 +362,39 @@ const OPERAND_SPECS: Partial<Record<Mnemonic, Array<Operand['kind'][]>>> = {
   LODSB: [],
   CMPSB: [],
   SCASB: [],
+  MOVSW: [],
+  STOSW: [],
+  LODSW: [],
+  CMPSW: [],
+  SCASW: [],
   CLD: [],
   STD: [],
+  ADC: [['reg', 'mem'], ['reg', 'imm', 'mem']],
+  SBB: [['reg', 'mem'], ['reg', 'imm', 'mem']],
+  ROL: [['reg', 'mem'], ['reg', 'imm']],
+  ROR: [['reg', 'mem'], ['reg', 'imm']],
+  RCL: [['reg', 'mem'], ['reg', 'imm']],
+  RCR: [['reg', 'mem'], ['reg', 'imm']],
+  IMUL: [['reg', 'mem']],
+  IDIV: [['reg', 'mem']],
+  CBW: [],
+  CWD: [],
+  STC: [],
+  CLC: [],
+  CMC: [],
+  STI: [],
+  CLI: [],
+  PUSHF: [],
+  POPF: [],
+  LAHF: [],
+  SAHF: [],
+  XLATB: [],
+  AAA: [],
+  AAS: [],
+  AAM: [],
+  AAD: [],
+  DAA: [],
+  DAS: [],
 }
 
 const OPERAND_KIND_LABEL: Record<Operand['kind'], string> = {
@@ -346,6 +415,19 @@ function describeOperand(op: Operand): string {
   let inner = parts.join('+')
   if (op.disp) inner += (op.disp > 0 ? '+' : '') + op.disp
   return `[${inner}]`
+}
+
+// The operand's size in bits, where known: a register by its own width, a memory operand by its
+// explicit BYTE/WORD PTR override or (failing that) the width of the data label it references.
+// Immediates and bare labels (MOV's "load this label's address" form) carry no size of their own.
+function operandSizeHint(op: Operand, dataWidths: Map<string, 'byte' | 'word'>): 'byte' | 'word' | undefined {
+  if (op.kind === 'reg') return REG8_SET.has(op.name) ? 'byte' : 'word'
+  if (op.kind === 'mem') return op.size ?? (op.label ? dataWidths.get(op.label) : undefined)
+  return undefined
+}
+
+function isAmbiguousMem(op: Operand | undefined): op is Operand & { kind: 'mem' } {
+  return op?.kind === 'mem' && !op.size && !op.label
 }
 
 function validateOperands(
@@ -504,7 +586,8 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
         : parseDwItems(itemsText, lineNo, itemsOffset, errors)
       if (bytes === null) continue
       declaredLabels.add(name)
-      data.push({ name, address: dataCursor, bytes, line: lineNo })
+      const width = directive.toUpperCase() === 'DB' ? 'byte' : 'word'
+      data.push({ name, address: dataCursor, bytes, width, line: lineNo })
       dataCursor += bytes.length
       continue
     }
@@ -583,6 +666,15 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
     return idx !== undefined && idx >= 0 ? idx + 1 : undefined
   }
 
+  // Case-insensitive whole-word search, used below to locate a mnemonic regardless of how it was
+  // capitalized in the source (findColumn's plain indexOf wouldn't match "mov" against "MOV").
+  function findWordColumn(lineNo: number, word: string): number | undefined {
+    const line = lines[lineNo - 1]
+    if (!line) return undefined
+    const match = new RegExp(`\\b${word}\\b`, 'i').exec(line)
+    return match ? match.index + 1 : undefined
+  }
+
   for (const instr of instructions) {
     for (const op of instr.ops) {
       if (op.kind === 'label') {
@@ -596,6 +688,99 @@ export function assemble(source: string): { instructions: Instruction[]; data: D
       }
       if (op.kind === 'mem' && op.label && !dataLabelNames.has(op.label)) {
         errors.push({ line: instr.line, message: `Undefined data label: ${op.label}`, column: findColumn(instr.line, op.label), length: op.label.length })
+      }
+    }
+  }
+
+  // Reference-manual operand rules that need every data label's declared width known up front
+  // (a memory operand can reference a label declared later in the source), so -- like the
+  // undefined-label checks above -- these run as a second pass over the fully-parsed program
+  // rather than inline during the per-line parse.
+  const dataWidths = new Map<string, 'byte' | 'word'>(data.map((d) => [d.name, d.width]))
+  const AMBIGUOUS_MEM_MESSAGE = 'Size of memory operand is not specified (use BYTE PTR or WORD PTR)'
+
+  for (const instr of instructions) {
+    const [op1, op2] = instr.ops
+    const mnemonicCol = findWordColumn(instr.line, instr.mnemonic)
+
+    if ((instr.mnemonic === 'PUSH' || instr.mnemonic === 'POP') && op1?.kind === 'reg' && REG8_SET.has(op1.name)) {
+      errors.push({
+        line: instr.line,
+        message: `${instr.mnemonic} only works with 16-bit operands, not ${op1.name}`,
+        column: findWordColumn(instr.line, op1.name),
+        length: op1.name.length,
+      })
+      continue
+    }
+
+    if (instr.mnemonic === 'LEA' && op1?.kind === 'reg' && REG8_SET.has(op1.name)) {
+      errors.push({
+        line: instr.line,
+        message: `LEA destination must be a 16-bit register, not ${op1.name}`,
+        column: findWordColumn(instr.line, op1.name),
+        length: op1.name.length,
+      })
+      continue
+    }
+
+    if (instr.mnemonic === 'INT' && op1?.kind === 'imm' && (op1.value < 0 || op1.value > 255)) {
+      errors.push({
+        line: instr.line,
+        message: `INT operand must be between 0 and 255, found ${op1.value}`,
+        column: findColumn(instr.line, String(op1.value)),
+        length: String(op1.value).length,
+      })
+      continue
+    }
+
+    if (SHIFT_ROTATE_MNEMONICS.has(instr.mnemonic) && op2?.kind === 'reg' && op2.name !== 'CL') {
+      errors.push({
+        line: instr.line,
+        message: `${instr.mnemonic} count must be the CL register or an immediate number, not ${op2.name}`,
+        column: findWordColumn(instr.line, op2.name),
+        length: op2.name.length,
+      })
+      continue
+    }
+
+    // Shift/rotate's 2nd operand is always a count, never something that could tell us the 1st
+    // operand's size -- so an unsized memory destination is ambiguous here exactly like it is for
+    // the single-sized-operand group above.
+    if ((SINGLE_SIZED_OPERAND_MNEMONICS.has(instr.mnemonic) || SHIFT_ROTATE_MNEMONICS.has(instr.mnemonic)) && isAmbiguousMem(op1)) {
+      errors.push({ line: instr.line, message: AMBIGUOUS_MEM_MESSAGE, column: mnemonicCol, length: instr.mnemonic.length })
+      continue
+    }
+
+    if (SAME_SIZE_MNEMONICS.has(instr.mnemonic) && op1 && op2) {
+      const size1 = operandSizeHint(op1, dataWidths)
+      const size2 = operandSizeHint(op2, dataWidths)
+
+      if ((isAmbiguousMem(op1) && size2 === undefined) || (isAmbiguousMem(op2) && size1 === undefined)) {
+        errors.push({ line: instr.line, message: AMBIGUOUS_MEM_MESSAGE, column: mnemonicCol, length: instr.mnemonic.length })
+        continue
+      }
+
+      if (size1 && size2 && size1 !== size2) {
+        errors.push({
+          line: instr.line,
+          message: `${instr.mnemonic}: operand sizes do not match -- ${describeOperand(op1)} is ${size1 === 'byte' ? '8-bit' : '16-bit'}, ${describeOperand(op2)} is ${size2 === 'byte' ? '8-bit' : '16-bit'}`,
+          column: mnemonicCol,
+          length: instr.mnemonic.length,
+        })
+        continue
+      }
+
+      if (op2.kind === 'imm' && size1) {
+        const [lo, hi] = size1 === 'byte' ? [-128, 255] : [-32768, 65535]
+        if (op2.value < lo || op2.value > hi) {
+          errors.push({
+            line: instr.line,
+            message: `Immediate value ${op2.value} does not fit in ${size1 === 'byte' ? 'a byte' : 'a word'} (${lo}..${hi})`,
+            column: findColumn(instr.line, String(op2.value)),
+            length: String(op2.value).length,
+          })
+          continue
+        }
       }
     }
   }

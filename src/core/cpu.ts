@@ -10,6 +10,8 @@ const REG8_PARENT: Record<Reg8, { parent: Reg16; high: boolean }> = {
   DH: { parent: 'DX', high: true }, DL: { parent: 'DX', high: false },
 }
 
+type StringMnemonic = 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB' | 'MOVSW' | 'STOSW' | 'LODSW' | 'CMPSW' | 'SCASW'
+
 const MEMORY_SIZE = 0x10000
 const INITIAL_SP = 0xfffe
 
@@ -42,7 +44,7 @@ export interface CpuSnapshot {
 
 export class Cpu {
   regs: Record<Reg16, number> = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP, DS: 0, ES: 0, SS: 0, CS: 0 }
-  flags: Flags = { ZF: false, SF: false, CF: false, OF: false, DF: false }
+  flags: Flags = { ZF: false, SF: false, CF: false, OF: false, DF: false, PF: false, IF: true, AF: false }
   memory = new Uint8Array(MEMORY_SIZE)
   // Virtual I/O ports for IN/OUT, driving the virtual device views (traffic
   // light, stepper motor, 7-segment display, thermometer — see Devices.tsx).
@@ -50,7 +52,7 @@ export class Cpu {
   instructions: Instruction[] = []
   data: DataDeclaration[] = []
   labels = new Map<string, number>()
-  dataLabels = new Map<string, { address: number; length: number }>()
+  dataLabels = new Map<string, { address: number; length: number; width: 'byte' | 'word' }>()
   ip = 0
   halted = false
   hitBreakpoint = false
@@ -87,13 +89,13 @@ export class Cpu {
       if (instr.label) this.labels.set(instr.label, idx)
     })
     this.dataLabels.clear()
-    for (const d of data) this.dataLabels.set(d.name, { address: d.address, length: d.bytes.length })
+    for (const d of data) this.dataLabels.set(d.name, { address: d.address, length: d.bytes.length, width: d.width })
     this.reset()
   }
 
   reset() {
     this.regs = { AX: 0, BX: 0, CX: 0, DX: 0, SI: 0, DI: 0, BP: 0, SP: INITIAL_SP, DS: 0, ES: 0, SS: 0, CS: 0 }
-    this.flags = { ZF: false, SF: false, CF: false, OF: false, DF: false }
+    this.flags = { ZF: false, SF: false, CF: false, OF: false, DF: false, PF: false, IF: true, AF: false }
     this.memory.fill(0)
     this.ports.fill(0)
     for (const d of this.data) {
@@ -188,9 +190,14 @@ export class Cpu {
     this.regs[name as Reg16] = value & 0xffff
   }
 
+  // A memory operand's size is its explicit BYTE/WORD PTR override if given; failing that, the
+  // width the referenced data label was declared with (DB = byte, DW = word) -- the same
+  // resolution order the assembler's own operand-size validation uses (assembler.ts
+  // `operandSizeHint`), so a labeled operand like `ROL [LEDS], 1` runs at the width LEDS was
+  // actually declared with instead of silently defaulting to word.
   private operandSize(op: Operand): 'byte' | 'word' | undefined {
     if (op.kind === 'reg') return REG16.includes(op.name as Reg16) ? 'word' : 'byte'
-    if (op.kind === 'mem') return op.size
+    if (op.kind === 'mem') return op.size ?? (op.label ? this.dataLabels.get(op.label)?.width : undefined)
     return undefined
   }
 
@@ -247,12 +254,27 @@ export class Cpu {
     throw new Error('Destination must be a register or memory address')
   }
 
-  private setArithFlags(result: number, isWord: boolean) {
+  // True (PF set) when the low byte of the result has an even number of 1 bits -- the same byte
+  // regardless of operand size, matching real 8086 behavior.
+  private parity(value: number): boolean {
+    let v = value & 0xff
+    let bits = 0
+    while (v) { bits += v & 1; v >>= 1 }
+    return bits % 2 === 0
+  }
+
+  // af, when given, is whatever the caller already knows about a carry/borrow into bit 4 (see the
+  // Flags.AF doc comment) -- callers that don't track it (INC/DEC/NEG's current callers, SHL/etc.
+  // which use their own flag logic instead) simply leave AF at its last value, same simplification
+  // this simulator already applies to OF for those instructions.
+  private setArithFlags(result: number, isWord: boolean, af?: boolean) {
     const mask = isWord ? 0xffff : 0xff
     const signBit = isWord ? 0x8000 : 0x80
     this.flags.ZF = (result & mask) === 0
     this.flags.SF = (result & signBit) !== 0
     this.flags.CF = result < 0 || result > mask
+    this.flags.PF = this.parity(result)
+    if (af !== undefined) this.flags.AF = af
   }
 
   private setLogicalFlags(result: number, isWord: boolean) {
@@ -262,6 +284,34 @@ export class Cpu {
     this.flags.SF = (result & signBit) !== 0
     this.flags.CF = false
     this.flags.OF = false
+    this.flags.PF = this.parity(result)
+  }
+
+  // Packs the tracked flags into their real 8086 FLAGS-register bit positions (matching
+  // RegisterView's synthesized FLAGS row) for PUSHF/LAHF, and the reverse for POPF/SAHF. Bits for
+  // flags this simulator doesn't track (TF and the reserved bits) are left 0.
+  private flagsToWord(): number {
+    let w = 0
+    if (this.flags.CF) w |= 1 << 0
+    if (this.flags.PF) w |= 1 << 2
+    if (this.flags.AF) w |= 1 << 4
+    if (this.flags.ZF) w |= 1 << 6
+    if (this.flags.SF) w |= 1 << 7
+    if (this.flags.IF) w |= 1 << 9
+    if (this.flags.DF) w |= 1 << 10
+    if (this.flags.OF) w |= 1 << 11
+    return w
+  }
+
+  private wordToFlags(w: number) {
+    this.flags.CF = (w & (1 << 0)) !== 0
+    this.flags.PF = (w & (1 << 2)) !== 0
+    this.flags.AF = (w & (1 << 4)) !== 0
+    this.flags.ZF = (w & (1 << 6)) !== 0
+    this.flags.SF = (w & (1 << 7)) !== 0
+    this.flags.IF = (w & (1 << 9)) !== 0
+    this.flags.DF = (w & (1 << 10)) !== 0
+    this.flags.OF = (w & (1 << 11)) !== 0
   }
 
   private jumpToLabel(op: Operand) {
@@ -274,35 +324,50 @@ export class Cpu {
     throw new Error('Jump target must be a label')
   }
 
-  // Byte string ops (MOVSB/STOSB/LODSB/CMPSB/SCASB): operate implicitly on
-  // memory[SI]/memory[DI], advancing SI and/or DI by +1 (DF=0) or -1 (DF=1)
-  // afterward. No segment registers, so SI/DI are used as absolute addresses.
-  private execStringOp(mnemonic: 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB') {
-    switch (mnemonic) {
-      case 'MOVSB':
-        this.memory[this.regs.DI & 0xffff] = this.memory[this.regs.SI & 0xffff]
-        this.trackWrite(this.regs.DI)
+  // String ops (MOVS*/STOS*/LODS*/CMPS*/SCAS*, byte or word form): operate implicitly on
+  // memory[SI]/memory[DI], advancing SI and/or DI by +1/+2 (DF=0) or -1/-2 (DF=1) afterward. No
+  // segment registers, so SI/DI are used as absolute addresses.
+  private execStringOp(mnemonic: StringMnemonic) {
+    const isWord = mnemonic.endsWith('W')
+    const accReg = isWord ? 'AX' : 'AL'
+    const base = mnemonic.slice(0, -1) // 'MOVS' | 'STOS' | 'LODS' | 'CMPS' | 'SCAS'
+    const readAt = (addr: number) =>
+      isWord
+        ? this.memory[addr & 0xffff] | (this.memory[(addr + 1) & 0xffff] << 8)
+        : this.memory[addr & 0xffff]
+    const writeAt = (addr: number, value: number) => {
+      const a = addr & 0xffff
+      this.memory[a] = value & 0xff
+      this.trackWrite(a)
+      if (isWord) {
+        const hi = (a + 1) & 0xffff
+        this.memory[hi] = (value >> 8) & 0xff
+        this.trackWrite(hi)
+      }
+    }
+
+    switch (base) {
+      case 'MOVS':
+        writeAt(this.regs.DI, readAt(this.regs.SI))
         break
-      case 'STOSB':
-        this.memory[this.regs.DI & 0xffff] = this.getReg('AL')
-        this.trackWrite(this.regs.DI)
+      case 'STOS':
+        writeAt(this.regs.DI, this.getReg(accReg))
         break
-      case 'LODSB':
-        this.setReg('AL', this.memory[this.regs.SI & 0xffff])
+      case 'LODS':
+        this.setReg(accReg, readAt(this.regs.SI))
         break
-      case 'CMPSB':
-        this.setArithFlags(this.memory[this.regs.SI & 0xffff] - this.memory[this.regs.DI & 0xffff], false)
+      case 'CMPS':
+        this.setArithFlags(readAt(this.regs.SI) - readAt(this.regs.DI), isWord)
         break
-      case 'SCASB':
-        this.setArithFlags(this.getReg('AL') - this.memory[this.regs.DI & 0xffff], false)
+      case 'SCAS':
+        this.setArithFlags(this.getReg(accReg) - readAt(this.regs.DI), isWord)
         break
     }
-    const delta = this.flags.DF ? -1 : 1
-    if (mnemonic === 'MOVSB' || mnemonic === 'CMPSB') this.regs.SI = (this.regs.SI + delta) & 0xffff
-    if (mnemonic === 'MOVSB' || mnemonic === 'STOSB' || mnemonic === 'CMPSB' || mnemonic === 'SCASB') {
+    const delta = (this.flags.DF ? -1 : 1) * (isWord ? 2 : 1)
+    if (base === 'MOVS' || base === 'CMPS' || base === 'LODS') this.regs.SI = (this.regs.SI + delta) & 0xffff
+    if (base === 'MOVS' || base === 'STOS' || base === 'CMPS' || base === 'SCAS') {
       this.regs.DI = (this.regs.DI + delta) & 0xffff
     }
-    if (mnemonic === 'LODSB') this.regs.SI = (this.regs.SI + delta) & 0xffff
   }
 
   step() {
@@ -325,20 +390,44 @@ export class Cpu {
       case 'NOP': break
       case 'MOV': this.writeOperand(op1, this.readOperand(op2, isWord), isWord); break
       case 'ADD': {
-        const result = this.readOperand(op1, isWord) + this.readOperand(op2, isWord)
+        const a = this.readOperand(op1, isWord)
+        const b = this.readOperand(op2, isWord)
+        const result = a + b
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord)
+        this.setArithFlags(result, isWord, ((a & 0xf) + (b & 0xf)) > 0xf)
         break
       }
       case 'SUB': {
-        const result = this.readOperand(op1, isWord) - this.readOperand(op2, isWord)
+        const a = this.readOperand(op1, isWord)
+        const b = this.readOperand(op2, isWord)
+        const result = a - b
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord)
+        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf))
+        break
+      }
+      case 'ADC': {
+        const a = this.readOperand(op1, isWord)
+        const b = this.readOperand(op2, isWord)
+        const cfIn = this.flags.CF ? 1 : 0
+        const result = a + b + cfIn
+        this.writeOperand(op1, result, isWord)
+        this.setArithFlags(result, isWord, ((a & 0xf) + (b & 0xf) + cfIn) > 0xf)
+        break
+      }
+      case 'SBB': {
+        const a = this.readOperand(op1, isWord)
+        const b = this.readOperand(op2, isWord)
+        const cfIn = this.flags.CF ? 1 : 0
+        const result = a - b - cfIn
+        this.writeOperand(op1, result, isWord)
+        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf) + cfIn)
         break
       }
       case 'CMP': {
-        const result = this.readOperand(op1, isWord) - this.readOperand(op2, isWord)
-        this.setArithFlags(result, isWord)
+        const a = this.readOperand(op1, isWord)
+        const b = this.readOperand(op2, isWord)
+        const result = a - b
+        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf))
         break
       }
       case 'INC': {
@@ -386,6 +475,55 @@ export class Cpu {
           if (quotient > 0xff) throw new Error('Division overflow (DIV): result does not fit in an 8-bit register')
           this.setReg('AL', quotient & 0xff)
           this.setReg('AH', (dividend % value) & 0xff)
+        }
+        break
+      }
+      case 'IMUL': {
+        const toSigned = (v: number, word: boolean) => (word ? (v >= 0x8000 ? v - 0x10000 : v) : v >= 0x80 ? v - 0x100 : v)
+        const value = toSigned(this.readOperand(op1, isWord), isWord)
+        if (isWord) {
+          const a = toSigned(this.getReg('AX'), true)
+          const product = a * value
+          const u32 = (((product % 0x100000000) + 0x100000000) % 0x100000000) >>> 0
+          this.regs.AX = u32 & 0xffff
+          this.regs.DX = (u32 >>> 16) & 0xffff
+          const signExtended = (this.regs.AX & 0x8000) !== 0 ? 0xffff : 0x0000
+          const overflow = this.regs.DX !== signExtended
+          this.flags.CF = overflow
+          this.flags.OF = overflow
+        } else {
+          const a = toSigned(this.getReg('AL'), false)
+          const product = a * value
+          const u16 = ((product % 0x10000) + 0x10000) % 0x10000
+          this.setReg('AX', u16)
+          const al = this.getReg('AL')
+          const ah = this.getReg('AH')
+          const expectedAh = (al & 0x80) !== 0 ? 0xff : 0x00
+          const overflow = ah !== expectedAh
+          this.flags.CF = overflow
+          this.flags.OF = overflow
+        }
+        break
+      }
+      case 'IDIV': {
+        const toSigned = (v: number, word: boolean) => (word ? (v >= 0x8000 ? v - 0x10000 : v) : v >= 0x80 ? v - 0x100 : v)
+        const divisor = toSigned(this.readOperand(op1, isWord), isWord)
+        if (divisor === 0) throw new Error('Division by zero (IDIV)')
+        if (isWord) {
+          const u32 = ((this.regs.DX << 16) | this.regs.AX) >>> 0
+          const dividend = u32 >= 0x80000000 ? u32 - 0x100000000 : u32
+          const quotient = Math.trunc(dividend / divisor)
+          if (quotient > 32767 || quotient < -32768) throw new Error('Division overflow (IDIV): result does not fit in a 16-bit register')
+          const remainder = dividend - quotient * divisor
+          this.regs.AX = quotient & 0xffff
+          this.regs.DX = remainder & 0xffff
+        } else {
+          const dividend = toSigned(this.getReg('AX'), true)
+          const quotient = Math.trunc(dividend / divisor)
+          if (quotient > 127 || quotient < -128) throw new Error('Division overflow (IDIV): result does not fit in an 8-bit register')
+          const remainder = dividend - quotient * divisor
+          this.setReg('AL', quotient & 0xff)
+          this.setReg('AH', remainder & 0xff)
         }
         break
       }
@@ -466,6 +604,36 @@ export class Cpu {
         this.flags.OF = false
         break
       }
+      case 'ROL': case 'ROR': case 'RCL': case 'RCR': {
+        const size = isWord ? 16 : 8
+        const mask = isWord ? 0xffff : 0xff
+        const value = this.readOperand(op1, isWord)
+        const rawCount = Math.min(this.readOperand(op2, false), 31)
+        shiftCount = rawCount
+        const throughCarry = instr.mnemonic === 'RCL' || instr.mnemonic === 'RCR'
+        const left = instr.mnemonic === 'ROL' || instr.mnemonic === 'RCL'
+        const modulus = throughCarry ? size + 1 : size
+        const count = rawCount % modulus
+        let result = value & mask
+        let cf = this.flags.CF
+        for (let i = 0; i < count; i++) {
+          if (left) {
+            const outBit = (result >> (size - 1)) & 1
+            const inBit = throughCarry ? (cf ? 1 : 0) : outBit
+            result = ((result << 1) | inBit) & mask
+            cf = outBit === 1
+          } else {
+            const outBit = result & 1
+            const inBit = throughCarry ? (cf ? 1 : 0) : outBit
+            result = ((result >>> 1) | (inBit << (size - 1))) & mask
+            cf = outBit === 1
+          }
+        }
+        if (rawCount > 0) this.flags.CF = cf
+        this.flags.OF = false
+        this.writeOperand(op1, result, isWord)
+        break
+      }
       case 'CALL': {
         const returnIdx = this.ip + 1
         const sp = (this.regs.SP - 2) & 0xffff
@@ -495,10 +663,28 @@ export class Cpu {
       case 'JB': if (this.flags.CF) { this.jumpToLabel(op1); nextIp = this.ip }; break
       case 'JBE': if (this.flags.CF || this.flags.ZF) { this.jumpToLabel(op1); nextIp = this.ip }; break
       case 'JCXZ': if (this.getReg('CX') === 0) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JS': if (this.flags.SF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JNS': if (!this.flags.SF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JO': if (this.flags.OF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JNO': if (!this.flags.OF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JP': if (this.flags.PF) { this.jumpToLabel(op1); nextIp = this.ip }; break
+      case 'JNP': if (!this.flags.PF) { this.jumpToLabel(op1); nextIp = this.ip }; break
       case 'LOOP': {
         const cx = (this.getReg('CX') - 1) & 0xffff
         this.setReg('CX', cx)
         if (cx !== 0) { this.jumpToLabel(op1); nextIp = this.ip }
+        break
+      }
+      case 'LOOPE': {
+        const cx = (this.getReg('CX') - 1) & 0xffff
+        this.setReg('CX', cx)
+        if (cx !== 0 && this.flags.ZF) { this.jumpToLabel(op1); nextIp = this.ip }
+        break
+      }
+      case 'LOOPNE': {
+        const cx = (this.getReg('CX') - 1) & 0xffff
+        this.setReg('CX', cx)
+        if (cx !== 0 && !this.flags.ZF) { this.jumpToLabel(op1); nextIp = this.ip }
         break
       }
       case 'PUSH': {
@@ -539,7 +725,8 @@ export class Cpu {
         this.lastPortValue = value
         break
       }
-      case 'MOVSB': case 'STOSB': case 'LODSB': case 'CMPSB': case 'SCASB': {
+      case 'MOVSB': case 'STOSB': case 'LODSB': case 'CMPSB': case 'SCASB':
+      case 'MOVSW': case 'STOSW': case 'LODSW': case 'CMPSW': case 'SCASW': {
         if (instr.rep) {
           let iterations = 0
           while (this.getReg('CX') !== 0 && iterations < 0x10000) {
@@ -559,6 +746,146 @@ export class Cpu {
       case 'STD': this.flags.DF = true; break
       case 'INT': this.handleInterrupt(this.readOperand(op1, true)); break
       case 'HLT': this.halted = true; break
+      case 'CBW': {
+        const al = this.getReg('AL')
+        this.regs.AX = (al & 0x80) !== 0 ? (0xff00 | al) : al
+        break
+      }
+      case 'CWD': {
+        this.regs.DX = (this.regs.AX & 0x8000) !== 0 ? 0xffff : 0x0000
+        break
+      }
+      case 'STC': this.flags.CF = true; break
+      case 'CLC': this.flags.CF = false; break
+      case 'CMC': this.flags.CF = !this.flags.CF; break
+      case 'STI': this.flags.IF = true; break
+      case 'CLI': this.flags.IF = false; break
+      case 'PUSHF': {
+        const sp = (this.regs.SP - 2) & 0xffff
+        this.regs.SP = sp
+        const value = this.flagsToWord()
+        this.memory[sp] = value & 0xff
+        this.memory[(sp + 1) & 0xffff] = (value >> 8) & 0xff
+        break
+      }
+      case 'POPF': {
+        const sp = this.regs.SP
+        const value = this.memory[sp] | (this.memory[(sp + 1) & 0xffff] << 8)
+        this.wordToFlags(value)
+        this.regs.SP = (sp + 2) & 0xffff
+        break
+      }
+      case 'LAHF': this.setReg('AH', this.flagsToWord() & 0xff); break
+      case 'SAHF': {
+        const ah = this.getReg('AH')
+        this.wordToFlags((this.flagsToWord() & 0xff00) | ah)
+        break
+      }
+      case 'XLATB': {
+        const addr = (this.regs.BX + this.getReg('AL')) & 0xffff
+        this.setReg('AL', this.memory[addr])
+        this.lastAddress = addr
+        this.lastMemValue = this.memory[addr]
+        break
+      }
+      case 'AAA': {
+        let al = this.getReg('AL')
+        if ((al & 0x0f) > 9 || this.flags.AF) {
+          al = (al + 6) & 0xff
+          this.setReg('AH', (this.getReg('AH') + 1) & 0xff)
+          this.flags.CF = true
+          this.flags.AF = true
+        } else {
+          this.flags.CF = false
+          this.flags.AF = false
+        }
+        this.setReg('AL', al & 0x0f)
+        break
+      }
+      case 'AAS': {
+        let al = this.getReg('AL')
+        if ((al & 0x0f) > 9 || this.flags.AF) {
+          al = (al - 6) & 0xff
+          this.setReg('AH', (this.getReg('AH') - 1) & 0xff)
+          this.flags.CF = true
+          this.flags.AF = true
+        } else {
+          this.flags.CF = false
+          this.flags.AF = false
+        }
+        this.setReg('AL', al & 0x0f)
+        break
+      }
+      case 'AAM': {
+        const al = this.getReg('AL')
+        const ah = Math.floor(al / 10)
+        const rem = al % 10
+        this.setReg('AH', ah & 0xff)
+        this.setReg('AL', rem & 0xff)
+        this.flags.ZF = rem === 0
+        this.flags.SF = (rem & 0x80) !== 0
+        this.flags.PF = this.parity(rem)
+        break
+      }
+      case 'AAD': {
+        const al = this.getReg('AL')
+        const ah = this.getReg('AH')
+        const result = (ah * 10 + al) & 0xff
+        this.setReg('AL', result)
+        this.setReg('AH', 0)
+        this.flags.ZF = result === 0
+        this.flags.SF = (result & 0x80) !== 0
+        this.flags.PF = this.parity(result)
+        break
+      }
+      case 'DAA': {
+        const oldAl = this.getReg('AL')
+        const oldCf = this.flags.CF
+        const oldAf = this.flags.AF
+        let al = oldAl
+        let cf = false
+        let af = false
+        if ((al & 0x0f) > 9 || oldAf) {
+          al = (al + 6) & 0xff
+          cf = oldCf || al < 6 // the +6 wrapped past 0xff
+          af = true
+        }
+        if (oldAl > 0x99 || oldCf) {
+          al = (al + 0x60) & 0xff
+          cf = true
+        }
+        this.setReg('AL', al)
+        this.flags.CF = cf
+        this.flags.AF = af
+        this.flags.ZF = al === 0
+        this.flags.SF = (al & 0x80) !== 0
+        this.flags.PF = this.parity(al)
+        break
+      }
+      case 'DAS': {
+        const oldAl = this.getReg('AL')
+        const oldCf = this.flags.CF
+        const oldAf = this.flags.AF
+        let al = oldAl
+        let cf = false
+        let af = false
+        if ((al & 0x0f) > 9 || oldAf) {
+          cf = oldCf || al < 6 // the -6 borrowed past 0x00
+          al = (al - 6) & 0xff
+          af = true
+        }
+        if (oldAl > 0x99 || oldCf) {
+          al = (al - 0x60) & 0xff
+          cf = true
+        }
+        this.setReg('AL', al)
+        this.flags.CF = cf
+        this.flags.AF = af
+        this.flags.ZF = al === 0
+        this.flags.SF = (al & 0x80) !== 0
+        this.flags.PF = this.parity(al)
+        break
+      }
     }
 
     // AH=01/0A requested keyboard input: stop without completing this instruction
