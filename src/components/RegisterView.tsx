@@ -27,12 +27,15 @@ function binary(value: number) {
 
 // FLAGS is itself a 16-bit CPU register, just like AX or IP -- each flag is
 // one bit at a fixed position (matching real 8086 bit numbering) rather than
-// a separate storage location. This simulator only models CF/ZF/SF/DF/OF, so
-// every other bit (including the reserved ones) is always 0 here.
+// a separate storage location. This simulator only models CF/PF/AF/ZF/SF/IF/DF/OF,
+// so every other bit (including TF and the reserved ones) is always 0 here.
 const FLAG_BITS: { name: keyof Flags; bit: number }[] = [
   { name: 'CF', bit: 0 },
+  { name: 'PF', bit: 2 },
+  { name: 'AF', bit: 4 },
   { name: 'ZF', bit: 6 },
   { name: 'SF', bit: 7 },
+  { name: 'IF', bit: 9 },
   { name: 'DF', bit: 10 },
   { name: 'OF', bit: 11 },
 ]
@@ -89,6 +92,9 @@ export function RegisterView({ regs, flags }: { regs: Record<Reg16, number>; fla
         <span className={flags.CF ? 'flag on' : 'flag'}>CF={flags.CF ? 1 : 0}</span>
         <span className={flags.OF ? 'flag on' : 'flag'}>OF={flags.OF ? 1 : 0}</span>
         <span className={flags.DF ? 'flag on' : 'flag'}>DF={flags.DF ? 1 : 0}</span>
+        <span className={flags.PF ? 'flag on' : 'flag'}>PF={flags.PF ? 1 : 0}</span>
+        <span className={flags.AF ? 'flag on' : 'flag'}>AF={flags.AF ? 1 : 0}</span>
+        <span className={flags.IF ? 'flag on' : 'flag'}>IF={flags.IF ? 1 : 0}</span>
       </div>
     </div>
   )

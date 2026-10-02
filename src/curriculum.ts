@@ -353,4 +353,239 @@ INT 21h
       },
     ],
   },
+  {
+    id: 'stage-5',
+    title: 'Stage 5: Carry, Sign, and BCD Arithmetic',
+    summary: 'Arithmetic that needs more than one register, more than one sign, or more than binary to get right.',
+    tasks: [
+      {
+        id: 'task-10-adc-sbb',
+        title: 'Task 10 - Multi-Word Arithmetic (ADC/SBB)',
+        scenario:
+          'A cumulative counter (e.g. total distance traveled) has grown too large for a single 16-bit register, ' +
+          'so it is kept as two words — propagating a carry from the low word into the high word correctly when ' +
+          'it is updated.',
+        assignments: [
+          {
+            id: 't10-32bit-increment',
+            title: 'Incrementing a 32-bit Distance Counter',
+            concept:
+              'ADC adds its operands plus whatever CF is currently set — exactly what SUB/ADD alone can\'t do: ' +
+              "chain an addition across a boundary wider than one register. Add the low halves with plain ADD " +
+              "first (its CF reflects whether that addition overflowed), then ADC the high halves so that carry " +
+              "isn't lost.",
+            starterSource: `; Task 10: Multi-Word Arithmetic (ADC/SBB)
+; DIST_LOW:DIST_HIGH together hold a 32-bit distance counter. DIST_LOW is
+; already at its maximum (0FFFFh) -- add 1 to the full 32-bit value using
+; ADD on DIST_LOW and ADC on DIST_HIGH, so the carry out of the low word
+; correctly propagates into the high word instead of being lost.
+DIST_LOW DW 0FFFFh
+DIST_HIGH DW 0
+
+; TODO: ADD [DIST_LOW], 1 then ADC [DIST_HIGH], 0
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              {
+                name: 'DIST_LOW wraps to 0, DIST_HIGH becomes 1 (32-bit carry propagated)',
+                expect: { memory: [{ label: 'DIST_LOW', size: 'word', equals: 0 }, { label: 'DIST_HIGH', size: 'word', equals: 1 }] },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-11-signed-division',
+        title: 'Task 11 - Signed vs. Unsigned Division (IDIV)',
+        scenario:
+          'A temperature sensor this time reports a reading that went below freezing (negative). Averaging it ' +
+          'needs signed division -- DIV would read the same bits as a huge positive number instead and give a ' +
+          'completely wrong answer.',
+        assignments: [
+          {
+            id: 't11-negative-average',
+            title: 'Averaging Negative Temperature Readings',
+            concept:
+              'DIV always treats its dividend and divisor as unsigned. IDIV reads them as signed (two\'s ' +
+              'complement) instead -- the only difference is which convention is used to interpret the exact ' +
+              'same bits. CWD must sign-extend AX into DX:AX first, exactly like the unsigned case needs DX ' +
+              'cleared first.',
+            starterSource: `; Task 11: Signed vs. Unsigned Division (IDIV)
+; TOTAL holds the sum of several below-freezing readings: -40. Divide it
+; by COUNT (4) to get the average into BX, using signed division -- DIV
+; would misread -40 as a large unsigned number and give a wrong answer.
+TOTAL DW -40
+COUNT DW 4
+
+; TODO: load TOTAL into AX, sign-extend into DX:AX (CWD), IDIV by COUNT,
+; then copy the quotient (AX) into BX
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [{ name: 'BX = -10 as a 16-bit value (0FFF6h)', expect: { regs: { BX: 0xfff6 } } }],
+          },
+        ],
+      },
+      {
+        id: 'task-12-bcd-adjust',
+        title: 'Task 12 - BCD Digit Correction (AAA)',
+        scenario:
+          'A simple decimal tally keeps its units digit as an unpacked BCD byte (one decimal digit, 0-9, no ' +
+          'binary-value tricks) -- adding two tallies can overflow past 9 and needs correcting back into a valid ' +
+          'two-digit result.',
+        assignments: [
+          {
+            id: 't12-tally-correction',
+            title: 'Correcting a Two-Digit BCD Tally',
+            concept:
+              'Plain binary ADD doesn\'t know the operands are meant to be single decimal digits -- adding 7 and ' +
+              '6 gives 13 (0Dh), not the BCD pair "1, 3". AAA corrects AL right after such an addition: it folds ' +
+              'any overflow past 9 into AH as a carried tens digit, leaving a valid 0-9 units digit in AL.',
+            starterSource: `; Task 12: BCD Digit Correction (AAA)
+; Two single-digit tallies arrive as unpacked BCD: 7 and 6. Add them in
+; AL, then use AAA to correct the result into valid BCD digits -- units
+; digit in AL, carried tens digit in AH.
+MOV AX, 0
+MOV AL, 7
+ADD AL, 6
+
+; TODO: correct AL/AH into valid BCD digits with AAA
+
+MOV DI, AX   ; capture AX (AH:AL) post-AAA for grading -- provided
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              { name: 'AL = 3 (units), AH = 1 (tens) -- 7+6=13 corrected to BCD "13" (captured via DI=0103h)', expect: { regs: { DI: 0x0103 } } },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'stage-6',
+    title: 'Stage 6: Rotation, Flag Control, and Word-Sized Strings',
+    summary: 'Bits that wrap instead of disappearing, flags worth protecting across a call, and arrays twice as wide.',
+    tasks: [
+      {
+        id: 'task-13-rotate',
+        title: 'Task 13 - Circular Bit Rotation (ROL/ROR)',
+        scenario:
+          'An 8-LED indicator ring needs its single lit bit to cycle around to the first LED again after reaching ' +
+          'the last one, instead of disappearing off the end the way a shift would lose it.',
+        assignments: [
+          {
+            id: 't13-rotate-indicator',
+            title: 'Rotating the Active Indicator',
+            concept:
+              "SHL would push the top bit out and lose it for good, replacing it with a 0. ROL does the same " +
+              "left-shift but wraps that outgoing bit back around into bit 0 instead of discarding it -- nothing " +
+              "is ever lost, so a single lit bit can cycle through a ring indefinitely.",
+            starterSource: `; Task 13: Circular Bit Rotation (ROL)
+; LEDS holds an 8-LED ring with LED 7 (the top bit) lit: 10000000b.
+; Rotate it left by 1 so LED 0 lights up instead -- wrapping around
+; rather than being lost the way SHL would lose it.
+LEDS DB 10000000b
+
+; TODO: rotate LEDS left by 1 bit (ROL)
+
+MOV BL, [LEDS]   ; capture the rotated pattern for grading -- provided
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [{ name: 'LEDS = 00000001b (LED 0 now lit)', expect: { regs: { BL: 1 } } }],
+          },
+        ],
+      },
+      {
+        id: 'task-14-flags-save',
+        title: 'Task 14 - Save/Restore Flags Across a Call (PUSHF/POPF)',
+        scenario:
+          'CF currently means something specific to the caller ("overflow pending"). A subroutine that must still ' +
+          'be called does its own arithmetic as a side effect and will clear CF -- the caller needs it back ' +
+          'exactly as it was once the subroutine returns.',
+        assignments: [
+          {
+            id: 't14-preserve-carry',
+            title: 'Preserving the Carry Flag Across a Subroutine Call',
+            concept:
+              "PUSHF/POPF save and restore the whole FLAGS word around a block of code, the same way PUSH/POP " +
+              "save a register -- so a subroutine's internal arithmetic (here, CLOBBER's own CLC) can't disturb " +
+              "a flag the caller still needs afterward.",
+            starterSource: `; Task 14: Save/Restore Flags (PUSHF/POPF)
+; STC marks CF=1 ("overflow pending"). CLOBBER must still run -- it does
+; necessary work and always clears CF as a side effect -- but CF needs to
+; read back as 1 once CLOBBER returns. Wrap the CALL with PUSHF before it
+; and POPF after it.
+RAN DB 0
+STC   ; CF = 1 ("overflow pending")
+
+; TODO: PUSHF, then CALL CLOBBER, then POPF (in that order)
+
+MOV BL, 0
+JC STILL_SET
+MOV BL, 1
+STILL_SET:
+MOV AH, 4Ch
+INT 21h
+
+CLOBBER PROC
+  MOV [RAN], 1
+  CLC
+  RET
+CLOBBER ENDP
+`,
+            testCases: [
+              {
+                name: 'BL = 0 (JC taken, CF restored to 1) and CLOBBER actually ran (RAN = 1)',
+                expect: { regs: { BL: 0 }, memory: [{ label: 'RAN', size: 'byte', equals: 1 }] },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-15-word-strings',
+        title: 'Task 15 - Word-Sized Buffer Copy (MOVSW)',
+        scenario:
+          'The array-summing work from Stage 3 used single-byte readings; this time the sensor buffer holds ' +
+          '16-bit samples, and the whole buffer needs copying elsewhere in one shot rather than element by ' +
+          'element.',
+        assignments: [
+          {
+            id: 't15-copy-samples',
+            title: 'Copying a Word-Sized Sample Buffer',
+            concept:
+              'MOVSW copies one 16-bit element at a time from [SI] to [DI], advancing both by 2 -- the exact same ' +
+              "idea as MOVSB, just double the width per step. Combined with REP and CX set to the element count, " +
+              "it copies an entire buffer in a single instruction.",
+            starterSource: `; Task 15: Word-Sized Buffer Copy (MOVSW)
+; SAMPLES holds 5 word-sized sensor readings. Copy all 5 words from
+; SAMPLES into COPY using REP MOVSW (set up SI, DI, and CX first, and
+; CLD so the copy goes forward).
+SAMPLES DW 100, 200, 300, 400, 500
+COPY DW 0, 0, 0, 0, 0
+
+; TODO: CLD, then SI = SAMPLES, DI = COPY, CX = 5, then REP MOVSW
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              {
+                name: 'COPY = [100, 200, 300, 400, 500] (first and last word checked)',
+                expect: { memory: [{ label: 'COPY', size: 'word', equals: 100 }, { label: 'COPY', offset: 8, size: 'word', equals: 500 }] },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]

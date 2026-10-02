@@ -19,6 +19,15 @@ export interface Flags {
   OF: boolean
   /** Direction flag: false = SI/DI count up during string ops, true = count down. */
   DF: boolean
+  /** Parity flag: true if the low byte of the result has an even number of set bits. */
+  PF: boolean
+  /** Auxiliary carry: a carry/borrow into or out of bit 3 (the low nibble) -- only meaningful as
+   *  input to AAA/AAS/AAM/AAD/DAA/DAS, which use it to detect a BCD-digit carry that the result's
+   *  low nibble alone can miss (e.g. 9+8=17=0x11, whose low nibble is 1, not >9). */
+  AF: boolean
+  /** Interrupt-enable flag, set/cleared by STI/CLI. Tracked but inert -- this simulator has no
+   *  hardware-interrupt mechanism for it to gate, the same treatment segment registers get. */
+  IF: boolean
 }
 
 export type Operand =
@@ -32,8 +41,14 @@ export type Mnemonic =
   | 'MUL' | 'DIV' | 'AND' | 'OR' | 'XOR' | 'NOT' | 'SHL' | 'SHR'
   | 'XCHG' | 'NEG' | 'TEST' | 'LEA'
   | 'JMP' | 'JE' | 'JNE' | 'JG' | 'JL' | 'JGE' | 'JLE' | 'JA' | 'JAE' | 'JB' | 'JBE' | 'JCXZ'
-  | 'LOOP' | 'PUSH' | 'POP' | 'CALL' | 'RET' | 'IN' | 'OUT' | 'INT' | 'NOP' | 'HLT'
+  | 'JS' | 'JNS' | 'JO' | 'JNO' | 'JP' | 'JNP'
+  | 'LOOP' | 'LOOPE' | 'LOOPNE' | 'PUSH' | 'POP' | 'CALL' | 'RET' | 'IN' | 'OUT' | 'INT' | 'NOP' | 'HLT'
   | 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB' | 'CLD' | 'STD'
+  | 'MOVSW' | 'STOSW' | 'LODSW' | 'CMPSW' | 'SCASW'
+  | 'ADC' | 'SBB' | 'ROL' | 'ROR' | 'RCL' | 'RCR' | 'IMUL' | 'IDIV'
+  | 'CBW' | 'CWD' | 'STC' | 'CLC' | 'CMC' | 'STI' | 'CLI'
+  | 'PUSHF' | 'POPF' | 'LAHF' | 'SAHF' | 'XLATB'
+  | 'AAA' | 'AAS' | 'AAM' | 'AAD' | 'DAA' | 'DAS'
 
 // A REP/REPE/REPNE prefix on a string instruction (MOVSB/STOSB/LODSB/CMPSB/SCASB).
 export type RepPrefix = 'REP' | 'REPE' | 'REPNE'
@@ -52,6 +67,8 @@ export interface DataDeclaration {
   name: string
   address: number
   bytes: number[]
+  /** Element size of the declaring directive (DB = byte, DW = word) -- used to flag e.g. "MOV AX, byteVar" as an operand-size mismatch. */
+  width: 'byte' | 'word'
   line: number
 }
 

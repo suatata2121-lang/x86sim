@@ -98,6 +98,69 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         exampleNote: 'Popping in reverse order restores both registers correctly.',
         notes: ['POPping in the same order they were PUSHed (instead of reverse) swaps their values by mistake.'],
       },
+      {
+        mnemonics: ['PUSHF'],
+        syntax: 'PUSHF',
+        summary: 'Push the 16-bit FLAGS register onto the stack.',
+        description: "PUSH's flags-register counterpart: writes the current FLAGS (packed into their real bit positions, same layout as the FLAGS row in the Registers panel) to [SP], then decrements SP by 2. Useful to save the flags across a block of code that needs them restored afterward.",
+        flags: 'none',
+        example: 'STC\nPUSHF\nCLC         ; CF is now 0...\nPOPF        ; ...until this restores it back to 1',
+        exampleNote: 'The CF=1 set by STC survives the CLC in between, because POPF restores the saved FLAGS.',
+      },
+      {
+        mnemonics: ['POPF'],
+        syntax: 'POPF',
+        summary: 'Restore the FLAGS register from the stack.',
+        description: "PUSHF's mirror: reads the 16-bit value at [SP] back into FLAGS, then increments SP by 2.",
+        flags: 'all (overwritten by the popped value)',
+        example: 'PUSHF\nPOPF   ; no-op: saves then immediately restores the same flags',
+        exampleNote: 'A PUSHF immediately followed by POPF leaves every flag exactly as it was.',
+      },
+      {
+        mnemonics: ['LAHF'],
+        syntax: 'LAHF',
+        summary: 'Load AH with the low byte of FLAGS.',
+        description: 'Copies the low 8 bits of FLAGS (SF, ZF, PF, CF, in their real bit positions) into AH, without touching AL.',
+        flags: 'none',
+        example: 'STC\nLAHF    ; AH now has bit 0 set (CF), reflecting the carry',
+        exampleNote: "AH's bit 0 mirrors CF; the other flag bits land at their usual positions within AH too.",
+      },
+      {
+        mnemonics: ['SAHF'],
+        syntax: 'SAHF',
+        summary: "LAHF's reverse: store AH into the low byte of FLAGS.",
+        description: 'Copies AH back into the low 8 bits of FLAGS (SF, ZF, PF, CF) -- the opposite direction of LAHF.',
+        flags: 'SF, ZF, CF',
+        example: 'MOV AH, 00000001b\nSAHF        ; CF = 1 (bit 0 of AH)',
+        exampleNote: "Setting AH's bit 0 and running SAHF sets CF to match.",
+      },
+      {
+        mnemonics: ['CBW'],
+        syntax: 'CBW',
+        summary: 'Sign-extend AL into AX.',
+        description: "Fills AH with all 0s or all 1s to match AL's sign bit, so a signed byte in AL becomes the same signed value as a word in AX -- needed before a word-sized signed operation (e.g. IDIV) on a value that started out as a byte.",
+        flags: 'none',
+        example: 'MOV AL, -5\nCBW      ; AX = 0FFFBh, still -5 but now as a 16-bit value',
+        exampleNote: "AL's top bit (1, since -5 is negative) is copied into every bit of AH.",
+      },
+      {
+        mnemonics: ['CWD'],
+        syntax: 'CWD',
+        summary: 'Sign-extend AX into DX:AX.',
+        description: "CBW's word-sized counterpart: fills DX with all 0s or all 1s to match AX's sign bit, so a signed word in AX becomes a signed doubleword in DX:AX -- the usual way to set up DX before a signed word IDIV.",
+        flags: 'none',
+        example: 'MOV AX, -5\nCWD      ; DX = 0FFFFh, AX = 0FFFBh -- DX:AX together still read as -5',
+        exampleNote: "AX's sign bit (1, since -5 is negative) fills every bit of DX.",
+      },
+      {
+        mnemonics: ['XLATB'],
+        syntax: 'XLATB',
+        summary: 'Table lookup: AL = memory[BX + AL].',
+        description: 'Treats AL as an unsigned index (0-255) into a 256-byte lookup table starting at BX, and replaces AL with the byte found there -- handy for e.g. mapping raw sensor codes to display characters without a chain of CMP/JE instructions.',
+        flags: 'none',
+        example: "TABLE DB 'ABCDEFGH'\nMOV BX, TABLE\nMOV AL, 3\nXLATB      ; AL = 'D' (the byte at TABLE+3)",
+        exampleNote: "AL=3 picked out the 4th byte of TABLE, which is 'D'.",
+      },
     ],
   },
   {
@@ -120,6 +183,19 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         ],
       },
       {
+        mnemonics: ['ADC'],
+        syntax: 'ADC dest, src',
+        summary: 'dest = dest + src + CF',
+        description:
+          'Adds src and the current carry flag to dest. The same instruction as ADD, except it also folds in ' +
+          "whatever carry a previous ADD left behind -- used to chain addition across register widths wider " +
+          'than one register, e.g. adding two 32-bit values held as two 16-bit halves each: ADD the low halves, ' +
+          'then ADC the high halves so a carry out of the low addition is not lost.',
+        flags: 'ZF, SF, CF',
+        example: 'MOV AX, 0FFFFh\nADD AX, 1      ; AX = 0, CF = 1 (16-bit overflow)\nMOV DX, 0\nADC DX, 0      ; DX = 1, carrying the overflow in',
+        exampleNote: 'The low half wrapped to 0 and set CF; ADC folds that 1 into the high half instead of losing it.',
+      },
+      {
         mnemonics: ['SUB'],
         syntax: 'SUB dest, src',
         summary: 'dest = dest - src',
@@ -127,6 +203,18 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         flags: 'ZF, SF, CF',
         example: 'MOV AX, 8\nSUB AX, 3   ; AX = 5',
         exampleNote: 'AX becomes 5.',
+      },
+      {
+        mnemonics: ['SBB'],
+        syntax: 'SBB dest, src',
+        summary: 'dest = dest - src - CF',
+        description:
+          "SUB's carry-aware counterpart: subtracts src and the current carry flag from dest, for " +
+          "multi-register subtraction the same way ADC is for addition -- SUB the low halves, then SBB the high " +
+          'halves so a borrow from the low subtraction is carried into the high one.',
+        flags: 'ZF, SF, CF',
+        example: 'MOV AX, 0\nSUB AX, 1      ; AX = 0FFFFh, CF = 1 (borrowed)\nMOV DX, 5\nSBB DX, 0      ; DX = 4, the borrow taken out',
+        exampleNote: 'The low half borrowed (went negative and wrapped); SBB passes that borrow into the high half.',
       },
       {
         mnemonics: ['CMP'],
@@ -172,6 +260,20 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         exampleNote: 'AX = 120 fits entirely in the low byte, so no overflow is flagged.',
       },
       {
+        mnemonics: ['IMUL'],
+        syntax: 'IMUL src',
+        summary: 'Signed multiply: AL or AX times src.',
+        description:
+          "MUL's signed counterpart -- src is treated as a two's-complement signed value (so a register with " +
+          'its top bit set is negative, not a large positive number) and multiplied the same way: byte src gives ' +
+          'AL * src in AX; word src gives AX * src across DX:AX. CF and OF are set together if the high half ' +
+          "(AH or DX) is not simply the sign-extension of the low half's result -- i.e. the result needed more " +
+          'than the low half to represent, same spirit as MUL but judged by sign rather than by "nonzero".',
+        flags: 'CF, OF',
+        example: 'MOV AL, -5\nMOV BL, 3\nIMUL BL    ; AX = 0FFF1h (-15), CF = 0, OF = 0',
+        exampleNote: '-5 * 3 = -15, which fits in AX as a signed value, so no overflow is flagged.',
+      },
+      {
         mnemonics: ['DIV'],
         syntax: 'DIV src',
         summary: 'Unsigned divide: AX or DX:AX by src.',
@@ -185,6 +287,19 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         exampleNote: '17 / 5 = 3 remainder 2.',
       },
       {
+        mnemonics: ['IDIV'],
+        syntax: 'IDIV src',
+        summary: 'Signed divide: AX or DX:AX by src.',
+        description:
+          "DIV's signed counterpart -- both the dividend (AX, or DX:AX for a word src) and src are treated as " +
+          "two's-complement signed values, and the quotient/remainder are computed and stored the same way DIV " +
+          'does (quotient in AL/AX, remainder in AH/DX), truncated toward zero. Division by zero, or a quotient ' +
+          "that doesn't fit back in the destination, still raises a runtime error exactly like DIV.",
+        flags: 'none',
+        example: 'MOV AX, -17\nMOV BL, 5\nIDIV BL    ; AL = 0FDh (-3), AH = 0FEh (-2)',
+        exampleNote: '-17 / 5 truncates toward zero to -3, with remainder -2 (since -3*5 + -2 = -17).',
+      },
+      {
         mnemonics: ['NEG'],
         syntax: 'NEG dest',
         summary: "Two's-complement negation: dest = -dest.",
@@ -192,6 +307,66 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         flags: 'ZF, SF, CF',
         example: 'MOV AX, 5\nNEG AX    ; AX = 0FFFBh (-5 as a 16-bit value)',
         exampleNote: 'AX now holds the bit pattern for -5.',
+      },
+      {
+        mnemonics: ['AAA'],
+        syntax: 'AAA',
+        summary: 'ASCII-adjust AL after adding two unpacked BCD digits.',
+        description:
+          "Corrects AL after ADD'ing two unpacked BCD digits (one decimal digit per byte, e.g. the ASCII '0'..'9' " +
+          "codes with the top nibble masked off) so AL holds the correct single BCD digit and AH gets the carry " +
+          "digit. If AL's low nibble is over 9, adds 6 to AL and 1 to AH; either way, clears AL's high nibble.",
+        flags: 'CF',
+        example: "MOV AX, 0\nMOV AL, 9\nADD AL, 8   ; AL = 11h (17, wrong as a digit)\nAAA         ; AH = 1, AL = 7 -- \"17\" split into two BCD digits",
+        exampleNote: "9 + 8 = 17; AAA splits that into AH=1, AL=7 -- the correct two-digit BCD result.",
+      },
+      {
+        mnemonics: ['AAS'],
+        syntax: 'AAS',
+        summary: 'ASCII-adjust AL after subtracting two unpacked BCD digits.',
+        description: "AAA's mirror image for subtraction: corrects AL after SUB'ing two unpacked BCD digits, borrowing a digit into AH when needed.",
+        flags: 'CF',
+        example: 'MOV AX, 0\nMOV AL, 2\nSUB AL, 9    ; AL = 0F9h (-7, wrong as a digit)\nAAS          ; AH = 0FFh (-1), AL = 3',
+        exampleNote: '2 - 9 = -7; AAS borrows a ten into AL (AL=3) and takes 1 off AH (AH=-1) to represent "-7" as a borrow plus the digit 3.',
+      },
+      {
+        mnemonics: ['AAM'],
+        syntax: 'AAM',
+        summary: 'ASCII-adjust AL after multiplying two unpacked BCD digits.',
+        description: 'Splits AL (expected to hold a byte value 0-99, the result of multiplying two BCD digits) into two BCD digits: AH = AL / 10, AL = AL % 10.',
+        flags: 'ZF, SF, PF',
+        example: 'MOV AL, 15\nAAM     ; AH = 1, AL = 5',
+        exampleNote: '15 splits into AH=1 (tens digit) and AL=5 (units digit).',
+      },
+      {
+        mnemonics: ['AAD'],
+        syntax: 'AAD',
+        summary: 'ASCII-adjust AX before dividing two unpacked BCD digits.',
+        description: "AAM's mirror image, run before a division rather than after a multiplication: combines two BCD digits in AH (tens) and AL (units) into a single binary byte in AL (AH*10 + AL), and clears AH.",
+        flags: 'ZF, SF, PF',
+        example: 'MOV AX, 0105h   ; AH = 1 (tens), AL = 5 (units)\nAAD             ; AX = 000Fh -- AL = 15, AH = 0',
+        exampleNote: '1 ten plus 5 units becomes the plain binary value 15 in AL.',
+      },
+      {
+        mnemonics: ['DAA'],
+        syntax: 'DAA',
+        summary: 'Decimal-adjust AL after adding two packed BCD bytes.',
+        description:
+          "AAA's packed-BCD counterpart: corrects AL after ADD'ing two packed BCD bytes (two decimal digits per " +
+          "byte, one per nibble, e.g. 0x29 means \"29\") so AL holds the correct two-digit BCD result instead of " +
+          'a raw binary sum.',
+        flags: 'ZF, SF, CF, PF',
+        example: 'MOV AL, 29h   ; packed BCD for 29\nADD AL, 18h   ; AL = 41h, not a valid BCD byte\nDAA           ; AL = 47h -- the correct packed BCD for 29+18=47',
+        exampleNote: 'A plain binary ADD of 0x29+0x18=0x41 is wrong as BCD; DAA corrects it to 0x47, i.e. "47".',
+      },
+      {
+        mnemonics: ['DAS'],
+        syntax: 'DAS',
+        summary: 'Decimal-adjust AL after subtracting two packed BCD bytes.',
+        description: "DAA's mirror image for subtraction: corrects AL after SUB'ing two packed BCD bytes so AL holds the correct two-digit BCD difference.",
+        flags: 'ZF, SF, CF, PF',
+        example: 'MOV AL, 47h   ; packed BCD for 47\nSUB AL, 18h   ; AL = 2Fh, not a valid BCD byte\nDAS           ; AL = 29h -- the correct packed BCD for 47-18=29',
+        exampleNote: 'A plain binary SUB gives 0x2F; DAS corrects it to 0x29, i.e. "29".',
       },
     ],
   },
@@ -251,7 +426,7 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         exampleNote: 'AL is unchanged; only ZF is set/cleared based on bit 0.',
       },
       {
-        mnemonics: ['SHL'],
+        mnemonics: ['SHL', 'SAL'],
         syntax: 'SHL dest, count',
         summary: 'Shift left; equivalent to multiplying by 2^count.',
         description:
@@ -271,6 +446,51 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         flags: 'CF, ZF, SF (OF is always cleared)',
         example: 'MOV AL, 00011000b\nSHR AL, 3    ; AL = 00000011b (3)',
         exampleNote: 'The 2-bit field that was sitting at bits 3-4 now reads as a plain number, 3.',
+      },
+      {
+        mnemonics: ['ROL'],
+        syntax: 'ROL dest, count',
+        summary: 'Rotate left; bits that fall off the top wrap around to the bottom.',
+        description:
+          "Like SHL, but instead of discarding the bit that falls off the top, it wraps around into the vacated " +
+          "bottom bit -- no bits are ever lost. CF is also set to a copy of that wrapped bit, same as SHL's CF.",
+        flags: 'CF (OF is always cleared)',
+        example: 'MOV AL, 10000001b\nROL AL, 1    ; AL = 00000011b, CF = 1',
+        exampleNote: 'The top bit wraps around to become the new bottom bit instead of being lost.',
+      },
+      {
+        mnemonics: ['ROR'],
+        syntax: 'ROR dest, count',
+        summary: 'Rotate right; bits that fall off the bottom wrap around to the top.',
+        description: "ROL's mirror image: the bit that falls off the bottom wraps around into the vacated top bit instead of being discarded.",
+        flags: 'CF (OF is always cleared)',
+        example: 'MOV AL, 10000001b\nROR AL, 1    ; AL = 11000000b, CF = 1',
+        exampleNote: 'The bottom bit wraps around to become the new top bit.',
+      },
+      {
+        mnemonics: ['RCL'],
+        syntax: 'RCL dest, count',
+        summary: "Rotate left through carry -- CF is treated as an extra bit in the rotation.",
+        description:
+          "Like ROL, but CF is folded into the rotation as if it were one more bit: each rotation shifts the old " +
+          "CF in at the bottom and shifts the top bit out into CF, so a value takes 9 rotations (byte) or 17 " +
+          "(word) to return to where it started instead of 8/16.",
+        flags: 'CF (OF is always cleared)',
+        example: 'STC            ; CF = 1\nMOV AL, 00000001b\nRCL AL, 1      ; AL = 00000011b, CF = 0',
+        exampleNote: "The old CF (1) rotates into AL's bottom bit, while AL's old top bit (0) becomes the new CF.",
+      },
+      {
+        mnemonics: ['RCR'],
+        syntax: 'RCR dest, count',
+        summary: "Rotate right through carry -- CF is treated as an extra bit in the rotation.",
+        description: "RCL's mirror image: CF rotates in at the top and the bottom bit rotates out into CF.",
+        flags: 'CF (OF is always cleared)',
+        example: 'STC            ; CF = 1\nMOV AL, 00000010b\nRCR AL, 1      ; AL = 10000001b, CF = 0',
+        exampleNote: "The old CF (1) rotates into AL's top bit, while AL's old bottom bit (0) becomes the new CF.",
+        notes: [
+          'ROL/ROR/RCL/RCR follow the same "count must be CL or an immediate" rule as SHL/SHR, and the same ' +
+            '"both operands must be the same size" exception the reference notes for the whole shift/rotate family.',
+        ],
       },
     ],
   },
@@ -301,6 +521,27 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
           'If CX starts at 0, LOOP still runs the body once (CX wraps to 0FFFFh first) instead of skipping it -- ' +
             'guard with JCXZ beforehand if CX might legitimately be 0.',
         ],
+      },
+      {
+        mnemonics: ['LOOPE', 'LOOPZ'],
+        syntax: 'LOOPE label',
+        summary: 'Decrement CX, and jump back while it is nonzero AND ZF is set.',
+        description:
+          "LOOP's doubly-conditioned cousin: decrements CX, then jumps to label only if CX is nonzero and the " +
+          'last comparison set ZF -- useful for e.g. scanning an array while a run of equal values continues, ' +
+          'stopping as soon as either the array ends (CX=0) or a different value is found (ZF=0).',
+        flags: 'none (only CX changes)',
+        example: 'MOV CX, 5\nAGAIN:\n  CMP AL, BL\nLOOPE AGAIN   ; keeps looping only while AL=BL and CX>0',
+        exampleNote: 'The loop stops the moment AL != BL, even if CX has not reached 0 yet.',
+      },
+      {
+        mnemonics: ['LOOPNE', 'LOOPNZ'],
+        syntax: 'LOOPNE label',
+        summary: 'Decrement CX, and jump back while it is nonzero AND ZF is clear.',
+        description: "LOOPE's mirror image: keeps looping only while CX is nonzero and the last comparison left ZF clear -- e.g. scanning for the first matching value and stopping as soon as one is found.",
+        flags: 'none (only CX changes)',
+        example: 'MOV CX, 5\nAGAIN:\n  CMP AL, BL\nLOOPNE AGAIN   ; keeps looping only while AL != BL and CX > 0',
+        exampleNote: 'The loop stops as soon as AL = BL, even if CX has not reached 0 yet.',
       },
       {
         mnemonics: ['CALL'],
@@ -444,6 +685,68 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         example: 'JCXZ SKIP_LOOP\nAGAIN:\n  ; ... loop body ...\nLOOP AGAIN\nSKIP_LOOP:',
         exampleNote: 'If CX is 0 on entry, the whole loop is skipped instead of running once.',
       },
+      {
+        mnemonics: ['JS'],
+        syntax: 'JS label',
+        summary: 'Jump if the sign flag is set (result was negative).',
+        description: 'Jumps if SF=1, i.e. the top bit of the last result was 1. Reads the result as signed; for an unsigned reading of "did it go negative" there is no real equivalent, since unsigned values can\'t be negative -- CF after a SUB/CMP is the unsigned analogue of "went below".',
+        flags: 'reads SF',
+        example: 'MOV AX, 3\nSUB AX, 5\nJS WENT_NEGATIVE   ; taken: 3-5=-2, SF=1',
+        exampleNote: '3 - 5 is negative, so SF is set and the jump is taken.',
+      },
+      {
+        mnemonics: ['JNS'],
+        syntax: 'JNS label',
+        summary: 'Jump if the sign flag is clear (result was zero or positive).',
+        description: "JS's opposite: jumps if SF=0.",
+        flags: 'reads SF',
+        example: 'MOV AX, 5\nSUB AX, 3\nJNS NOT_NEGATIVE   ; taken: 5-3=2, SF=0',
+        exampleNote: '5 - 3 is positive, so SF is clear and the jump is taken.',
+      },
+      {
+        mnemonics: ['JO'],
+        syntax: 'JO label',
+        summary: 'Jump if the overflow flag is set (signed result overflowed).',
+        description: 'Jumps if OF=1 -- the result of the last operation was too large (or too negative) to fit as a signed value in the destination\'s width, even though it may look like a plausible unsigned number.',
+        flags: 'reads OF',
+        notes: [
+          "This simulator's ADD/SUB/CMP/INC/DEC/NEG never update OF (see the note on ADD), so JO/JNO are only " +
+            'meaningfully exercised after MUL, IMUL, SHL, ROL, or RCL -- the instructions that do set it here.',
+        ],
+        example: 'MOV AL, 20\nMOV BL, 20\nIMUL BL\nJO TOO_BIG   ; taken: 20*20=400 does not fit back in AL alone',
+        exampleNote: "20*20=400 doesn't fit in the low byte alone, so IMUL sets OF and the jump is taken.",
+      },
+      {
+        mnemonics: ['JNO'],
+        syntax: 'JNO label',
+        summary: 'Jump if the overflow flag is clear (no signed overflow).',
+        description: "JO's opposite: jumps if OF=0.",
+        flags: 'reads OF',
+        example: 'MOV AL, 2\nMOV BL, 3\nIMUL BL\nJNO FITS_FINE   ; taken: 2*3=6 fits easily',
+        exampleNote: '2*3=6 fits comfortably in AL, so OF stays clear and the jump is taken.',
+      },
+      {
+        mnemonics: ['JP', 'JPE'],
+        syntax: 'JP label',
+        summary: 'Jump if the parity flag is set (the low byte of the result has even parity).',
+        description:
+          'Jumps if PF=1, i.e. the low 8 bits of the last result have an even number of 1 bits. Historically used ' +
+          'as a cheap error-detection check (a transmitted byte with a parity bit should always come out even, ' +
+          'say); rarely useful for anything else. JPE is the same instruction under its other name ("jump if ' +
+          'parity even").',
+        flags: 'reads PF',
+        example: 'MOV AL, 00000011b\nTEST AL, AL\nJP EVEN_PARITY   ; taken: two 1-bits is an even count',
+        exampleNote: '00000011b has two 1-bits (even), so PF is set and the jump is taken.',
+      },
+      {
+        mnemonics: ['JNP', 'JPO'],
+        syntax: 'JNP label',
+        summary: 'Jump if the parity flag is clear (the low byte of the result has odd parity).',
+        description: 'JP\'s opposite: jumps if PF=0. JPO is the same instruction under its other name ("jump if parity odd").',
+        flags: 'reads PF',
+        example: 'MOV AL, 00000111b\nTEST AL, AL\nJNP ODD_PARITY   ; taken: three 1-bits is an odd count',
+        exampleNote: '00000111b has three 1-bits (odd), so PF is clear and the jump is taken.',
+      },
     ],
   },
   {
@@ -504,6 +807,51 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         flags: 'ZF, SF, CF',
         example: "MOV AL, '$'\nMOV DI, OFFSET STR\nMOV CX, 20\nREPNE SCASB   ; stops once a '$' is found",
         exampleNote: "DI ends up pointing just past the '$' (or the scan gives up after 20 bytes).",
+      },
+      {
+        mnemonics: ['MOVSW'],
+        syntax: 'MOVSW',
+        summary: "MOVSB's word-sized counterpart.",
+        description: 'Copies a 16-bit word from [SI] to [DI] instead of a single byte, then advances SI and DI by 2 (or -2 if DF is set) instead of 1. Otherwise identical to MOVSB -- same REP support, same direction-flag behavior.',
+        flags: 'none',
+        example: 'CLD\nMOV SI, OFFSET SRC\nMOV DI, OFFSET DST\nMOV CX, 10\nREP MOVSW   ; copies 10 words (20 bytes)',
+        exampleNote: 'REP MOVSW copies CX words rather than CX bytes -- 10 words here, not 10 bytes.',
+      },
+      {
+        mnemonics: ['STOSW'],
+        syntax: 'STOSW',
+        summary: "STOSB's word-sized counterpart.",
+        description: 'Stores AX (instead of AL) at [DI], then advances DI by 2 (or -2 if DF is set). Handy with REP to fill a buffer with a repeating 16-bit pattern.',
+        flags: 'none',
+        example: 'MOV AX, 0\nMOV DI, OFFSET BUF\nMOV CX, 50\nREP STOSW   ; zeroes 50 words (100 bytes)',
+        exampleNote: 'REP STOSW writes CX copies of AX, 2 bytes apart each time.',
+      },
+      {
+        mnemonics: ['LODSW'],
+        syntax: 'LODSW',
+        summary: "LODSB's word-sized counterpart.",
+        description: 'Loads a 16-bit word from [SI] into AX (instead of a byte into AL), then advances SI by 2 (or -2 if DF is set).',
+        flags: 'none',
+        example: 'MOV SI, OFFSET DATA\nLODSW   ; AX = the word at DATA, SI += 2',
+        exampleNote: 'AX picks up the first word of DATA, and SI now points at the second.',
+      },
+      {
+        mnemonics: ['CMPSW'],
+        syntax: 'CMPSW',
+        summary: "CMPSB's word-sized counterpart.",
+        description: 'Computes [SI] - [DI] as 16-bit words (instead of bytes) to update the flags like CMP, then advances both SI and DI by 2 (or -2 if DF is set).',
+        flags: 'ZF, SF, CF',
+        example: 'MOV SI, OFFSET A\nMOV DI, OFFSET B\nMOV CX, 5\nREPE CMPSW   ; stops at the first differing word',
+        exampleNote: 'REPE CMPSW compares word by word, stopping as soon as two words differ.',
+      },
+      {
+        mnemonics: ['SCASW'],
+        syntax: 'SCASW',
+        summary: "SCASB's word-sized counterpart.",
+        description: 'Computes AX - [DI] as 16-bit words (instead of AL - [DI] as bytes) to update the flags like CMP, then advances DI by 2 (or -2 if DF is set). Typically paired with REPNE to search a word array for a matching value.',
+        flags: 'ZF, SF, CF',
+        example: 'MOV AX, 0FFFFh\nMOV DI, OFFSET LIST\nMOV CX, 10\nREPNE SCASW   ; stops once a word equal to AX is found',
+        exampleNote: 'DI ends up pointing just past the matching word (or the scan gives up after 10 words).',
       },
       {
         mnemonics: ['CLD'],
@@ -610,6 +958,55 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         flags: 'none',
         example: 'HLT',
         exampleNote: 'The simulator stops on this line.',
+      },
+      {
+        mnemonics: ['STC'],
+        syntax: 'STC',
+        summary: 'Set the Carry Flag (CF = 1).',
+        description: "Sets CF directly, independent of any arithmetic -- most often used right before RCL/RCR to shift a known bit in, or to hand a 1-or-0 result off to a caller that checks CF.",
+        flags: 'CF',
+        example: 'STC\nJC CARRY_IS_SET   ; always taken',
+        exampleNote: 'CF is forced to 1, so the following JC always jumps.',
+      },
+      {
+        mnemonics: ['CLC'],
+        syntax: 'CLC',
+        summary: 'Clear the Carry Flag (CF = 0).',
+        description: "STC's opposite: clears CF directly.",
+        flags: 'CF',
+        example: 'CLC\nJNC NO_CARRY   ; always taken',
+        exampleNote: 'CF is forced to 0, so the following JNC always jumps.',
+      },
+      {
+        mnemonics: ['CMC'],
+        syntax: 'CMC',
+        summary: 'Complement (flip) the Carry Flag.',
+        description: 'Sets CF to its opposite value: 1 becomes 0, 0 becomes 1.',
+        flags: 'CF',
+        example: 'STC\nCMC   ; CF = 0\nCMC   ; CF = 1',
+        exampleNote: 'Each CMC flips CF to the other state.',
+      },
+      {
+        mnemonics: ['STI'],
+        syntax: 'STI',
+        summary: 'Set the Interrupt flag (IF = 1): enable interrupts.',
+        description:
+          "Sets IF, which on real hardware allows maskable hardware interrupts to be delivered. This simulator " +
+          "has no hardware-interrupt mechanism (INT is only ever triggered explicitly by the INT instruction " +
+          "itself, which IF does not gate), so STI/CLI are tracked -- visible in the Flags panel, and saved/" +
+          "restored by PUSHF/POPF/LAHF/SAHF -- but otherwise have no effect on execution here.",
+        flags: 'IF',
+        example: 'STI',
+        exampleNote: 'IF is set to 1; nothing else about execution changes in this simulator.',
+      },
+      {
+        mnemonics: ['CLI'],
+        syntax: 'CLI',
+        summary: 'Clear the Interrupt flag (IF = 0): disable interrupts.',
+        description: "STI's opposite: clears IF. Same simulator caveat as STI -- tracked, but inert here.",
+        flags: 'IF',
+        example: 'CLI',
+        exampleNote: 'IF is cleared to 0; nothing else about execution changes in this simulator.',
       },
     ],
   },
