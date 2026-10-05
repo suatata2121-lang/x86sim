@@ -141,8 +141,8 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         summary: 'The small set of fast storage locations inside the CPU itself.',
         content: [
           'AX, BX, CX, DX, SI, DI, BP, and SP are the general-purpose 16-bit registers this simulator models ' +
-            '(DS/ES/SS/CS also exist but this simulator has no real segmentation, so they stay 0 -- see ' +
-            '"Segmented Addressing" below). AX-DX can also be addressed as two independent 8-bit halves each ' +
+            '(DS/ES/SS/CS also exist and accept values so MASM-style boilerplate runs, but this simulator has no ' +
+            'real segmentation, so they never take part in an address calculation -- see "Segmented Addressing" below). AX-DX can also be addressed as two independent 8-bit halves each ' +
             '(AH/AL, BH/BL, CH/CL, DH/DL) -- SI, DI, BP, and SP cannot, they are only ever a full 16-bit word.',
           'Reading or writing a register is effectively instant compared to a memory access -- there is no bus ' +
             'transaction involved, which is exactly why registers exist: they are the CPU\'s own scratch space.',
@@ -200,10 +200,11 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'result away.',
           'Conditional jumps (JE, JG, JA, ...) read these flags rather than repeating the comparison -- that\'s ' +
             'the whole point of separating "compute" from "decide."',
-          'FLAGS itself is not five separate switches -- it\'s one more 16-bit register, exactly like AX or IP, ' +
-            'and each flag is just one bit within it at a fixed position: CF is bit 0, ZF is bit 6, SF is bit 7, ' +
-            'DF is bit 10, and OF is bit 11. The FLAGS row below shows that same register as a whole -- watch ' +
-            'its hex/decimal/binary value change as the individual flag bits below it flip between 0 and 1.',
+          'FLAGS itself is not a set of separate switches -- it\'s one more 16-bit register, exactly like AX or ' +
+            'IP, and each flag is just one bit within it at a fixed position: CF is bit 0, PF is bit 2, AF is bit 4, ' +
+            'ZF is bit 6, SF is bit 7, IF is bit 9, DF is bit 10, and OF is bit 11. The FLAGS row below shows that ' +
+            'same register as a whole -- watch its hex/decimal/binary value change as the individual flag bits ' +
+            'below it flip between 0 and 1.',
         ],
         demo: {
           visual: 'registers',
@@ -220,8 +221,10 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         notes: [
           'This simulator\'s ADD/SUB/CMP/INC/DEC/NEG never actually update OF -- see the Instruction Reference ' +
             'entries for JG/JL/JGE/JLE for why that matters for signed comparisons.',
-          'A real 8086 also has PF, AF, TF, and IF bits (plus a permanently-set reserved bit 1) packed into the ' +
-            'same FLAGS register -- this simulator doesn\'t model them, so those bits always read as 0 here.',
+          'PF (parity of the low result byte), AF (carry out of the low nibble, used by the BCD-adjust ' +
+            'instructions), and IF (the interrupt-enable flag, set by STI and cleared by CLI) are modeled here too. ' +
+            'The one bit this simulator still leaves out is TF (the single-step trap flag), so it always reads 0; ' +
+            'a real 8086 also keeps reserved bit 1 permanently set, which is not shown either.',
         ],
       },
     ],
@@ -351,8 +354,9 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         title: 'IN / OUT and Ports',
         summary: 'A separate address space, just for talking to hardware.',
         content: [
-          'Besides memory, the 8086 has a completely separate 256-port I/O address space, reached only through ' +
-            'IN and OUT. OUT writes a byte from AL (or a word from AX) to a port; IN reads one back. Real ' +
+          'Besides memory, the 8086 has a completely separate I/O address space of 64K ports (16-bit port ' +
+            'numbers, passed in DX), reached only through IN and OUT. A port number written directly in the ' +
+            'instruction is only 8 bits wide, so it can reach ports 0-255 only -- higher ports must go through DX. OUT writes a byte from AL (or a word from AX) to a port; IN reads one back. Real ' +
             'hardware -- a keyboard controller, a disk controller, a sound chip -- sits behind these ports ' +
             'instead of at a memory address.',
           'This simulator wires a few ports to virtual devices you can watch react live: port 40h is a traffic ' +
