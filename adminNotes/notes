@@ -1,0 +1,12 @@
+05.10.2026
+
+Learn -> hardware etkileşimli öğrelerde step tuşu ile birlikte back tuşuda olmalı.
+Fetch-Decode-Execute Cycle sekmesinde yer alan etkileşimli öğe tam olarak konuyu anlatmakta başarısız oluyor. buradaki etkileşimli öğe baştan tasarlanmalı.
+BIU & EU: The 8086's Two Units sekmesinde önce BIU ve EU yapılarının içerisinde neler var, bu yapılar nasıl birlikte çalışıyor gibi bilgiler. şekil ve etkileşimli öğrelrle verilebilir. Burada yer alan mevcut etkileşimli öğe oldukça karmaşık. T clock anlarında neler olduğu daha açık bir animasyonla ifade edilmeye çalışılmalı
+aynı şekilde "The 6-Byte Instruction Queue" ve "The 6-Byte Instruction Queue" sekmelerindeki etkileşimli öğelerde karmaşık duruyor. 
+ALU Operations sekmesinde etkileşimli öğe tam olarak konuyu anlatmakta başarısız oluyor. buradaki etkileşimli öğe baştan tasarlanmalı.
+Segmented Addressing vs This Simulator's Flat Model sekmesindeki görseller gereksiz büyük, etkileşimli bir öğe tasarlanarak etki arttırılmalı
+hardware kısmında mem read, mem write, I/o read-write gibi işlemlerin timing diagramdaki gösterimleri etkileşimli öğrele anlatılmalı
+addres/data demultiplexing, control signals, minimum/maximum mode, Bus request and bus grant, lock sinyali kavramları şekil ve etkileşimli öğelerle anlatılmalı.
+öğrenme kısmında yer alan şekil ve öğeler renklendirilebilir. 
+Hardware ksımında yer alan teorik bilgileri kontrol et. ifadelerde gözne çarpan hatalar varsa düzelt, gerektiğinde ifadeleri daha anlaşılır hale getir.
