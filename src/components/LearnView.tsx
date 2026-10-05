@@ -6,6 +6,8 @@ import { NUMBERING_REFERENCE, type NumberingCategory, type NumberingTopic } from
 import { HardwarePlayground } from './HardwarePlayground'
 import { SegmentedAddressingView } from './SegmentedAddressingView'
 import { TimingDiagramView } from './TimingDiagramView'
+import { FetchDecodeExecuteView } from './FetchDecodeExecuteView'
+import { AluView } from './AluView'
 import { BiuEuView } from './BiuEuView'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -467,6 +469,8 @@ export function LearnDetail({
         {hwTopic.demo && <HardwarePlayground source={hwTopic.demo.source} visual={hwTopic.demo.visual} />}
         {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
         {hwTopic.timing && <TimingDiagramView />}
+        {hwTopic.interactive === 'fde' && <FetchDecodeExecuteView />}
+        {hwTopic.interactive === 'alu' && <AluView />}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">

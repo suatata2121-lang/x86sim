@@ -165,6 +165,20 @@ export function BiuEuView({ scenarios }: { scenarios: PipelineScenario[] }) {
         </div>
       )}
       <p className="example-description pipe-scenario-desc">{prog.description}</p>
+      <p className="pipe-now">
+        <b>{state.clock === 0 ? 'Before the first clock:' : `Clock ${state.clock}:`}</b>{' '}
+        {state.clock === 0
+          ? 'nothing has happened yet. Press Clock +1 to watch the BIU start fetching bytes while the EU waits.'
+          : `${bus ? 'the BIU is using the bus' : 'the BIU has nothing to fetch and sits idle'}, and ${
+              state.euPhase === 'exec'
+                ? 'the EU is busy running an instruction'
+                : state.euPhase === 'idle'
+                  ? 'the EU is between instructions'
+                  : state.euPhase === 'done'
+                    ? 'the program has halted'
+                    : 'the EU is waiting for bytes or the bus'
+            }.`}
+      </p>
 
       <div className="hw-playground-controls">
         <button onClick={stepClock} disabled={state.done || isPlaying}>Clock +1</button>
