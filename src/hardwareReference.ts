@@ -23,6 +23,8 @@ export interface HardwareTopic {
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
   staticDiagram?: 'segmented-addressing'
+  // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
+  timing?: boolean
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
   // core/biuEu.ts) instead of a Cpu demo -- the main Cpu runs whole
   // instructions atomically and has no notion of bus cycles or the prefetch
@@ -264,6 +266,80 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'IN AL, 41h        ; IOR: same port, data comes back in\n' +
             'HLT\n',
         },
+      },
+      {
+        id: 'bus-timing',
+        title: 'Memory & I/O Bus Cycles (Timing)',
+        summary: 'What each clock state T1-T4 does on the 8086 bus, for memory and I/O reads and writes.',
+        content: [
+          'The 8086 multiplexes its address and data onto the same 16 lines AD15-AD0 (plus A19-A16 shared with ' +
+            'status). In T1 the CPU puts the address there and pulses ALE high; an external latch such as the 8282 ' +
+            'captures it on ALE\'s falling edge. That is the demultiplexing step: after T1 the same pins carry data, ' +
+            'and the latch is what keeps the address stable for the memory or port being accessed.',
+          'Pick a bus cycle below and step through T1-T4. Active-low control signals (RD̅, WR̅, DEN̅) are drawn low ' +
+            'while they are asserted. M/IO̅ tells memory and I/O apart, and DT/R̅ sets the direction of the data ' +
+            'transceivers. A write starts driving data in T2, while a read leaves the bus floating in T2 so memory ' +
+            'can drive it instead.',
+          'READY is sampled in T3. If it is low, the CPU inserts wait states (Tw) until the device is ready.',
+        ],
+        timing: true,
+        notes: [
+          'Minimum mode is shown here. In maximum mode an 8288 bus controller generates the read/write strobes ' +
+            '(MRDC̅, MWTC̅, IORC̅, IOWC̅) from the CPU\'s status lines S2̅-S0̅, so the CPU itself never drives RD̅/WR̅.',
+        ],
+      },
+      {
+        id: 'control-signals',
+        title: 'Control Signals & Minimum vs Maximum Mode',
+        summary: 'The pins that tell memory and I/O what a bus cycle is for, and how the MN/MX̅ pin changes who generates them.',
+        content: [
+          'Control signals decide when data is read or written and which kind of transfer is happening. ' +
+            'The most important ones are M/IO̅ (memory or I/O cycle), RD̅ and WR̅ (read or write strobe), ALE ' +
+            '(address latch enable), DEN̅ and DT/R̅ (data transceiver enable and direction), READY (the device ' +
+            'says it is ready to finish the cycle), and INTA̅ (interrupt acknowledge).',
+          'The MN/MX̅ pin selects the operating mode at power-up. MN/MX̅ tied high is minimum mode: a single ' +
+            'processor system where the 8086 generates all of these signals itself. MN/MX̅ tied low is maximum ' +
+            'mode, for multiprocessor systems: the 8086 instead outputs the status lines S2̅-S0̅, and an 8288 bus ' +
+            'controller decodes them into the actual command strobes (MRDC̅, MWTC̅, AMWC̅, IORC̅, IOWC̅) plus ALE, ' +
+            'DEN, and DT/R.',
+          'Maximum mode lets several processors share one bus safely, because the 8288 is the only chip that drives ' +
+            'the command lines. Its advanced write strobe AMWC̅ asserts one clock earlier than the normal MWTC̅, ' +
+            'giving slower memories a wider write pulse.',
+        ],
+        notes: [
+          'The control-line names here follow the Microprocessors course slides. The 8086 pin list also contains ' +
+            'RESET, NMI, INTR, TEST̅, and HOLD/HLDA (minimum mode) or RQ/GT̅ (maximum mode), covered in the next topics.',
+        ],
+      },
+      {
+        id: 'bus-request-grant',
+        title: 'Bus Request & Bus Grant',
+        summary: 'How another bus master borrows the bus, and how the CPU hands it over cleanly.',
+        content: [
+          'Sometimes another device needs the bus itself, for example a DMA controller moving data straight to ' +
+            'memory. It asks for the bus, and the CPU hands it over only at a safe point: the CPU finishes the ' +
+            'bus cycle it is in, then floats its address, data, and control lines so the other device can drive them.',
+          'In minimum mode the handshake uses HOLD (request, input) and HLDA (acknowledge, output). In maximum mode ' +
+            'it uses the request/grant pins RQ/GT̅0 and RQ/GT̅1: a master pulses its request line, the 8086 answers ' +
+            'on the matching grant line once the bus is free, and the master then sends the release pulse back ' +
+            'when it is finished.',
+          'The CPU does not lose its place while the bus is borrowed: its registers, flags, and instruction queue ' +
+            'stay intact, and it resumes the next bus cycle as soon as the bus is returned.',
+        ],
+      },
+      {
+        id: 'lock-signal',
+        title: 'The LOCK Signal',
+        summary: 'A promise that the current bus transaction cannot be interrupted by another bus master.',
+        content: [
+          'The LOCK̅ output is asserted (low) while the 8086 runs an instruction prefixed with the LOCK prefix, and ' +
+            'during bus cycles that must not be split, such as the two memory accesses of a read-modify-write ' +
+            'sequence (for example XCHG with a memory operand) and interrupt acknowledgement.',
+          'While LOCK̅ is low, bus request/grant is not honored: another master has to wait until the locked ' +
+            'sequence has finished, so no other processor can read a semaphore between the read and write halves.',
+          'This simulator is single-processor and has no other bus masters, so LOCK has no visible effect here; it is ' +
+            'documented for completeness and for the multiprocessor systems covered by maximum mode.',
+        ],
       },
       {
         id: 'segmented-addressing',
