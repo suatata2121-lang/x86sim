@@ -211,6 +211,10 @@ function ReferenceNav({ nav }: { nav: LearnNav }) {
   )
 }
 
+// One accent color per Hardware category, so the four groups are easy to tell
+// apart in the sidebar and the detail header.
+const CATEGORY_ACCENTS = ['#3b82f6', '#22c55e', '#f59e0b', '#a855f7']
+
 function HardwareNav({ nav }: { nav: LearnNav }) {
   const category: HardwareCategory | null = HARDWARE_REFERENCE.find((c) => c.id === nav.hwCategoryId) ?? null
 
@@ -218,9 +222,13 @@ function HardwareNav({ nav }: { nav: LearnNav }) {
   if (!category) {
     return (
       <ul className="learn-list">
-        {HARDWARE_REFERENCE.map((c) => (
+        {HARDWARE_REFERENCE.map((c, idx) => (
           <li key={c.id}>
-            <button className="learn-item" onClick={() => nav.setHwCategoryId(c.id)}>
+            <button
+              className="learn-item"
+              style={{ borderLeft: `4px solid ${CATEGORY_ACCENTS[idx % CATEGORY_ACCENTS.length]}` }}
+              onClick={() => nav.setHwCategoryId(c.id)}
+            >
               <span className="learn-item-title">{c.title}</span>
               <span className="learn-item-progress">{c.topics.length}</span>
             </button>

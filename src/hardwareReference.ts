@@ -289,6 +289,59 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         ],
       },
       {
+        id: 'control-signals',
+        title: 'Control Signals & Minimum vs Maximum Mode',
+        summary: 'The pins that tell memory and I/O what a bus cycle is for, and how the MN/MX̅ pin changes who generates them.',
+        content: [
+          'Control signals decide when data is read or written and which kind of transfer is happening. ' +
+            'The most important ones are M/IO̅ (memory or I/O cycle), RD̅ and WR̅ (read or write strobe), ALE ' +
+            '(address latch enable), DEN̅ and DT/R̅ (data transceiver enable and direction), READY (the device ' +
+            'says it is ready to finish the cycle), and INTA̅ (interrupt acknowledge).',
+          'The MN/MX̅ pin selects the operating mode at power-up. MN/MX̅ tied high is minimum mode: a single ' +
+            'processor system where the 8086 generates all of these signals itself. MN/MX̅ tied low is maximum ' +
+            'mode, for multiprocessor systems: the 8086 instead outputs the status lines S2̅-S0̅, and an 8288 bus ' +
+            'controller decodes them into the actual command strobes (MRDC̅, MWTC̅, AMWC̅, IORC̅, IOWC̅) plus ALE, ' +
+            'DEN, and DT/R.',
+          'Maximum mode lets several processors share one bus safely, because the 8288 is the only chip that drives ' +
+            'the command lines. Its advanced write strobe AMWC̅ asserts one clock earlier than the normal MWTC̅, ' +
+            'giving slower memories a wider write pulse.',
+        ],
+        notes: [
+          'The control-line names here follow the Microprocessors course slides. The 8086 pin list also contains ' +
+            'RESET, NMI, INTR, TEST̅, and HOLD/HLDA (minimum mode) or RQ/GT̅ (maximum mode), covered in the next topics.',
+        ],
+      },
+      {
+        id: 'bus-request-grant',
+        title: 'Bus Request & Bus Grant',
+        summary: 'How another bus master borrows the bus, and how the CPU hands it over cleanly.',
+        content: [
+          'Sometimes another device needs the bus itself, for example a DMA controller moving data straight to ' +
+            'memory. It asks for the bus, and the CPU hands it over only at a safe point: the CPU finishes the ' +
+            'bus cycle it is in, then floats its address, data, and control lines so the other device can drive them.',
+          'In minimum mode the handshake uses HOLD (request, input) and HLDA (acknowledge, output). In maximum mode ' +
+            'it uses the request/grant pins RQ/GT̅0 and RQ/GT̅1: a master pulses its request line, the 8086 answers ' +
+            'on the matching grant line once the bus is free, and the master then sends the release pulse back ' +
+            'when it is finished.',
+          'The CPU does not lose its place while the bus is borrowed: its registers, flags, and instruction queue ' +
+            'stay intact, and it resumes the next bus cycle as soon as the bus is returned.',
+        ],
+      },
+      {
+        id: 'lock-signal',
+        title: 'The LOCK Signal',
+        summary: 'A promise that the current bus transaction cannot be interrupted by another bus master.',
+        content: [
+          'The LOCK̅ output is asserted (low) while the 8086 runs an instruction prefixed with the LOCK prefix, and ' +
+            'during bus cycles that must not be split, such as the two memory accesses of a read-modify-write ' +
+            'sequence (for example XCHG with a memory operand) and interrupt acknowledgement.',
+          'While LOCK̅ is low, bus request/grant is not honored: another master has to wait until the locked ' +
+            'sequence has finished, so no other processor can read a semaphore between the read and write halves.',
+          'This simulator is single-processor and has no other bus masters, so LOCK has no visible effect here; it is ' +
+            'documented for completeness and for the multiprocessor systems covered by maximum mode.',
+        ],
+      },
+      {
         id: 'segmented-addressing',
         title: 'Segmented Addressing vs This Simulator\'s Flat Model',
         summary: 'Why real 8086 addresses need two registers, and why this simulator only needs one.',
