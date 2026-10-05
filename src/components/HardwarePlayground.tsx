@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { assemble } from '../core/assembler'
-import { Cpu } from '../core/cpu'
+import { Cpu, type CpuSnapshot } from '../core/cpu'
 import type { Flags, Instruction, Reg16 } from '../core/types'
 import { RegisterView } from './RegisterView'
 import { DataBusView } from './DataBusView'
@@ -9,6 +9,7 @@ import { StackView } from './StackView'
 import { DevicesView } from './Devices'
 
 const PLAY_INTERVAL_MS = 600
+const MAX_HISTORY = 500
 
 export type HardwareVisual = 'registers' | 'databus' | 'busdetail' | 'stack' | 'devices'
 
@@ -38,6 +39,8 @@ export function HardwarePlayground({
   const [isPlaying, setIsPlaying] = useState(false)
   const [generation, setGeneration] = useState(0)
   const timerRef = useRef<number | null>(null)
+  const historyRef = useRef<CpuSnapshot[]>([])
+  const [historyLength, setHistoryLength] = useState(0)
 
   function sync() {
     const cpu = cpuRef.current
@@ -66,7 +69,26 @@ export function HardwarePlayground({
     const cpu = new Cpu()
     cpu.load(instructions, data)
     cpuRef.current = cpu
+    historyRef.current = []
+    setHistoryLength(0)
     setGeneration((g) => g + 1)
+    sync()
+  }
+
+  // Captures the CPU before each step so Step Back can rewind to it. Capped so a long Play
+  // session doesn't keep every 64KB memory snapshot alive.
+  function recordHistory() {
+    historyRef.current.push(cpuRef.current.snapshot())
+    if (historyRef.current.length > MAX_HISTORY) historyRef.current.shift()
+    setHistoryLength(historyRef.current.length)
+  }
+
+  function stepBack() {
+    stop()
+    const snap = historyRef.current.pop()
+    if (!snap) return
+    cpuRef.current.restore(snap)
+    setHistoryLength(historyRef.current.length)
     sync()
   }
 
@@ -80,6 +102,7 @@ export function HardwarePlayground({
 
   function step() {
     if (cpuRef.current.halted) return
+    recordHistory()
     cpuRef.current.step()
     sync()
   }
@@ -89,6 +112,7 @@ export function HardwarePlayground({
     setIsPlaying(true)
     timerRef.current = window.setInterval(() => {
       const cpu = cpuRef.current
+      recordHistory()
       cpu.step()
       sync()
       if (cpu.halted) stop()
@@ -105,7 +129,8 @@ export function HardwarePlayground({
   return (
     <div className="hw-playground">
       <div className="hw-playground-controls">
-        <button onClick={step} disabled={halted || isPlaying}>Step</button>
+        <button onClick={stepBack} disabled={isPlaying || historyLength === 0}>◀ Step Back</button>
+        <button onClick={step} disabled={halted || isPlaying}>Step ▶</button>
         {isPlaying ? (
           <button onClick={stop}>Pause</button>
         ) : (
