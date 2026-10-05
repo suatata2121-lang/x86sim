@@ -10,3 +10,4 @@ hardware kısmında mem read, mem write, I/o read-write gibi işlemlerin timing 
 addres/data demultiplexing, control signals, minimum/maximum mode, Bus request and bus grant, lock sinyali kavramları şekil ve etkileşimli öğelerle anlatılmalı.
 öğrenme kısmında yer alan şekil ve öğeler renklendirilebilir. 
 Hardware ksımında yer alan teorik bilgileri kontrol et. ifadelerde gözne çarpan hatalar varsa düzelt, gerektiğinde ifadeleri daha anlaşılır hale getir.
+microprocessor ile ilgili slide dosyaları github'a yüklendiğinde teorik bilgi ve şekil oluşturuken o slaytlardan yararlanabilirsin.
