@@ -74,6 +74,89 @@ header p {
   }
 }
 
+.timing-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.timing-btn {
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-button);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.timing-btn.active {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.timing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.timing-table th,
+.timing-table td {
+  padding: 0.25rem 0.4rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.timing-table td:first-child,
+.timing-table th:first-child {
+  text-align: left;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  white-space: nowrap;
+}
+
+.timing-col-active {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.timing-level {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.timing-level.high {
+  color: #22c55e;
+}
+
+.timing-level.low {
+  color: #f59e0b;
+}
+
+.timing-clk {
+  color: var(--text-dim);
+}
+
+.timing-clk.on {
+  color: #3b82f6;
+}
+
+.timing-text {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.72rem;
+}
+
+.timing-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.timing-caption {
+  margin-top: 0.5rem;
+}
+
 .theme-toggle {
   flex-shrink: 0;
   padding: 0.4rem 0.7rem;

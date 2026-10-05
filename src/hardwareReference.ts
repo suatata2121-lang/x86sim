@@ -23,6 +23,8 @@ export interface HardwareTopic {
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
   staticDiagram?: 'segmented-addressing'
+  // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
+  timing?: boolean
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
   // core/biuEu.ts) instead of a Cpu demo -- the main Cpu runs whole
   // instructions atomically and has no notion of bus cycles or the prefetch
@@ -264,6 +266,27 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'IN AL, 41h        ; IOR: same port, data comes back in\n' +
             'HLT\n',
         },
+      },
+      {
+        id: 'bus-timing',
+        title: 'Memory & I/O Bus Cycles (Timing)',
+        summary: 'What each clock state T1-T4 does on the 8086 bus, for memory and I/O reads and writes.',
+        content: [
+          'The 8086 multiplexes its address and data onto the same 16 lines AD15-AD0 (plus A19-A16 shared with ' +
+            'status). In T1 the CPU puts the address there and pulses ALE high; an external latch such as the 8282 ' +
+            'captures it on ALE\'s falling edge. That is the demultiplexing step: after T1 the same pins carry data, ' +
+            'and the latch is what keeps the address stable for the memory or port being accessed.',
+          'Pick a bus cycle below and step through T1-T4. Active-low control signals (RD̅, WR̅, DEN̅) are drawn low ' +
+            'while they are asserted. M/IO̅ tells memory and I/O apart, and DT/R̅ sets the direction of the data ' +
+            'transceivers. A write starts driving data in T2, while a read leaves the bus floating in T2 so memory ' +
+            'can drive it instead.',
+          'READY is sampled in T3. If it is low, the CPU inserts wait states (Tw) until the device is ready.',
+        ],
+        timing: true,
+        notes: [
+          'Minimum mode is shown here. In maximum mode an 8288 bus controller generates the read/write strobes ' +
+            '(MRDC̅, MWTC̅, IORC̅, IOWC̅) from the CPU\'s status lines S2̅-S0̅, so the CPU itself never drives RD̅/WR̅.',
+        ],
       },
       {
         id: 'segmented-addressing',
