@@ -1656,6 +1656,17 @@ aside .panel {
   margin-bottom: 0.6rem;
 }
 
+.pipe-queue-wrap {
+  flex: 1 1 220px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.pipe-summary {
+  margin-top: 0.5rem;
+}
+
 .pipe-unit {
   flex: 1 1 250px;
   min-width: 0;
