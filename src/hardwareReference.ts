@@ -25,6 +25,9 @@ export interface HardwareTopic {
   staticDiagram?: 'segmented-addressing'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
+  // A purpose-built interactive view instead of a Cpu demo: 'fde' is the three-phase
+  // stepper (FetchDecodeExecuteView), 'alu' is the live ALU explorer (AluView).
+  interactive?: 'fde' | 'alu'
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
   // core/biuEu.ts) instead of a Cpu demo -- the main Cpu runs whole
   // instructions atomically and has no notion of bus cycles or the prefetch
@@ -53,21 +56,11 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'memory), decode (figure out the mnemonic and operands), and execute (actually do it -- move a ' +
             'value, compute something in the ALU, or read/write memory). IP then advances to the next ' +
             'instruction and the cycle repeats.',
-          'The diagram below is the same Data Bus view used elsewhere in this simulator. Press Step and watch ' +
-            'which box lights up: REG for a register-to-register move, ALU for an arithmetic operation, and a ' +
-            'pulse toward MEMORY when an instruction reads or writes a memory operand.',
+          'Step through the three phases below for one instruction, ADD AX, BX. Fetch brings the bytes in, decode ' +
+            'works out what they mean and which operands they use, and execute does the work. Each phase only ' +
+            'hands its result to the next one.',
         ],
-        demo: {
-          visual: 'databus',
-          source:
-            'RESULT DW 0\n' +
-            'MOV AX, 5        ; reg: load an immediate into a register\n' +
-            'MOV BX, AX       ; reg: register-to-register move\n' +
-            'ADD AX, BX       ; alu: the ALU computes AX + BX\n' +
-            'MOV [RESULT], AX ; mem-write: the result is written out to memory\n' +
-            'MOV CX, [RESULT] ; mem-read: and read back into another register\n' +
-            'HLT\n',
-        },
+        interactive: 'fde',
       },
       {
         id: 'biu-eu',
@@ -172,24 +165,11 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
           'The Arithmetic Logic Unit takes one or two register/immediate values, computes a result (ADD, SUB, ' +
             'AND, OR, XOR, NOT, INC, DEC, and the rest), and writes that result back to a register while also ' +
             'updating the flags register based on what came out.',
-          'Notice the ALU box lights up for every one of these instructions below, never the MEMORY box -- all ' +
-            'of them work purely on registers and immediates.',
+          'Pick an operation and move the A and B sliders below. The result and flags come straight from the ' +
+            'simulator, so you can see how carries, borrows, and the bitwise operations change them. Operations ' +
+            'like these work only on registers and immediates, never on memory.',
         ],
-        demo: {
-          visual: 'databus',
-          source:
-            'MOV AX, 12\n' +
-            'MOV BX, 5\n' +
-            'ADD AX, BX\n' +
-            'SUB AX, BX\n' +
-            'AND AX, 0Fh\n' +
-            'OR AX, 30h\n' +
-            'XOR AX, AX\n' +
-            'NOT BX\n' +
-            'INC BX\n' +
-            'DEC BX\n' +
-            'HLT\n',
-        },
+        interactive: 'alu',
       },
       {
         id: 'flags-register',
