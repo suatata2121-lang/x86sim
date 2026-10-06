@@ -11,3 +11,9 @@ addres/data demultiplexing, control signals, minimum/maximum mode, Bus request a
 öğrenme kısmında yer alan şekil ve öğeler renklendirilebilir. 
 Hardware ksımında yer alan teorik bilgileri kontrol et. ifadelerde gözne çarpan hatalar varsa düzelt, gerektiğinde ifadeleri daha anlaşılır hale getir.
 microprocessor ile ilgili slide dosyaları github'a yüklendiğinde teorik bilgi ve şekil oluşturuken o slaytlardan yararlanabilirsin.
+
+06.10.2026
+
+feedback kısmı şuan pasif gibi çalışmıyor.
+kullanıcı profili oluştur. kullanıcılar mail adresleri ile kayıt olsunlar. sitede geçirdikleri süre ve çeşitli istatistikleri takip edebileyim.
+öğrencilere site üzerinden ödev gönderebileyim.
