@@ -8,6 +8,7 @@ import { SegmentedAddressingView } from './SegmentedAddressingView'
 import { TimingDiagramView } from './TimingDiagramView'
 import { FetchDecodeExecuteView } from './FetchDecodeExecuteView'
 import { AluView } from './AluView'
+import { FigureStepper } from './FigureStepper'
 import { BiuEuView } from './BiuEuView'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -58,21 +59,32 @@ export function useLearnNav(): LearnNav {
   }
 }
 
+// Each Learn section gets its own accent color, shown on its header while open.
+const SECTION_ACCENTS = {
+  curriculum: '#3b82f6',
+  reference: '#22c55e',
+  hardware: '#a855f7',
+  numbering: '#f59e0b',
+}
+
 function LearnAccordionSection({
   title,
   isOpen,
   onToggle,
+  accent,
   children,
 }: {
   title: string
   isOpen: boolean
   onToggle: () => void
+  accent: string
   children: ReactNode
 }) {
   return (
     <div className="learn-accordion-section">
       <button
         className={isOpen ? 'learn-accordion-header active' : 'learn-accordion-header'}
+        style={isOpen ? { borderLeft: `4px solid ${accent}`, color: accent } : undefined}
         onClick={onToggle}
       >
         {title}
@@ -339,6 +351,7 @@ export function LearnSidebar({
     <div className="mode-panel learn-panel">
       <LearnAccordionSection
         title="Instruction Reference"
+        accent={SECTION_ACCENTS.reference}
         isOpen={nav.section === 'reference'}
         onToggle={() => nav.setSection('reference')}
       >
@@ -346,6 +359,7 @@ export function LearnSidebar({
       </LearnAccordionSection>
       <LearnAccordionSection
         title="Curriculum"
+        accent={SECTION_ACCENTS.curriculum}
         isOpen={nav.section === 'curriculum'}
         onToggle={() => nav.setSection('curriculum')}
       >
@@ -358,6 +372,7 @@ export function LearnSidebar({
       </LearnAccordionSection>
       <LearnAccordionSection
         title="Hardware"
+        accent={SECTION_ACCENTS.hardware}
         isOpen={nav.section === 'hardware'}
         onToggle={() => nav.setSection('hardware')}
       >
@@ -365,6 +380,7 @@ export function LearnSidebar({
       </LearnAccordionSection>
       <LearnAccordionSection
         title="Numbering Systems"
+        accent={SECTION_ACCENTS.numbering}
         isOpen={nav.section === 'numbering'}
         onToggle={() => nav.setSection('numbering')}
       >
@@ -469,6 +485,7 @@ export function LearnDetail({
         {hwTopic.demo && <HardwarePlayground source={hwTopic.demo.source} visual={hwTopic.demo.visual} />}
         {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
         {hwTopic.timing && <TimingDiagramView />}
+        {hwTopic.figure && <FigureStepper spec={hwTopic.figure} />}
         {hwTopic.interactive === 'fde' && <FetchDecodeExecuteView />}
         {hwTopic.interactive === 'alu' && <AluView />}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
