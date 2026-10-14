@@ -48,16 +48,17 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Only university addresses may sign up; the site checks this too, but the
--- anon key can call the sign-up API directly, so the real gate is here.
--- Accounts that already exist (e.g. the instructor's) are not affected.
+-- Only university addresses may sign up: students use @ogr.halic.edu.tr,
+-- staff @halic.edu.tr. The site checks this too, but the anon key can call
+-- the sign-up API directly, so the real gate is here. Accounts that already
+-- exist (e.g. the instructor's) are not affected.
 create or replace function public.require_school_email()
 returns trigger
 language plpgsql
 as $$
 begin
-  if lower(new.email) not like '%@halic.edu.tr' then
-    raise exception 'Sign-up is limited to @halic.edu.tr addresses';
+  if lower(new.email) !~ '@(ogr\.)?halic\.edu\.tr$' then
+    raise exception 'Sign-up is limited to @ogr.halic.edu.tr and @halic.edu.tr addresses';
   end if;
   return new;
 end;

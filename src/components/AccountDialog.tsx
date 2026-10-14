@@ -5,7 +5,9 @@ type View = 'signin' | 'signup' | 'reset' | 'newpassword'
 
 const MIN_PASSWORD_LENGTH = 8
 // Mirrors require_school_email() in supabase/schema.sql, which is the real gate.
-const SCHOOL_EMAIL_DOMAIN = '@halic.edu.tr'
+// Students use the ogr. subdomain; staff addresses are accepted too.
+const SCHOOL_EMAIL = /@(ogr\.)?halic\.edu\.tr$/
+const STUDENT_EMAIL_DOMAIN = '@ogr.halic.edu.tr'
 
 interface Props {
   onClose: () => void
@@ -49,8 +51,8 @@ export function AccountDialog({ onClose, initialView = 'signin' }: Props) {
         await auth.signIn(email.trim(), password)
         onClose()
       } else if (view === 'signup') {
-        if (!email.trim().toLowerCase().endsWith(SCHOOL_EMAIL_DOMAIN)) {
-          throw new Error(`Please sign up with your university email (…${SCHOOL_EMAIL_DOMAIN}).`)
+        if (!SCHOOL_EMAIL.test(email.trim().toLowerCase())) {
+          throw new Error(`Please sign up with your university email (…${STUDENT_EMAIL_DOMAIN}).`)
         }
         const { needsEmailConfirmation } = await auth.signUp({
           email: email.trim(),
@@ -119,7 +121,7 @@ export function AccountDialog({ onClose, initialView = 'signin' }: Props) {
               {view === 'signup' ? 'University email' : 'Email'}
               <input
                 type="email"
-                placeholder={view === 'signup' ? `name${SCHOOL_EMAIL_DOMAIN}` : undefined}
+                placeholder={view === 'signup' ? `name${STUDENT_EMAIL_DOMAIN}` : undefined}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
