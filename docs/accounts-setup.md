@@ -15,8 +15,12 @@ eskisi gibi hesapsız çalışmaya devam eder.
    - Redirect URLs: `https://simx86.com`, `http://localhost:5173`
 4. **Authentication → Sign In / Providers → Email**: "Confirm email" açık kalsın
    (öğrenci kayıttan sonra e-postasındaki bağlantıya tıklayıp hesabını onaylar).
-   İstersen yalnızca okul adresiyle kayıt için Supabase'in "Auth Hooks" özelliği
-   kullanılabilir; bu PR'da kısıt yok.
+   Kayıt yalnızca `@halic.edu.tr` adresleriyle yapılabilir (`schema.sql` içindeki
+   `require_school_email` tetikleyicisi). Başka uzantılı bir hesap gerekirse
+   (ör. asistan), Supabase → **Authentication → Users → Add user** ile değil,
+   tetikleyiciyi geçici olarak kapatarak eklenir:
+   `alter table auth.users disable trigger require_school_email;` → hesabı aç →
+   `alter table auth.users enable trigger require_school_email;`
 
 ## 2. Anahtarları GitHub'a ekle
 
