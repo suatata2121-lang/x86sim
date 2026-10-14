@@ -1,0 +1,476 @@
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../backend/client'
+import { CURRICULUM, type Assignment } from '../curriculum'
+
+// Instructor-only panel: who is using the lab, how long, and how far each
+// student got through the curriculum. Row-level security on the database is
+// what actually restricts this data to admins; this component only renders it.
+
+const PAGE_SIZE = 1000
+
+interface StudentSummary {
+  id: string
+  email: string
+  full_name: string
+  student_no: string
+  class_group: string
+  role: 'student' | 'admin'
+  created_at: string
+  last_seen_at: string | null
+  total_seconds: number
+  session_count: number
+  attempt_count: number
+  completed_count: number
+  event_count: number
+}
+
+interface Progress {
+  user_id: string
+  assignment_id: string
+  attempt_count: number
+  best_passed: number
+  total_count: number
+  passed: boolean
+  first_passed_at: string | null
+  last_attempt_at: string
+}
+
+interface Attempt {
+  id: number
+  assignment_id: string
+  passed_count: number
+  total_count: number
+  assembled: boolean
+  passed: boolean
+  source: string
+  created_at: string
+}
+
+interface ActivityEvent {
+  id: number
+  kind: string
+  assignment_id: string | null
+  detail: Record<string, unknown>
+  created_at: string
+}
+
+interface StudySession {
+  id: string
+  started_at: string
+  last_seen_at: string
+  active_seconds: number
+}
+
+const ASSIGNMENTS: { assignment: Assignment; stageTitle: string; taskTitle: string }[] = CURRICULUM.flatMap((stage) =>
+  stage.tasks.flatMap((task) =>
+    task.assignments.map((assignment) => ({ assignment, stageTitle: stage.title, taskTitle: task.title })),
+  ),
+)
+const ASSIGNMENT_TITLES = new Map(ASSIGNMENTS.map((a) => [a.assignment.id, a.assignment.title]))
+
+// Supabase caps a single select at 1000 rows, so page through bigger tables.
+async function fetchAll<T>(table: string, columns: string): Promise<T[]> {
+  if (!supabase) return []
+  const rows: T[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase.from(table).select(columns).range(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    rows.push(...((data ?? []) as T[]))
+    if (!data || data.length < PAGE_SIZE) return rows
+  }
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return h > 0 ? `${h} h ${m} min` : `${m} min`
+}
+
+function formatDate(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleString() : '-'
+}
+
+function downloadCsv(filename: string, header: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => {
+    const s = String(v)
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  // The BOM makes Excel open UTF-8 (Turkish characters) correctly.
+  const csv = '﻿' + [header, ...rows].map((r) => r.map(escape).join(',')).join('\r\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+export function AdminView({ onClose }: { onClose: () => void }) {
+  const [students, setStudents] = useState<StudentSummary[]>([])
+  const [progress, setProgress] = useState<Progress[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [group, setGroup] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    Promise.all([
+      fetchAll<StudentSummary>('student_summary', '*'),
+      fetchAll<Progress>('assignment_progress', '*'),
+    ])
+      .then(([s, p]) => {
+        if (cancelled) return
+        setStudents(s.filter((row) => row.role === 'student'))
+        setProgress(p)
+      })
+      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
+  const groups = useMemo(() => [...new Set(students.map((s) => s.class_group).filter(Boolean))].sort(), [students])
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase('tr')
+    return students
+      .filter((s) => !group || s.class_group === group)
+      .filter((s) => !q || [s.full_name, s.student_no, s.email].some((v) => v.toLocaleLowerCase('tr').includes(q)))
+      .sort((a, b) => a.full_name.localeCompare(b.full_name, 'tr'))
+  }, [students, search, group])
+
+  const visibleIds = useMemo(() => new Set(visible.map((s) => s.id)), [visible])
+
+  const perAssignment = useMemo(
+    () =>
+      ASSIGNMENTS.map(({ assignment, taskTitle }) => {
+        const rows = progress.filter((p) => p.assignment_id === assignment.id && visibleIds.has(p.user_id))
+        const passed = rows.filter((r) => r.passed).length
+        const attempts = rows.reduce((n, r) => n + r.attempt_count, 0)
+        return { assignment, taskTitle, tried: rows.length, passed, attempts }
+      }),
+    [progress, visibleIds],
+  )
+
+  const selected = students.find((s) => s.id === selectedId) ?? null
+
+  function exportStudents() {
+    downloadCsv(
+      `x86sim-students-${today()}.csv`,
+      ['Full name', 'Student no', 'Group', 'Email', 'Active minutes', 'Visits', 'Assignments passed', `Of ${ASSIGNMENTS.length}`, 'Test runs', 'Registered', 'Last seen'],
+      visible.map((s) => [
+        s.full_name, s.student_no, s.class_group, s.email,
+        Math.round(s.total_seconds / 60), s.session_count, s.completed_count, ASSIGNMENTS.length,
+        s.attempt_count, formatDate(s.created_at), formatDate(s.last_seen_at),
+      ]),
+    )
+  }
+
+  function exportGradebook() {
+    const byKey = new Map(progress.map((p) => [`${p.user_id}|${p.assignment_id}`, p]))
+    downloadCsv(
+      `x86sim-gradebook-${today()}.csv`,
+      ['Full name', 'Student no', 'Group', ...ASSIGNMENTS.map((a) => a.assignment.title)],
+      visible.map((s) => [
+        s.full_name, s.student_no, s.class_group,
+        ...ASSIGNMENTS.map(({ assignment }) => {
+          const p = byKey.get(`${s.id}|${assignment.id}`)
+          if (!p) return ''
+          return p.passed ? 'passed' : `${p.best_passed}/${p.total_count}`
+        }),
+      ]),
+    )
+  }
+
+  if (selected) {
+    return (
+      <StudentDetail
+        student={selected}
+        progress={progress.filter((p) => p.user_id === selected.id)}
+        onBack={() => setSelectedId(null)}
+      />
+    )
+  }
+
+  const totalSeconds = visible.reduce((n, s) => n + s.total_seconds, 0)
+  const activeLastWeek = visible.filter((s) => s.last_seen_at && Date.now() - Date.parse(s.last_seen_at) < 7 * 86400_000).length
+
+  return (
+    <div className="admin">
+      <div className="admin-header">
+        <h2>Lab report</h2>
+        <div className="admin-actions no-print">
+          <button onClick={() => setReloadKey((k) => k + 1)} disabled={loading}>↻ Refresh</button>
+          <button onClick={exportStudents} disabled={loading}>⬇ Students CSV</button>
+          <button onClick={exportGradebook} disabled={loading}>⬇ Gradebook CSV</button>
+          <button onClick={() => window.print()} disabled={loading}>🖨 Print / PDF</button>
+          <button onClick={onClose}>Close</button>
+        </div>
+      </div>
+
+      <div className="admin-filters no-print">
+        <input placeholder="Search name, number or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select value={group} onChange={(e) => setGroup(e.target.value)}>
+          <option value="">All groups</option>
+          {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+      </div>
+
+      {error && <p className="feedback-error">Couldn't load the report: {error}</p>}
+      {loading ? (
+        <p className="status">Loading…</p>
+      ) : (
+        <>
+          <div className="admin-stats">
+            <div><strong>{visible.length}</strong><span>students</span></div>
+            <div><strong>{activeLastWeek}</strong><span>active in the last 7 days</span></div>
+            <div><strong>{formatDuration(totalSeconds)}</strong><span>total lab time</span></div>
+            <div>
+              <strong>{visible.length ? (visible.reduce((n, s) => n + s.completed_count, 0) / visible.length).toFixed(1) : '0'}</strong>
+              <span>avg. assignments passed (of {ASSIGNMENTS.length})</span>
+            </div>
+          </div>
+
+          <h3>Students</h3>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Name</th><th>Student no</th><th>Group</th><th>Lab time</th><th>Visits</th>
+                  <th>Passed</th><th>Test runs</th><th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((s) => (
+                  <tr key={s.id} onClick={() => setSelectedId(s.id)} className="admin-row-link">
+                    <td>{s.full_name || s.email}</td>
+                    <td>{s.student_no}</td>
+                    <td>{s.class_group}</td>
+                    <td>{formatDuration(s.total_seconds)}</td>
+                    <td>{s.session_count}</td>
+                    <td>
+                      <ProgressBar value={s.completed_count} max={ASSIGNMENTS.length} />
+                    </td>
+                    <td>{s.attempt_count}</td>
+                    <td>{formatDate(s.last_seen_at)}</td>
+                  </tr>
+                ))}
+                {visible.length === 0 && (
+                  <tr><td colSpan={8} className="admin-empty">No students yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Assignments</h3>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr><th>Task</th><th>Assignment</th><th>Tried</th><th>Passed</th><th>Test runs</th></tr>
+              </thead>
+              <tbody>
+                {perAssignment.map((a) => (
+                  <tr key={a.assignment.id}>
+                    <td>{a.taskTitle}</td>
+                    <td>{a.assignment.title}</td>
+                    <td>{a.tried}</td>
+                    <td><ProgressBar value={a.passed} max={visible.length} /></td>
+                    <td>{a.attempts}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ProgressBar({ value, max }: { value: number; max: number }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0
+  return (
+    <span className="admin-progress" title={`${pct}%`}>
+      <span className="admin-progress-track"><span style={{ width: `${pct}%` }} /></span>
+      {value}/{max}
+    </span>
+  )
+}
+
+function StudentDetail({ student, progress, onBack }: { student: StudentSummary; progress: Progress[]; onBack: () => void }) {
+  const [attempts, setAttempts] = useState<Attempt[]>([])
+  const [events, setEvents] = useState<ActivityEvent[]>([])
+  const [sessions, setSessions] = useState<StudySession[]>([])
+  const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!supabase) return
+    Promise.all([
+      supabase.from('assignment_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }).limit(500),
+      supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).order('created_at', { ascending: false }).limit(300),
+      supabase.from('study_sessions').select('id, started_at, last_seen_at, active_seconds').eq('user_id', student.id).order('started_at', { ascending: false }).limit(200),
+    ]).then(([a, e, s]) => {
+      const err = a.error ?? e.error ?? s.error
+      if (err) setError(err.message)
+      setAttempts((a.data ?? []) as Attempt[])
+      setEvents((e.data ?? []) as ActivityEvent[])
+      setSessions((s.data ?? []) as StudySession[])
+    })
+  }, [student.id])
+
+  useEffect(() => {
+    if (!openAttempt) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpenAttempt(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [openAttempt])
+
+  const byAssignment = new Map(progress.map((p) => [p.assignment_id, p]))
+
+  function exportAttempts() {
+    downloadCsv(
+      `x86sim-${student.student_no || student.id}-attempts-${today()}.csv`,
+      ['Time', 'Assignment', 'Assembled', 'Passed tests', 'Total tests', 'Passed', 'Source'],
+      attempts.map((a) => [
+        formatDate(a.created_at), ASSIGNMENT_TITLES.get(a.assignment_id) ?? a.assignment_id,
+        a.assembled ? 'yes' : 'no', a.passed_count, a.total_count, a.passed ? 'yes' : 'no', a.source,
+      ]),
+    )
+  }
+
+  return (
+    <div className="admin">
+      <div className="admin-header">
+        <h2>{student.full_name || student.email}</h2>
+        <div className="admin-actions no-print">
+          <button onClick={exportAttempts}>⬇ Attempts CSV</button>
+          <button onClick={() => window.print()}>🖨 Print / PDF</button>
+          <button onClick={onBack}>← All students</button>
+        </div>
+      </div>
+      <p className="admin-meta">
+        {student.student_no && <>No: {student.student_no} · </>}
+        {student.class_group && <>Group: {student.class_group} · </>}
+        {student.email} · Registered {formatDate(student.created_at)} · Last seen {formatDate(student.last_seen_at)}
+      </p>
+
+      {error && <p className="feedback-error">{error}</p>}
+
+      <div className="admin-stats">
+        <div><strong>{formatDuration(student.total_seconds)}</strong><span>lab time</span></div>
+        <div><strong>{student.session_count}</strong><span>visits</span></div>
+        <div><strong>{student.completed_count}/{ASSIGNMENTS.length}</strong><span>assignments passed</span></div>
+        <div><strong>{student.attempt_count}</strong><span>test runs</span></div>
+      </div>
+
+      <h3>Curriculum progress</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr><th>Task</th><th>Assignment</th><th>Status</th><th>Best score</th><th>Test runs</th><th>First passed</th></tr>
+          </thead>
+          <tbody>
+            {ASSIGNMENTS.map(({ assignment, taskTitle }) => {
+              const p = byAssignment.get(assignment.id)
+              return (
+                <tr key={assignment.id}>
+                  <td>{taskTitle}</td>
+                  <td>{assignment.title}</td>
+                  <td>
+                    <span className={`admin-badge ${p?.passed ? 'passed' : p ? 'tried' : ''}`}>
+                      {p?.passed ? 'Passed' : p ? 'In progress' : 'Not started'}
+                    </span>
+                  </td>
+                  <td>{p ? `${p.best_passed}/${p.total_count}` : '-'}</td>
+                  <td>{p?.attempt_count ?? 0}</td>
+                  <td>{formatDate(p?.first_passed_at ?? null)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Test runs</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Time</th><th>Assignment</th><th>Result</th><th className="no-print">Code</th></tr></thead>
+          <tbody>
+            {attempts.map((a) => (
+              <tr key={a.id}>
+                <td>{formatDate(a.created_at)}</td>
+                <td>{ASSIGNMENT_TITLES.get(a.assignment_id) ?? a.assignment_id}</td>
+                <td>{a.assembled ? `${a.passed_count}/${a.total_count}${a.passed ? ' ✓' : ''}` : 'Assemble error'}</td>
+                <td className="no-print"><button className="link-button" onClick={() => setOpenAttempt(a)}>View</button></td>
+              </tr>
+            ))}
+            {attempts.length === 0 && <tr><td colSpan={4} className="admin-empty">No test runs yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Recent activity</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Time</th><th>Action</th><th>Assignment</th><th>Detail</th></tr></thead>
+          <tbody>
+            {events.map((e) => (
+              <tr key={e.id}>
+                <td>{formatDate(e.created_at)}</td>
+                <td>{e.kind.replace('_', ' ')}</td>
+                <td>{e.assignment_id ? ASSIGNMENT_TITLES.get(e.assignment_id) ?? e.assignment_id : ''}</td>
+                <td>{Object.entries(e.detail).map(([k, v]) => `${k}: ${String(v)}`).join(', ')}</td>
+              </tr>
+            ))}
+            {events.length === 0 && <tr><td colSpan={4} className="admin-empty">No activity yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Visits</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Started</th><th>Last seen</th><th>Active time</th></tr></thead>
+          <tbody>
+            {sessions.map((s) => (
+              <tr key={s.id}>
+                <td>{formatDate(s.started_at)}</td>
+                <td>{formatDate(s.last_seen_at)}</td>
+                <td>{formatDuration(s.active_seconds)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {openAttempt && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setOpenAttempt(null)}>
+          <div className="modal admin-code-modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <h2>{ASSIGNMENT_TITLES.get(openAttempt.assignment_id) ?? openAttempt.assignment_id}</h2>
+              <button className="modal-close" onClick={() => setOpenAttempt(null)} aria-label="Close">×</button>
+            </div>
+            <p className="admin-meta">
+              {formatDate(openAttempt.created_at)} ·{' '}
+              {openAttempt.assembled ? `${openAttempt.passed_count}/${openAttempt.total_count} tests passed` : 'Did not assemble'}
+            </p>
+            <pre className="admin-code">{openAttempt.source}</pre>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

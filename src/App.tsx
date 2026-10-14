@@ -11,10 +11,15 @@ import { StackView } from './components/StackView'
 import { ProfilerView } from './components/ProfilerView'
 import { GraderView } from './components/GraderView'
 import { FeedbackDialog } from './components/FeedbackDialog'
+import { AccountDialog } from './components/AccountDialog'
+import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { EXAMPLES } from './examples'
 import { CURRICULUM, type Assignment } from './curriculum'
 import { gradeSource, type GradeReport } from './core/grader'
+import { backendEnabled } from './backend/client'
+import { useAuth } from './backend/auth'
+import { fetchCompletedAssignments, recordAttempt, trackActivity, useStudySession } from './backend/tracking'
 import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
@@ -90,6 +95,11 @@ export default function App() {
     window.localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark'
   ))
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(false)
+  const auth = useAuth()
+  const userId = auth.session?.user.id ?? null
+  useStudySession(userId)
   const animTimerRef = useRef<number | null>(null)
   const stepHistoryRef = useRef<CpuSnapshot[]>([])
   const [canStepBack, setCanStepBack] = useState(false)
@@ -103,6 +113,24 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     window.localStorage.setItem(THEME_STORAGE_KEY, theme)
   }, [theme])
+
+  // Progress made on another device (or before clearing the browser) comes
+  // back from the server once the student signs in.
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    fetchCompletedAssignments(userId).then((ids) => {
+      if (cancelled || ids.length === 0) return
+      setCompletedAssignments((prev) => new Set([...prev, ...ids]))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  useEffect(() => {
+    if (!auth.isAdmin) setAdminOpen(false)
+  }, [auth.isAdmin])
 
   useEffect(() => {
     return () => {
@@ -151,6 +179,7 @@ export default function App() {
   }
 
   function handleAnimate() {
+    trackActivity('animate', activeAssignmentId)
     setIsAnimating(true)
     animTimerRef.current = window.setInterval(() => {
       const cpu = cpuRef.current
@@ -210,6 +239,7 @@ export default function App() {
   function handleAssemble() {
     stopAnimation()
     const { instructions, data, errors } = assemble(source)
+    trackActivity('assemble', activeAssignmentId, { errors: errors.length })
     setErrors(errors)
     if (errors.length > 0) {
       setAssembled(false)
@@ -224,6 +254,7 @@ export default function App() {
   }
 
   function handleStep() {
+    trackActivity('step', activeAssignmentId)
     pushHistory()
     try {
       cpuRef.current.step()
@@ -246,6 +277,7 @@ export default function App() {
   }
 
   function handleRun() {
+    trackActivity('run', activeAssignmentId)
     pushHistory()
     try {
       cpuRef.current.run(100000, breakpoints)
@@ -270,6 +302,7 @@ export default function App() {
     stopAnimation()
     const example = EXAMPLES.find((e) => e.id === selectedExampleId)
     if (!example) return
+    trackActivity('load_example', null, { example: example.id })
     const tab = makeTab(example.title, example.source)
     setTabs((prev) => [...prev, tab])
     setActiveTabId(tab.id)
@@ -277,6 +310,7 @@ export default function App() {
   }
 
   function handleSelectAssignment(assignment: Assignment) {
+    trackActivity('open_assignment', assignment.id)
     stopAnimation()
     const tab = makeTab(assignment.title, assignment.starterSource)
     setTabs((prev) => [...prev, tab])
@@ -293,6 +327,13 @@ export default function App() {
     if (!assignment) return
     const report = gradeSource(source, assignment.testCases)
     setGradeReport(report)
+    recordAttempt({
+      assignmentId: assignment.id,
+      passedCount: report.passedCount,
+      totalCount: report.totalCount,
+      assembled: report.assembled,
+      source,
+    })
     if (report.assembled && report.totalCount > 0 && report.passedCount === report.totalCount) {
       setCompletedAssignments((prev) => (prev.has(assignment.id) ? prev : new Set(prev).add(assignment.id)))
     }
@@ -354,6 +395,21 @@ export default function App() {
           <p>A browser-based 8086 assembly simulator inspired by emu8086.</p>
         </div>
         <div className="header-actions">
+          {backendEnabled && auth.ready && (auth.session ? (
+            <>
+              {auth.isAdmin && (
+                <button className="theme-toggle" onClick={() => setAdminOpen((o) => !o)}>
+                  {adminOpen ? '💻 Simulator' : '📊 Admin panel'}
+                </button>
+              )}
+              <span className="account-name" title={auth.session.user.email}>
+                👤 {auth.profile?.full_name || auth.session.user.email}
+              </span>
+              <button className="theme-toggle" onClick={() => auth.signOut()}>Sign out</button>
+            </>
+          ) : (
+            <button className="theme-toggle" onClick={() => setAccountOpen(true)}>👤 Sign in</button>
+          ))}
           <button className="theme-toggle" onClick={() => setFeedbackOpen(true)} title="Report a bug or suggest an improvement">
             💬 Feedback
           </button>
@@ -363,6 +419,23 @@ export default function App() {
         </div>
       </header>
       {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} currentSource={source} />}
+      {(accountOpen || auth.passwordRecovery) && (
+        <AccountDialog
+          initialView={auth.passwordRecovery ? 'newpassword' : 'signin'}
+          onClose={() => {
+            setAccountOpen(false)
+            auth.dismissPasswordRecovery()
+          }}
+        />
+      )}
+      {backendEnabled && auth.ready && !auth.session && (
+        <p className="account-banner no-print">
+          Taking the lab course?{' '}
+          <button className="link-button" onClick={() => setAccountOpen(true)}>Sign in or create an account</button>{' '}
+          so your work and progress are saved.
+        </p>
+      )}
+      {adminOpen && auth.isAdmin ? <AdminView onClose={() => setAdminOpen(false)} /> : (
       <main>
         <section className="editor-panel">
           {!hardwareMode && (
@@ -583,6 +656,7 @@ export default function App() {
         </aside>
         )}
       </main>
+      )}
       <footer className="app-footer">
         <p>
           Developed by Dr. Murat Adnan TAMER as part of the Microprocessors course at Haliç

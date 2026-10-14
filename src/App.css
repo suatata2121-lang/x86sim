@@ -2032,3 +2032,279 @@ aside .panel {
   color: var(--text-faint);
   text-decoration: line-through;
 }
+
+/* ---- Accounts (components/AccountDialog.tsx) ---- */
+
+.feedback-form input:not([type='checkbox']) {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  color: var(--text);
+  font: inherit;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account-switch {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.account-notice {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background: var(--success-bg);
+  color: var(--success-text);
+  font-size: 0.9rem;
+}
+
+.account-name {
+  align-self: center;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.account-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* ---- Admin panel (components/AdminView.tsx) ---- */
+
+.admin {
+  margin-top: 1rem;
+}
+
+.admin-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-header h2 {
+  margin: 0;
+}
+
+.admin-actions,
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-actions button,
+.admin-filters input,
+.admin-filters select {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-button);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.admin-actions button {
+  cursor: pointer;
+}
+
+.admin-actions button:not(:disabled):hover {
+  background: var(--bg-button-hover);
+}
+
+.admin-filters {
+  margin: 1rem 0;
+}
+
+.admin-filters input {
+  min-width: 16rem;
+  background: var(--bg-panel-alt);
+}
+
+.admin-meta {
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.admin-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+}
+
+.admin-stats strong {
+  font-size: 1.4rem;
+}
+
+.admin-stats span {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.admin h3 {
+  margin: 1.5rem 0 0.5rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-table th {
+  background: var(--bg-panel-alt);
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-row-link {
+  cursor: pointer;
+}
+
+.admin-row-link:hover td {
+  background: var(--bg-button);
+}
+
+.admin-empty {
+  color: var(--text-faint);
+  text-align: center !important;
+}
+
+.admin-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.admin-progress-track {
+  display: inline-block;
+  width: 5rem;
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-button-hover);
+}
+
+.admin-progress-track span {
+  display: block;
+  height: 100%;
+  background: var(--accent-text);
+}
+
+.admin-badge {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-button);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.admin-badge.passed {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.admin-badge.tried {
+  background: var(--warning-bg-strong);
+  color: var(--warning-text);
+}
+
+.admin-code-modal {
+  max-width: 760px;
+}
+
+.admin-code {
+  margin: 0;
+  padding: 0.75rem;
+  overflow-x: auto;
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+@media print {
+  header,
+  .app-footer,
+  .no-print {
+    display: none !important;
+  }
+
+  .admin-table-wrap {
+    overflow: visible;
+  }
+
+  .admin-table tr {
+    break-inside: avoid;
+  }
+}
+
+@media print {
+  .admin,
+  .admin * {
+    color: #000 !important;
+  }
+
+  .admin-table th,
+  .admin-table td,
+  .admin-stats div,
+  .admin-table-wrap {
+    border-color: #999 !important;
+  }
+}
