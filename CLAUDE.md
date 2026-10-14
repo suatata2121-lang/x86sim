@@ -5,8 +5,11 @@ Microprocessors lab at Haliç University (instructor: Dr. Murat Adnan Tamer).
 Students do their x86 hardware and assembly lab work on the site; the
 instructor follows their progress and takes reports from the admin panel.
 
-The repo owner talks in Turkish. Answer in Turkish; keep code, comments,
-commit messages and the site's UI text in English (matches the existing code).
+The repo owner talks in Turkish. Answer in Turkish in chat. **Everything that
+ships on the site is English**: UI text, lessons, hints, prediction questions,
+feedback messages, examples. Code, comments and commit messages are English too.
+Plan issues may describe the work in Turkish; any content they quote for the
+site is already English and goes in as written.
 
 ## Commands
 
