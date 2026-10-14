@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../backend/client'
 import { CURRICULUM, type Assignment } from '../curriculum'
+import { LEARNING_PATH, STEPS, moduleStatus, type ModuleProgressRow } from '../learningPath'
 
 // Instructor-only panel: who is using the lab, how long, and how far each
 // student got through the curriculum. Row-level security on the database is
@@ -311,6 +312,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const [attempts, setAttempts] = useState<Attempt[]>([])
   const [events, setEvents] = useState<ActivityEvent[]>([])
   const [sessions, setSessions] = useState<StudySession[]>([])
+  const [pathRows, setPathRows] = useState<ModuleProgressRow[]>([])
   const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -320,12 +322,14 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       supabase.from('assignment_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }).limit(500),
       supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).order('created_at', { ascending: false }).limit(300),
       supabase.from('study_sessions').select('id, started_at, last_seen_at, active_seconds').eq('user_id', student.id).order('started_at', { ascending: false }).limit(200),
-    ]).then(([a, e, s]) => {
-      const err = a.error ?? e.error ?? s.error
+      supabase.from('module_progress').select('module_id, step, updated_at').eq('user_id', student.id),
+    ]).then(([a, e, s, m]) => {
+      const err = a.error ?? e.error ?? s.error ?? m.error
       if (err) setError(err.message)
       setAttempts((a.data ?? []) as Attempt[])
       setEvents((e.data ?? []) as ActivityEvent[])
       setSessions((s.data ?? []) as StudySession[])
+      setPathRows((m.data ?? []) as ModuleProgressRow[])
     })
   }, [student.id])
 
@@ -339,6 +343,8 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   }, [openAttempt])
 
   const byAssignment = new Map(progress.map((p) => [p.assignment_id, p]))
+  const passedIds = new Set(progress.filter((p) => p.passed).map((p) => p.assignment_id))
+  const byModule = new Map(pathRows.map((r) => [r.module_id, r]))
 
   function exportAttempts() {
     downloadCsv(
@@ -374,6 +380,34 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
         <div><strong>{student.session_count}</strong><span>visits</span></div>
         <div><strong>{student.completed_count}/{ASSIGNMENTS.length}</strong><span>assignments passed</span></div>
         <div><strong>{student.attempt_count}</strong><span>test runs</span></div>
+      </div>
+
+      <h3>Learning path</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr><th>Module</th><th>Status</th><th>Current step</th><th>Assignments passed</th><th>Last opened</th></tr>
+          </thead>
+          <tbody>
+            {LEARNING_PATH.map((m, i) => {
+              const row = byModule.get(m.id)
+              const status = moduleStatus(m, passedIds, row?.step)
+              return (
+                <tr key={m.id}>
+                  <td>{i}. {m.title}</td>
+                  <td>
+                    <span className={`admin-badge ${status === 'done' ? 'passed' : status === 'in-progress' ? 'tried' : ''}`}>
+                      {status === 'done' ? 'Done' : status === 'in-progress' ? 'In progress' : 'Not started'}
+                    </span>
+                  </td>
+                  <td>{status === 'done' || !row ? '-' : STEPS.find((s) => s.id === row.step)?.label ?? row.step}</td>
+                  <td>{m.assignments.length > 0 ? `${m.assignments.filter((id) => passedIds.has(id)).length}/${m.assignments.length}` : '-'}</td>
+                  <td>{formatDate(row?.updated_at ?? null)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
 
       <h3>Curriculum progress</h3>

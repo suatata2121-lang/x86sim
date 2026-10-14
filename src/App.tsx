@@ -14,12 +14,17 @@ import { FeedbackDialog } from './components/FeedbackDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
+import { LearningPathCard } from './components/LearningPathCard'
 import { EXAMPLES } from './examples'
 import { CURRICULUM, type Assignment } from './curriculum'
+import { HARDWARE_REFERENCE } from './hardwareReference'
+import { NUMBERING_REFERENCE } from './numberingSystems'
+import type { AsidePanel, ConceptRef } from './learningPath'
 import { gradeSource, type GradeReport } from './core/grader'
 import { backendEnabled } from './backend/client'
 import { useAuth } from './backend/auth'
 import { fetchCompletedAssignments, recordAttempt, trackActivity, useStudySession } from './backend/tracking'
+import { useModuleProgress } from './backend/moduleProgress'
 import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
@@ -27,12 +32,13 @@ const ANIMATE_INTERVAL_MS = 150
 const MAX_STEP_HISTORY = 200
 const THEME_STORAGE_KEY = 'x86sim-theme'
 const COMPLETED_ASSIGNMENTS_KEY = 'x86sim-completed-assignments'
+const PATH_CARD_HIDDEN_KEY = 'x86sim-path-card-hidden'
 const ALL_ASSIGNMENTS: Assignment[] = CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments))
 const BLANK_SOURCE = '; Write your code here.\n; Need inspiration? Check the Examples or Learn tabs on the left.\n\n'
 
 type SourceMode = 'new' | 'examples' | 'learn'
 
-type AsideTab = 'registers' | 'stack' | 'devices' | 'databus' | 'memory' | 'profiler'
+type AsideTab = AsidePanel
 const ASIDE_TABS: { id: AsideTab; label: string }[] = [
   { id: 'registers', label: 'Registers' },
   { id: 'stack', label: 'Stack' },
@@ -100,6 +106,8 @@ export default function App() {
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
   useStudySession(userId)
+  const moduleProgress = useModuleProgress(userId)
+  const [pathCardHidden, setPathCardHidden] = useState(() => window.localStorage.getItem(PATH_CARD_HIDDEN_KEY) === '1')
   const animTimerRef = useRef<number | null>(null)
   const stepHistoryRef = useRef<CpuSnapshot[]>([])
   const [canStepBack, setCanStepBack] = useState(false)
@@ -299,8 +307,12 @@ export default function App() {
   }
 
   function handleLoadExample() {
+    loadExample(selectedExampleId)
+  }
+
+  function loadExample(exampleId: string) {
     stopAnimation()
-    const example = EXAMPLES.find((e) => e.id === selectedExampleId)
+    const example = EXAMPLES.find((e) => e.id === exampleId)
     if (!example) return
     trackActivity('load_example', null, { example: example.id })
     const tab = makeTab(example.title, example.source)
@@ -317,6 +329,60 @@ export default function App() {
     setActiveTabId(tab.id)
     setActiveAssignmentId(assignment.id)
     resetExecutionState()
+  }
+
+  function setPathCardHiddenPersist(hidden: boolean) {
+    setPathCardHidden(hidden)
+    try {
+      window.localStorage.setItem(PATH_CARD_HIDDEN_KEY, hidden ? '1' : '0')
+    } catch {
+      // ignore (e.g. private browsing with storage disabled)
+    }
+  }
+
+  // The learning path's Concept step: the matching page in the Learn tab.
+  function openConcept(ref: ConceptRef) {
+    setMode('learn')
+    learnNav.setSection(ref.section)
+    if (ref.section === 'reference') {
+      learnNav.setCategoryId(ref.id)
+      learnNav.setMnemonic(null)
+    } else if (ref.section === 'hardware') {
+      learnNav.setHwCategoryId(HARDWARE_REFERENCE.find((c) => c.topics.some((t) => t.id === ref.id))?.id ?? null)
+      learnNav.setHwTopicId(ref.id)
+    } else {
+      learnNav.setNumCategoryId(NUMBERING_REFERENCE.find((c) => c.topics.some((t) => t.id === ref.id))?.id ?? null)
+      learnNav.setNumTopicId(ref.id)
+    }
+  }
+
+  // Observe: the example in its own tab with the panel that shows the effect.
+  // Pressing Continue again returns to that tab instead of stacking copies,
+  // as long as the student hasn't edited it.
+  function openExample(exampleId: string, panel: AsidePanel) {
+    setMode('examples')
+    setSelectedExampleId(exampleId)
+    setAsideTab(panel)
+    const example = EXAMPLES.find((e) => e.id === exampleId)
+    const existing = example && tabs.find((t) => t.title === example.title && t.source === example.source)
+    if (existing) handleSwitchTab(existing.id)
+    else loadExample(exampleId)
+  }
+
+  // Task: the assignment, with its stage/task scenario shown in Learn.
+  function openAssignment(assignmentId: string) {
+    for (const stage of CURRICULUM) {
+      for (const task of stage.tasks) {
+        const assignment = task.assignments.find((a) => a.id === assignmentId)
+        if (!assignment) continue
+        setMode('learn')
+        learnNav.setSection('curriculum')
+        learnNav.setStageId(stage.id)
+        learnNav.setTaskId(task.id)
+        handleSelectAssignment(assignment)
+        return
+      }
+    }
   }
 
   // Grades the editor's current source against the active assignment's test
@@ -397,6 +463,9 @@ export default function App() {
         <div className="header-actions">
           {backendEnabled && auth.ready && (auth.session ? (
             <>
+              {pathCardHidden && !adminOpen && (
+                <button className="theme-toggle" onClick={() => setPathCardHiddenPersist(false)}>🧭 Learning path</button>
+              )}
               {auth.isAdmin && (
                 <button className="theme-toggle" onClick={() => setAdminOpen((o) => !o)}>
                   {adminOpen ? '💻 Simulator' : '📊 Admin panel'}
@@ -438,6 +507,18 @@ export default function App() {
       {adminOpen && auth.isAdmin ? <AdminView onClose={() => setAdminOpen(false)} /> : (
       <main>
         <section className="editor-panel">
+          {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && (
+            <LearningPathCard
+              rows={moduleProgress.rows}
+              completed={completedAssignments}
+              onSetStep={moduleProgress.setStep}
+              onOpenConcept={openConcept}
+              onOpenExample={openExample}
+              onOpenAssignment={openAssignment}
+              onStepOpened={(moduleId, step) => trackActivity('path_step', null, { module: moduleId, step })}
+              onHide={() => setPathCardHiddenPersist(true)}
+            />
+          )}
           {!hardwareMode && (
             <div className="tabs-bar">
               {tabs.map((tab) => (
