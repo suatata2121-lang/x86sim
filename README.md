@@ -89,6 +89,10 @@ npm run dev
 
 Every push to `main` is automatically built and published to GitHub Pages at the custom domain `https://simx86.com/` by `.github/workflows/deploy.yml`. `public/CNAME` holds the domain and `vite.config.ts` uses `base: '/'` since the site is served from the domain root.
 
+## Student accounts and the admin panel
+
+Students can sign up with their email, and their lab work (time on the site, assemble/run activity, every **Run Tests** attempt with its code) is recorded for the instructor, who gets an admin panel with per-student and per-assignment reports plus CSV/PDF export. Accounts live in a [Supabase](https://supabase.com) project (`supabase/schema.sql`); the site only ever holds the public anon key, and row-level security keeps each student's data private. Without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` the site runs exactly as before, without accounts. Setup steps (in Turkish): [`docs/accounts-setup.md`](docs/accounts-setup.md).
+
 ## Structure
 
 ```
