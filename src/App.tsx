@@ -20,7 +20,10 @@ import { EXAMPLES } from './examples'
 import { CURRICULUM, type Assignment } from './curriculum'
 import { HARDWARE_REFERENCE } from './hardwareReference'
 import { NUMBERING_REFERENCE } from './numberingSystems'
-import { LEARNING_PATH, isModuleDone, unreadConcepts, type AsidePanel, type ConceptRef, type PathProgress } from './learningPath'
+import {
+  LEARNING_PATH, currentModule, isModuleDone, moduleForPage, unreadConcepts,
+  type AsidePanel, type ConceptRef, type PathProgress,
+} from './learningPath'
 import { findQuiz } from './quizzes'
 import { gradeSource, type GradeReport } from './core/grader'
 import { backendEnabled } from './backend/client'
@@ -513,6 +516,23 @@ export default function App() {
   // the freed-up space instead.
   const hardwareMode = mode === 'learn' && learnNav.section === 'hardware'
 
+  // A learning-path module can also leave out tools its pages don't need
+  // (Module 0 is reading only). The Numbering Systems overview counts as its
+  // first topic's page.
+  const pageRef: ConceptRef | null =
+    mode !== 'learn' ? null
+      : learnNav.section === 'numbering'
+        ? { section: 'numbering', id: learnNav.numTopicId ?? NUMBERING_REFERENCE[0].topics[0].id }
+        : learnNav.section === 'hardware' && learnNav.hwTopicId ? { section: 'hardware', id: learnNav.hwTopicId }
+          : learnNav.section === 'reference' && learnNav.categoryId ? { section: 'reference', id: learnNav.categoryId }
+            : null
+  const studentModule = auth.session && moduleProgress.loaded ? currentModule(moduleProgress.rows, pathProgress) : null
+  const pageTools = pageRef ? moduleForPage(pageRef, studentModule)?.tools : undefined
+  const showEditor = !hardwareMode && (!pageTools || pageTools.includes('editor'))
+  const showRun = !hardwareMode && (!pageTools || pageTools.includes('run'))
+  const asideTabs = hardwareMode ? [] : ASIDE_TABS.filter((t) => !pageTools || pageTools.includes(t.id))
+  const shownAsideTab = asideTabs.some((t) => t.id === asideTab) ? asideTab : asideTabs[0]?.id
+
   return (
     <div className="app">
       <header>
@@ -611,7 +631,7 @@ export default function App() {
               onHide={() => setPathCardHiddenPersist(true)}
             />
           )}
-          {!hardwareMode && (
+          {showEditor && (
             <div className="tabs-bar">
               {tabs.map((tab) => (
                 <div
@@ -684,7 +704,7 @@ export default function App() {
                   topicFooter={backendEnabled ? topicFooter : undefined}
                 />
               )}
-              {!hardwareMode && (
+              {showEditor && (
                 <CodeEditor
                   key={activeTabId}
                   value={source}
@@ -698,7 +718,7 @@ export default function App() {
               )}
             </div>
           </div>
-          {!hardwareMode && (
+          {showRun && (
             <>
               <div className="toolbar">
                 <button onClick={handleAssemble} disabled={isAnimating}>Assemble</button>
@@ -780,28 +800,28 @@ export default function App() {
             </>
           )}
         </section>
-        {!hardwareMode && (
+        {asideTabs.length > 0 && (
         <aside>
           <div className="mode-tabs aside-tabs">
-            {ASIDE_TABS.map((t) => (
+            {asideTabs.map((t) => (
               <button
                 key={t.id}
-                className={asideTab === t.id ? 'mode-tab active' : 'mode-tab'}
+                className={shownAsideTab === t.id ? 'mode-tab active' : 'mode-tab'}
                 onClick={() => setAsideTab(t.id)}
               >
                 {t.label}
               </button>
             ))}
           </div>
-          {asideTab === 'registers' && <RegisterView regs={regs} flags={flags} />}
-          {asideTab === 'databus' && (
+          {shownAsideTab === 'registers' && <RegisterView regs={regs} flags={flags} />}
+          {shownAsideTab === 'databus' && (
             <DataBusView
               key={`bus-${cpuGeneration}`}
               lastInstruction={cpuRef.current.lastInstruction}
               steps={cpuRef.current.steps}
             />
           )}
-          {asideTab === 'stack' && (
+          {shownAsideTab === 'stack' && (
             <StackView
               key={`stack-${cpuGeneration}`}
               memory={cpuRef.current.memory}
@@ -812,11 +832,11 @@ export default function App() {
               steps={cpuRef.current.steps}
             />
           )}
-          {asideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} />}
-          {asideTab === 'memory' && (
+          {shownAsideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} />}
+          {shownAsideTab === 'memory' && (
             <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
           )}
-          {asideTab === 'profiler' && (
+          {shownAsideTab === 'profiler' && (
             <ProfilerView
               cycles={cpuRef.current.cycles}
               profile={cpuRef.current.profile}

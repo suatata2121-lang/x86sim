@@ -6,6 +6,12 @@
 
 export type AsidePanel = 'registers' | 'stack' | 'devices' | 'databus' | 'memory' | 'profiler'
 
+/**
+ * The lab tools a module's pages show: 'editor' (the code tabs), 'run' (the
+ * toolbar, output and test results) and each side panel by name.
+ */
+export type ModuleTool = 'editor' | 'run' | AsidePanel
+
 export type ConceptRef =
   | { section: 'hardware'; id: string }
   | { section: 'numbering'; id: string }
@@ -24,6 +30,8 @@ export interface LearningModule {
   quiz?: string
   /** Modules that must be done before this one can be opened. */
   requires?: string[]
+  /** Tools shown next to this module's Learn pages; all of them when absent. */
+  tools?: ModuleTool[]
 }
 
 export type StepId = 'concept' | 'observe' | 'predict' | 'task' | 'quiz' | 'reflect'
@@ -63,6 +71,8 @@ export const LEARNING_PATH: LearningModule[] = [
     // Read every topic, then pass the quiz (issue #20); no program to run yet.
     steps: ['concept', 'quiz'],
     quiz: 'm0',
+    // Reading only: no code to write or run, so the pages get the full width.
+    tools: [],
   },
   {
     id: 'm1',
@@ -244,4 +254,14 @@ export function resumeStep(module: LearningModule, row: ModuleProgressRow | unde
   const step = !row || row.step === 'done' ? 'concept' : row.step
   if (!activeSteps(module).includes(step)) return 'concept'
   return step === 'quiz' && unreadConcepts(module, progress).length > 0 ? 'concept' : step
+}
+
+/**
+ * The module whose tools apply to an open Learn page: the student's current
+ * module if the page is one of its concepts (a page can belong to several,
+ * e.g. signed numbers in m0 and m9), otherwise the first module that has it.
+ */
+export function moduleForPage(ref: ConceptRef, current: LearningModule | null): LearningModule | null {
+  const has = (m: LearningModule) => m.concepts.some((c) => c.section === ref.section && c.id === ref.id)
+  return current && has(current) ? current : LEARNING_PATH.find(has) ?? null
 }
