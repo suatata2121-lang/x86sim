@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { assemble } from './core/assembler'
 import { Cpu, type CpuSnapshot } from './core/cpu'
 import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
@@ -14,12 +14,14 @@ import { FeedbackDialog } from './components/FeedbackDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
-import { LearningPathCard } from './components/LearningPathCard'
+import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
+import { QuizDialog } from './components/QuizDialog'
 import { EXAMPLES } from './examples'
 import { CURRICULUM, type Assignment } from './curriculum'
 import { HARDWARE_REFERENCE } from './hardwareReference'
 import { NUMBERING_REFERENCE } from './numberingSystems'
-import type { AsidePanel, ConceptRef } from './learningPath'
+import { LEARNING_PATH, isModuleDone, unreadConcepts, type AsidePanel, type ConceptRef, type PathProgress } from './learningPath'
+import { findQuiz } from './quizzes'
 import { gradeSource, type GradeReport } from './core/grader'
 import { backendEnabled } from './backend/client'
 import { useAuth } from './backend/auth'
@@ -107,6 +109,11 @@ export default function App() {
   const userId = auth.session?.user.id ?? null
   useStudySession(userId)
   const moduleProgress = useModuleProgress(userId)
+  const pathProgress: PathProgress = useMemo(
+    () => ({ completed: completedAssignments, quizzesPassed: moduleProgress.quizzesPassed, reads: moduleProgress.reads }),
+    [completedAssignments, moduleProgress.quizzesPassed, moduleProgress.reads],
+  )
+  const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   const [pathCardHidden, setPathCardHidden] = useState(() => window.localStorage.getItem(PATH_CARD_HIDDEN_KEY) === '1')
   const animTimerRef = useRef<number | null>(null)
   const stepHistoryRef = useRef<CpuSnapshot[]>([])
@@ -356,6 +363,59 @@ export default function App() {
     }
   }
 
+  // A quiz module's quiz (issue #20). The card and the last "Mark as read" only
+  // offer it once every topic is read; this checks again so nothing else can.
+  function openQuiz(moduleId: string) {
+    const m = LEARNING_PATH.find((x) => x.id === moduleId)
+    if (m?.quiz && unreadConcepts(m, pathProgress).length === 0) setQuizModuleId(moduleId)
+  }
+
+  // "Mark as read" at the end of a Learn page that belongs to a quiz module.
+  // Only signed-in students see it; it records the read and moves on to the
+  // next unread topic, or the quiz after the last one.
+  function topicFooter(ref: ConceptRef) {
+    if (!auth.session || !moduleProgress.loaded) return null
+    const m = LEARNING_PATH.find((x) => x.quiz && x.concepts.some((c) => c.section === ref.section && c.id === ref.id))
+    if (!m) return null
+    const unread = unreadConcepts(m, pathProgress)
+    const isRead = !unread.some((c) => c.id === ref.id)
+    const nextUnread = unread.find((c) => c.id !== ref.id)
+    const done = isModuleDone(m, pathProgress, moduleProgress.rows.get(m.id)?.step)
+
+    function goOn() {
+      if (nextUnread) {
+        openConcept(nextUnread)
+        requestAnimationFrame(() => document.querySelector('.learn-detail-panel')?.scrollIntoView({ block: 'start' }))
+      } else {
+        if (!done) moduleProgress.setStep(m!.id, 'quiz')
+        setQuizModuleId(m!.id)
+      }
+    }
+
+    return (
+      <div className="read-footer">
+        {isRead ? (
+          <>
+            <span className="read-done">✓ Marked as read</span>
+            {nextUnread
+              ? <button className="link-button" onClick={goOn}>Next unread topic: {conceptTitle(nextUnread)} →</button>
+              : !done && <button className="link-button" onClick={goOn}>Take the quiz →</button>}
+          </>
+        ) : (
+          <button
+            className="primary"
+            onClick={() => {
+              moduleProgress.markRead(m.id, ref.id)
+              goOn()
+            }}
+          >
+            {nextUnread ? 'Mark as read → next topic' : 'Mark as read → take the quiz'}
+          </button>
+        )}
+      </div>
+    )
+  }
+
   // Observe: the example in its own tab with the panel that shows the effect.
   // Pressing Continue again returns to that tab instead of stacking copies,
   // as long as the student hasn't edited it.
@@ -487,6 +547,29 @@ export default function App() {
           </button>
         </div>
       </header>
+      {quizModuleId && (() => {
+        const quiz = findQuiz(quizModuleId)
+        const module = LEARNING_PATH.find((m) => m.id === quizModuleId)
+        const nextModule = module && LEARNING_PATH[LEARNING_PATH.indexOf(module) + 1]
+        if (!quiz || !module) return null
+        return (
+          <QuizDialog
+            quiz={quiz}
+            topicTitle={(topic) => conceptTitle(module.concepts.find((c) => c.id === topic) ?? { section: 'numbering', id: topic })}
+            onSubmit={(r) => {
+              moduleProgress.recordQuizAttempt(module.id, { score: r.score, total: r.total, passed: r.passed, answers: r.answers })
+              if (r.passed) moduleProgress.setStep(module.id, 'done')
+            }}
+            onReview={(topic) => {
+              setQuizModuleId(null)
+              const ref = module.concepts.find((c) => c.id === topic)
+              if (ref) openConcept(ref)
+            }}
+            onClose={() => setQuizModuleId(null)}
+            next={nextModule && { label: `Next module: ${nextModule.title} →`, onClick: () => setQuizModuleId(null) }}
+          />
+        )
+      })()}
       {feedbackOpen && (
         <FeedbackDialog
           onClose={() => setFeedbackOpen(false)}
@@ -516,11 +599,12 @@ export default function App() {
           {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && (
             <LearningPathCard
               rows={moduleProgress.rows}
-              completed={completedAssignments}
+              progress={pathProgress}
               onSetStep={moduleProgress.setStep}
               onOpenConcept={openConcept}
               onOpenExample={openExample}
               onOpenAssignment={openAssignment}
+              onOpenQuiz={openQuiz}
               onStepOpened={(moduleId, step) => trackActivity('path_step', null, { module: moduleId, step })}
               onHide={() => setPathCardHiddenPersist(true)}
             />
@@ -595,6 +679,7 @@ export default function App() {
                   nav={learnNav}
                   activeAssignmentId={activeAssignmentId}
                   completedIds={completedAssignments}
+                  topicFooter={backendEnabled ? topicFooter : undefined}
                 />
               )}
               {!hardwareMode && (

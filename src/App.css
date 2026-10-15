@@ -2208,6 +2208,105 @@ aside .panel {
   outline-offset: 1px;
 }
 
+/* Locked until a required module (Module 0's quiz) is done. */
+.path-segment.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.path-unread {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.path-note {
+  margin: 0 0 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* "Mark as read" at the end of a Learn page (App.tsx topicFooter). */
+.read-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.read-footer button.primary {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.read-done {
+  color: var(--success-text);
+}
+
+/* ---- Module quiz (components/QuizDialog.tsx) ---- */
+
+.modal.quiz-modal {
+  max-width: 680px;
+}
+
+.quiz-questions {
+  margin: 0 0 1rem;
+  padding-left: 1.5rem;
+}
+
+.quiz-questions li {
+  margin-bottom: 1rem;
+}
+
+.quiz-question {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.quiz-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+  cursor: pointer;
+}
+
+.quiz-answer {
+  margin: 0;
+}
+
+.quiz-answer.correct {
+  color: var(--success-text);
+}
+
+.quiz-chosen {
+  color: var(--error-text);
+}
+
+.quiz-score {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+}
+
+.quiz-score.pass {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.quiz-score.fail {
+  background: var(--error-bg-soft);
+  color: var(--error-text);
+}
+
+.quiz-review {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+}
+
 /* ---- Admin panel (components/AdminView.tsx) ---- */
 
 .admin {

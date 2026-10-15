@@ -10,6 +10,7 @@ import { FetchDecodeExecuteView } from './FetchDecodeExecuteView'
 import { AluView } from './AluView'
 import { FigureStepper } from './FigureStepper'
 import { BiuEuView } from './BiuEuView'
+import type { ConceptRef } from '../learningPath'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
   return { done: assignments.filter((a) => completedIds.has(a.id)).length, total: assignments.length }
@@ -399,10 +400,13 @@ export function LearnDetail({
   nav,
   activeAssignmentId,
   completedIds,
+  topicFooter,
 }: {
   nav: LearnNav
   activeAssignmentId: string | null
   completedIds: Set<string>
+  /** Rendered at the very end of a Hardware or Numbering Systems page (the learning path's "Mark as read"). */
+  topicFooter?: (ref: ConceptRef) => ReactNode
 }) {
   const stage: Stage | null = CURRICULUM.find((s) => s.id === nav.stageId) ?? null
   const task: Task | null = stage?.tasks.find((t) => t.id === nav.taskId) ?? null
@@ -452,6 +456,7 @@ export function LearnDetail({
             {numTopic.notes.map((n, idx) => <li key={idx}>{n}</li>)}
           </ul>
         )}
+        {topicFooter?.({ section: 'numbering', id: numTopic.id })}
       </div>
     )
   }
@@ -494,6 +499,7 @@ export function LearnDetail({
             {hwTopic.notes.map((n, idx) => <li key={idx}>{n}</li>)}
           </ul>
         )}
+        {topicFooter?.({ section: 'hardware', id: hwTopic.id })}
       </div>
     )
   }
