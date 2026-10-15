@@ -16,6 +16,7 @@ import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
 import { QuizDialog } from './components/QuizDialog'
+import { ObserveView } from './components/ObserveView'
 import { EXAMPLES } from './examples'
 import { CURRICULUM, type Assignment } from './curriculum'
 import { HARDWARE_REFERENCE } from './hardwareReference'
@@ -128,6 +129,10 @@ export default function App() {
   )
   // The "What to watch" note of an example opened from a module's Observe step.
   const [watchNote, setWatchNote] = useState<{ title: string; text: string } | null>(null)
+  // The one-screen Observe viewer (#27), opened from a module whose Observe
+  // panel is the registers; it replaces the editor, toolbar and side panel.
+  const [observe, setObserve] = useState<{ moduleId: string; exampleId: string } | null>(null)
+  const [observeCardOpen, setObserveCardOpen] = useState(false)
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   const [pathCardHidden, setPathCardHidden] = useState(() => window.localStorage.getItem(PATH_CARD_HIDDEN_KEY) === '1')
   const animTimerRef = useRef<number | null>(null)
@@ -137,7 +142,11 @@ export default function App() {
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0]
   const source = activeTab.source
   const breakpoints = activeTab.breakpoints
-  const canRun = assembled && !halted && !waitingForInput && !isAnimating
+  // Step, Run and Animate assemble first when the code is new or edited
+  // (#27), so they only wait on a running program, not on the Assemble button.
+  const assembledSourceRef = useRef<string | null>(null)
+  const needsAssemble = !assembled || assembledSourceRef.current !== source
+  const canRun = (needsAssemble || !halted) && !waitingForInput && !isAnimating
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -209,6 +218,7 @@ export default function App() {
   }
 
   function handleAnimate() {
+    if (!ensureAssembled()) return
     trackActivity('animate', activeAssignmentId)
     setIsAnimating(true)
     animTimerRef.current = window.setInterval(() => {
@@ -271,24 +281,33 @@ export default function App() {
     syncState()
   }
 
-  function handleAssemble() {
+  /** Returns whether the program assembled. */
+  function handleAssemble(): boolean {
     stopAnimation()
     const { instructions, data, errors } = assemble(source)
     trackActivity('assemble', activeAssignmentId, { errors: errors.length })
     setErrors(errors)
     if (errors.length > 0) {
       setAssembled(false)
-      return
+      assembledSourceRef.current = null
+      return false
     }
     cpuRef.current.load(instructions, data)
+    assembledSourceRef.current = source
     setAssembled(true)
     setRuntimeError(null)
     clearHistory()
     setCpuGeneration((g) => g + 1)
     syncState()
+    return true
+  }
+
+  function ensureAssembled(): boolean {
+    return !needsAssemble || handleAssemble()
   }
 
   function handleStep() {
+    if (!ensureAssembled()) return
     trackActivity('step', activeAssignmentId)
     pushHistory()
     try {
@@ -312,6 +331,7 @@ export default function App() {
   }
 
   function handleRun() {
+    if (!ensureAssembled()) return
     trackActivity('run', activeAssignmentId)
     pushHistory()
     try {
@@ -334,6 +354,7 @@ export default function App() {
   }
 
   function handleLoadExample() {
+    setObserve(null)
     loadExample(selectedExampleId)
   }
 
@@ -369,6 +390,7 @@ export default function App() {
 
   // The learning path's Concept step: the matching page in the Learn tab.
   function openConcept(ref: ConceptRef) {
+    setObserve(null)
     setMode('learn')
     learnNav.setSection(ref.section)
     if (ref.section === 'reference') {
@@ -453,7 +475,22 @@ export default function App() {
   // Observe: the example in its own tab with the panel that shows the effect.
   // Pressing Continue again returns to that tab instead of stacking copies,
   // as long as the student hasn't edited it.
+  // A module's Observe step: the one-screen viewer when the module watches
+  // registers, otherwise the example in the editor with its note.
+  function openObserveStep(exampleId: string, panel: AsidePanel, watch: string | undefined, moduleId: string) {
+    if (panel !== 'registers') {
+      openExample(exampleId, panel, watch)
+      return
+    }
+    setMode('examples')
+    setSelectedExampleId(exampleId)
+    setWatchNote(null)
+    setObserveCardOpen(false)
+    setObserve({ moduleId, exampleId })
+  }
+
   function openExample(exampleId: string, panel: AsidePanel, watch?: string) {
+    setObserve(null)
     setMode('examples')
     setSelectedExampleId(exampleId)
     setAsideTab(panel)
@@ -466,6 +503,7 @@ export default function App() {
 
   // Task: the assignment, with its stage/task scenario shown in Learn.
   function openAssignment(assignmentId: string) {
+    setObserve(null)
     for (const stage of CURRICULUM) {
       for (const task of stage.tasks) {
         const assignment = task.assignments.find((a) => a.id === assignmentId)
@@ -501,6 +539,7 @@ export default function App() {
   }
 
   function handleNewTab() {
+    setObserve(null)
     stopAnimation()
     const tab = makeTab('Untitled', BLANK_SOURCE)
     setTabs((prev) => [...prev, tab])
@@ -510,6 +549,7 @@ export default function App() {
   }
 
   function handleSwitchTab(id: string) {
+    setObserve(null)
     if (id === activeTabId) return
     stopAnimation()
     setActiveTabId(id)
@@ -560,9 +600,11 @@ export default function App() {
             : null
   const studentModule = auth.session && moduleProgress.loaded ? currentModule(moduleProgress.rows, pathProgress) : null
   const pageTools = pageRef ? moduleForPage(pageRef, studentModule)?.tools : undefined
-  const showEditor = !hardwareMode && (!pageTools || pageTools.includes('editor'))
-  const showRun = !hardwareMode && (!pageTools || pageTools.includes('run'))
-  const asideTabs = hardwareMode ? [] : ASIDE_TABS.filter((t) => !pageTools || pageTools.includes(t.id))
+  const showEditor = !observe && !hardwareMode && (!pageTools || pageTools.includes('editor'))
+  const showRun = !observe && !hardwareMode && (!pageTools || pageTools.includes('run'))
+  const asideTabs = observe || hardwareMode ? [] : ASIDE_TABS.filter((t) => !pageTools || pageTools.includes(t.id))
+  const observeModule = observe ? LEARNING_PATH.find((m) => m.id === observe.moduleId) ?? null : null
+  const observeExample = observe ? EXAMPLES.find((e) => e.id === observe.exampleId) ?? null : null
   const shownAsideTab = asideTabs.some((t) => t.id === asideTab) ? asideTab : asideTabs[0]?.id
 
   return (
@@ -656,11 +698,16 @@ export default function App() {
               progress={pathProgress}
               onSetStep={moduleProgress.setStep}
               onOpenConcept={openConcept}
-              onOpenExample={openExample}
+              onOpenExample={openObserveStep}
               onOpenAssignment={openAssignment}
               onOpenQuiz={openQuiz}
               onStepOpened={(moduleId, step) => trackActivity('path_step', null, { module: moduleId, step })}
               onHide={() => setPathCardHiddenPersist(true)}
+              collapsed={observeModule && observeExample && !observeCardOpen
+                ? `Module ${LEARNING_PATH.indexOf(observeModule)} · Observe · ${observeExample.title}`
+                : undefined}
+              onExpand={() => setObserveCardOpen(true)}
+              onCollapse={observe ? () => setObserveCardOpen(false) : undefined}
             />
           )}
           {showEditor && (
@@ -690,9 +737,9 @@ export default function App() {
           <div className="editor-row">
             <div className="mode-sidebar">
               <div className="mode-tabs mode-tabs-vertical">
-                <button className={mode === 'new' ? 'mode-tab active' : 'mode-tab'} onClick={() => setMode('new')}>New</button>
-                <button className={mode === 'examples' ? 'mode-tab active' : 'mode-tab'} onClick={() => setMode('examples')}>Examples</button>
-                <button className={mode === 'learn' ? 'mode-tab active' : 'mode-tab'} onClick={() => setMode('learn')}>Learn</button>
+                <button className={mode === 'new' ? 'mode-tab active' : 'mode-tab'} onClick={() => { setObserve(null); setMode('new') }}>New</button>
+                <button className={mode === 'examples' ? 'mode-tab active' : 'mode-tab'} onClick={() => { setObserve(null); setMode('examples') }}>Examples</button>
+                <button className={mode === 'learn' ? 'mode-tab active' : 'mode-tab'} onClick={() => { setObserve(null); setMode('learn') }}>Learn</button>
               </div>
               {mode === 'new' && (
                 <div className="mode-panel">
@@ -728,6 +775,18 @@ export default function App() {
               )}
             </div>
             <div className="editor-col">
+              {observeModule && observeExample && (
+                <ObserveView
+                  key={observeExample.id}
+                  title={observeExample.title}
+                  source={observeExample.source}
+                  summary={observeModule.observe?.watch}
+                  registers={observeModule.observe?.registers}
+                  callouts={observeModule.observe?.callouts?.[observeExample.id]}
+                  onDone={() => markInteractiveDone(`example-${observeExample.id}`)}
+                  onOpenInEditor={() => openExample(observeExample.id, 'registers')}
+                />
+              )}
               {mode === 'learn' && (
                 <LearnDetail
                   nav={learnNav}
@@ -764,7 +823,7 @@ export default function App() {
           {showRun && (
             <>
               <div className="toolbar">
-                <button onClick={handleAssemble} disabled={isAnimating}>Assemble</button>
+                <button onClick={() => handleAssemble()} disabled={isAnimating}>Assemble</button>
                 <button onClick={handleRunTests} disabled={isAnimating || !activeAssignmentId}>Run Tests</button>
                 <button onClick={handleStepBack} disabled={!canStepBack || isAnimating} title="Undo the last Step/Animate tick/Run">⏪ Step Back</button>
                 <button onClick={handleStep} disabled={!canRun}>Step ▶</button>
