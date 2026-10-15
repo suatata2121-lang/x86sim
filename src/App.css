@@ -2382,6 +2382,21 @@ aside .panel {
   color: var(--warning-text);
 }
 
+.feedback-row-new td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent-text);
+}
+
+.feedback-message {
+  max-width: 32rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedback-status {
+  display: flex;
+  gap: 0.35rem;
+}
+
 .admin-code-modal {
   max-width: 760px;
 }

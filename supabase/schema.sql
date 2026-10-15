@@ -240,6 +240,45 @@ drop policy if exists "module progress: update own" on public.module_progress;
 create policy "module progress: update own" on public.module_progress
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+-- ---------------------------------------------------------------- feedback --
+-- Problems and requests sent from the site's Feedback button, read in the
+-- admin panel's inbox. Visitors who aren't signed in may send too (user_id
+-- null), but nobody can send in someone else's name, and only admins can
+-- read every message or change its status.
+
+create table if not exists public.feedback (
+  id            bigint generated always as identity primary key,
+  user_id       uuid references public.profiles (id) on delete set null,
+  kind          text not null check (kind in ('bug', 'suggestion', 'question', 'other')),
+  message       text not null check (length(message) between 1 and 5000),
+  reply_email   text check (length(reply_email) <= 200),
+  code          text check (length(code) <= 20000),
+  context       jsonb not null default '{}'::jsonb,
+  user_agent    text check (length(user_agent) <= 300),
+  status        text not null default 'new' check (status in ('new', 'seen', 'done')),
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists feedback_created_idx on public.feedback (created_at desc);
+
+alter table public.feedback enable row level security;
+
+drop policy if exists "feedback: insert own or anonymous" on public.feedback;
+create policy "feedback: insert own or anonymous" on public.feedback
+  for insert with check (
+    (user_id is null or user_id = auth.uid())
+    and status = 'new'
+    and length(context::text) <= 2000
+  );
+
+drop policy if exists "feedback: read own or admin" on public.feedback;
+create policy "feedback: read own or admin" on public.feedback
+  for select using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "feedback: admin updates" on public.feedback;
+create policy "feedback: admin updates" on public.feedback
+  for update using (public.is_admin()) with check (public.is_admin());
+
 -- ------------------------------------------------------------------ report --
 -- One row per student for the admin panel. security_invoker makes the view
 -- obey the RLS above, so a student querying it sees only their own row.
