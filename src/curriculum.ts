@@ -1,4 +1,4 @@
-import type { TestCase } from './core/grader'
+import type { SourceRules, TestCase } from './core/grader'
 
 // Every assignment ends its starter code with the standard DOS-exit sequence
 // (MOV AH,4Ch / INT 21h). That sequence overwrites AH — and therefore the
@@ -14,6 +14,8 @@ export interface Assignment {
   concept: string
   starterSource: string
   testCases: TestCase[]
+  /** How the program must be written, checked before the tests (see grader.ts). */
+  sourceRules?: SourceRules
 }
 
 export interface Task {
@@ -64,7 +66,11 @@ INT 21h
             testCases: [
               { name: 'BX = 240 (decimal)', expect: { regs: { BX: 240 } } },
               { name: 'CX = copy of AX = 240 (if AX was loaded correctly via hex)', expect: { regs: { CX: 240 } } },
+              { name: 'AL = F0h (the low byte of AX, which survives the exit code)', expect: { regs: { AL: 0xf0 } } },
             ],
+            sourceRules: {
+              mustMatch: [{ pattern: String.raw`^\s*MOV\s+AX\s*,\s*0[0-9A-F]*h\b`, message: 'Load AX with a hex literal, such as 0F0h.' }],
+            },
           },
         ],
       },
@@ -94,6 +100,11 @@ INT 21h
             testCases: [
               { name: 'BX = 25 (new reading), CX = 10 (old reading)', expect: { regs: { BX: 25, CX: 10 } } },
             ],
+            sourceRules: {
+              mustUse: [{ mnemonic: 'XCHG', message: 'Swap BX and CX with XCHG.' }],
+              // The two starting MOVs and the exit's MOV AH, 4Ch.
+              maxCount: [{ mnemonic: 'MOV', max: 3, message: 'Do the swap with XCHG alone, without extra MOV instructions.' }],
+            },
           },
         ],
       },

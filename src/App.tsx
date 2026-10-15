@@ -21,7 +21,7 @@ import { CURRICULUM, type Assignment } from './curriculum'
 import { HARDWARE_REFERENCE } from './hardwareReference'
 import { NUMBERING_REFERENCE } from './numberingSystems'
 import {
-  LEARNING_PATH, currentModule, isModuleDone, moduleForPage, unreadConcepts,
+  LEARNING_PATH, currentModule, interactiveParts, isModuleDone, moduleForPage, quizBlockers, unreadConcepts,
   type AsidePanel, type ConceptRef, type PathProgress,
 } from './learningPath'
 import { findQuiz } from './quizzes'
@@ -113,9 +113,21 @@ export default function App() {
   useStudySession(userId)
   const moduleProgress = useModuleProgress(userId)
   const pathProgress: PathProgress = useMemo(
-    () => ({ completed: completedAssignments, quizzesPassed: moduleProgress.quizzesPassed, reads: moduleProgress.reads }),
-    [completedAssignments, moduleProgress.quizzesPassed, moduleProgress.reads],
+    () => ({
+      completed: completedAssignments,
+      quizzesPassed: moduleProgress.quizzesPassed,
+      reads: moduleProgress.reads,
+      interactives: moduleProgress.interactives,
+    }),
+    [completedAssignments, moduleProgress.quizzesPassed, moduleProgress.reads, moduleProgress.interactives],
   )
+  // Every interactive item done, whichever module recorded it (for the ✓ on Learn pages).
+  const interactivesDone = useMemo(
+    () => new Set([...moduleProgress.interactives.values()].flatMap((ids) => [...ids])),
+    [moduleProgress.interactives],
+  )
+  // The "What to watch" note of an example opened from a module's Observe step.
+  const [watchNote, setWatchNote] = useState<{ title: string; text: string } | null>(null)
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   const [pathCardHidden, setPathCardHidden] = useState(() => window.localStorage.getItem(PATH_CARD_HIDDEN_KEY) === '1')
   const animTimerRef = useRef<number | null>(null)
@@ -232,6 +244,11 @@ export default function App() {
     setFlags({ ...cpu.flags })
     setOutput(cpu.output.join(''))
     setHalted(cpu.halted)
+    // An unedited example run to its exit counts for a module's Observe item.
+    if (cpu.halted && cpu.steps > 0) {
+      const example = EXAMPLES.find((e) => e.source === activeTab.source)
+      if (example) markInteractiveDone(`example-${example.id}`)
+    }
     setHitBreakpoint(cpu.hitBreakpoint)
     setWaitingForInput(cpu.waitingForInput)
     const instr = cpu.instructions[cpu.ip]
@@ -366,11 +383,22 @@ export default function App() {
     }
   }
 
-  // A quiz module's quiz (issue #20). The card and the last "Mark as read" only
-  // offer it once every topic is read; this checks again so nothing else can.
+  // A quiz module's quiz (issues #20, #25). The card and the last "Mark as
+  // read" only offer it once the rest of the checklist is done; this checks
+  // again, and quiz_draw checks once more on the server.
   function openQuiz(moduleId: string) {
     const m = LEARNING_PATH.find((x) => x.id === moduleId)
-    if (m?.quiz && unreadConcepts(m, pathProgress).length === 0) setQuizModuleId(moduleId)
+    if (m?.quiz && quizBlockers(m, pathProgress) === 0) setQuizModuleId(moduleId)
+  }
+
+  // An interactive item finished (a stepper reached its end, a demo halted,
+  // a challenge was solved, an example ran to its exit). Recorded for every
+  // module that lists it, for signed-in students only.
+  function markInteractiveDone(itemId: string) {
+    if (!auth.session) return
+    for (const m of LEARNING_PATH) {
+      if (m.interactives?.some((i) => interactiveParts(i).includes(itemId))) moduleProgress.markInteractive(m.id, itemId)
+    }
   }
 
   // "Mark as read" at the end of a Learn page that belongs to a quiz module.
@@ -384,13 +412,16 @@ export default function App() {
     const isRead = !unread.some((c) => c.id === ref.id)
     const nextUnread = unread.find((c) => c.id !== ref.id)
     const done = isModuleDone(m, pathProgress, moduleProgress.rows.get(m.id)?.step)
+    // Whether reading this page is the last thing the quiz is waiting for
+    // (modules with interactives or tasks may still have other items open).
+    const quizReady = !done && quizBlockers(m, pathProgress) - (isRead ? 0 : 1) === 0
 
     function goOn() {
       if (nextUnread) {
         openConcept(nextUnread)
         requestAnimationFrame(() => document.querySelector('.learn-detail-panel')?.scrollIntoView({ block: 'start' }))
-      } else {
-        if (!done) moduleProgress.setStep(m!.id, 'quiz')
+      } else if (quizReady) {
+        moduleProgress.setStep(m!.id, 'quiz')
         setQuizModuleId(m!.id)
       }
     }
@@ -402,7 +433,7 @@ export default function App() {
             <span className="read-done">✓ Marked as read</span>
             {nextUnread
               ? <button className="link-button" onClick={goOn}>Next unread topic: {conceptTitle(nextUnread)} →</button>
-              : !done && <button className="link-button" onClick={goOn}>Take the quiz →</button>}
+              : quizReady && <button className="link-button" onClick={goOn}>Take the quiz →</button>}
           </>
         ) : (
           <button
@@ -412,7 +443,7 @@ export default function App() {
               goOn()
             }}
           >
-            {nextUnread ? 'Mark as read → next topic' : 'Mark as read → take the quiz'}
+            {nextUnread ? 'Mark as read → next topic' : quizReady ? 'Mark as read → take the quiz' : 'Mark as read'}
           </button>
         )}
       </div>
@@ -422,11 +453,12 @@ export default function App() {
   // Observe: the example in its own tab with the panel that shows the effect.
   // Pressing Continue again returns to that tab instead of stacking copies,
   // as long as the student hasn't edited it.
-  function openExample(exampleId: string, panel: AsidePanel) {
+  function openExample(exampleId: string, panel: AsidePanel, watch?: string) {
     setMode('examples')
     setSelectedExampleId(exampleId)
     setAsideTab(panel)
     const example = EXAMPLES.find((e) => e.id === exampleId)
+    setWatchNote(example && watch ? { title: example.title, text: watch } : null)
     const existing = example && tabs.find((t) => t.title === example.title && t.source === example.source)
     if (existing) handleSwitchTab(existing.id)
     else loadExample(exampleId)
@@ -454,7 +486,7 @@ export default function App() {
   function handleRunTests() {
     const assignment = ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)
     if (!assignment) return
-    const report = gradeSource(source, assignment.testCases)
+    const report = gradeSource(source, assignment.testCases, assignment.sourceRules)
     setGradeReport(report)
     recordAttempt({
       assignmentId: assignment.id,
@@ -702,7 +734,18 @@ export default function App() {
                   activeAssignmentId={activeAssignmentId}
                   completedIds={completedAssignments}
                   topicFooter={backendEnabled ? topicFooter : undefined}
+                  interactivesDone={interactivesDone}
+                  onInteractiveDone={markInteractiveDone}
                 />
+              )}
+              {watchNote && mode === 'examples' && activeTab.title === watchNote.title && (
+                <div className="panel watch-note">
+                  <div className="path-header">
+                    <h3>What to watch</h3>
+                    <button className="modal-close" onClick={() => setWatchNote(null)} aria-label="Hide">×</button>
+                  </div>
+                  <p className="example-description">{watchNote.text}</p>
+                </div>
               )}
               {showEditor && (
                 <CodeEditor
@@ -813,7 +856,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          {shownAsideTab === 'registers' && <RegisterView regs={regs} flags={flags} />}
+          {shownAsideTab === 'registers' && <RegisterView regs={regs} flags={flags} stepKey={cpuRef.current.steps} />}
           {shownAsideTab === 'databus' && (
             <DataBusView
               key={`bus-${cpuGeneration}`}

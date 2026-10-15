@@ -13,12 +13,14 @@
 import type { HardwareVisual } from './components/HardwarePlayground'
 import type { FigureSpec } from './components/FigureStepper'
 import type { PipelineScenario } from './core/biuEu'
+import type { NumVisual } from './numberingSystems'
 
 export interface HardwareTopic {
   id: string
   title: string
   summary: string
-  content: string[]
+  /** Paragraphs and drawn blocks (components/NumberVisual.tsx). */
+  content: (string | NumVisual)[]
   demo?: { source: string; visual: HardwareVisual }
   // A purely illustrative diagram for topics with nothing to actually step
   // through in this simulator (e.g. segment:offset math this simulator never
@@ -26,9 +28,10 @@ export interface HardwareTopic {
   staticDiagram?: 'segmented-addressing'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
-  // A purpose-built interactive view instead of a Cpu demo: 'fde' is the three-phase
-  // stepper (FetchDecodeExecuteView), 'alu' is the live ALU explorer (AluView).
-  interactive?: 'fde' | 'alu'
+  // A purpose-built interactive view instead of a Cpu demo: 'fde' is the
+  // fetch-decode-execute stepper (FetchDecodeExecuteView), 'alu' is the live
+  // ALU explorer (AluView), 'move-it' the MOV/XCHG challenges (MoveItView).
+  interactive?: 'fde' | 'alu' | 'move-it'
   // A step-through figure built from data (components/FigureStepper.tsx).
   figure?: FigureSpec
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
@@ -53,17 +56,29 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
       {
         id: 'fetch-decode-execute',
         title: 'Fetch-Decode-Execute Cycle',
-        summary: 'How the CPU turns one line of assembly into a change in its state.',
+        summary: 'How the CPU turns one instruction in memory into a change in its registers.',
         content: [
-          'Every instruction goes through the same three phases: fetch (read the instruction at IP from ' +
-            'memory), decode (figure out the mnemonic and operands), and execute (actually do it -- move a ' +
-            'value, compute something in the ALU, or read/write memory). IP then advances to the next ' +
-            'instruction and the cycle repeats.',
-          'Step through the three phases below for one instruction, ADD AX, BX. Fetch brings the bytes in, decode ' +
-            'works out what they mean and which operands they use, and execute does the work. Each phase only ' +
-            'hands its result to the next one.',
+          'Every instruction goes through the same three phases. Fetch: the Bus Interface Unit (BIU) reads the ' +
+            "instruction's bytes from memory at the address in IP, and IP moves past them. Decode: the control unit " +
+            'reads the opcode and works out which operation this is and which operands it uses. Execute: the work ' +
+            'is done -- the ALU computes a result, a register is written, or a value is read from or written to ' +
+            'memory. Then the cycle starts again at the new IP.',
+          'An instruction in memory is not text. The assembler turns each line into machine-code bytes, and those ' +
+            'bytes are what the CPU fetches. Instructions have different lengths: MOV AX, 5 takes 3 bytes, ADD AX, BX ' +
+            'only 2. That is why IP jumps forward by the length of each instruction rather than by 1.',
+          'Step through the short program below, stored from address 0100h. For each instruction, watch which part ' +
+            'of the CPU is working (lit up in the diagram), which memory bytes are read, and how IP and the registers ' +
+            'change. The last instruction writes AX to memory: a word is stored low byte first, so 0008h becomes the ' +
+            'bytes 08h, 00h -- and the address 0200h inside the instruction is stored the same way, as 00 02.',
         ],
         interactive: 'fde',
+        notes: [
+          'The real 8086 overlaps these phases: the BIU fetches the next bytes while the EU is still executing the ' +
+            'current instruction (see "BIU & EU: The 8086\'s Two Units"). Here they are shown one after another so ' +
+            'each phase is easy to follow.',
+          'The main simulator runs one line at a time and highlights the current line instead of showing IP as a ' +
+            'byte address.',
+        ],
       },
       {
         id: 'biu-eu',
@@ -136,17 +151,26 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
       {
         id: 'register-file',
         title: 'Register File',
-        summary: 'The small set of fast storage locations inside the CPU itself.',
+        summary: 'The small set of fast storage locations inside the CPU, and what each one is for.',
         content: [
-          'AX, BX, CX, DX, SI, DI, BP, and SP are the general-purpose 16-bit registers this simulator models ' +
-            '(DS/ES/SS/CS also exist and accept values so MASM-style boilerplate runs, but this simulator has no ' +
-            'real segmentation, so they never take part in an address calculation -- see "Segmented Addressing" below). AX-DX can also be addressed as two independent 8-bit halves each ' +
-            '(AH/AL, BH/BL, CH/CL, DH/DL) -- SI, DI, BP, and SP cannot, they are only ever a full 16-bit word.',
-          'Reading or writing a register is effectively instant compared to a memory access -- there is no bus ' +
-            'transaction involved, which is exactly why registers exist: they are the CPU\'s own scratch space.',
-          'Watch the "8-bit halves" column below: AX is built entirely out of two separate byte-sized writes ' +
-            '(AH then AL), and writing BL alone only changes BX\'s low byte, leaving BH untouched. SI has no ' +
-            'such column entry -- it can\'t be split.',
+          "Registers are the CPU's own storage. Reading or writing one needs no bus cycle, so it is far faster than " +
+            'a memory access -- that is why programs load values into registers, work on them there, and write the ' +
+            'results back to memory only when needed.',
+          'The 8086 has eight general-purpose 16-bit registers. Any of them can hold any value, but each one also has ' +
+            'a job that some instructions expect it to do:',
+          { kind: 'registerRoles' },
+          'AX, BX, CX and DX can also be used as two independent 8-bit registers: AH is the high byte of AX and AL ' +
+            'the low byte, and the same for BH/BL, CH/CL and DH/DL. Writing one half never touches the other. SI, DI, ' +
+            'BP and SP cannot be split.',
+          { kind: 'register', name: 'AX', value: 0x1234, bits: 16 },
+          'Two more registers are not for data. IP holds the address of the next instruction (see ' +
+            '"Fetch-Decode-Execute Cycle"); programs never write it with MOV, only jumps and calls change it. FLAGS ' +
+            'holds one-bit results of the last ALU operation, such as "the result was zero" (Module 3). DS, ES, SS ' +
+            'and CS are segment registers; this simulator accepts them so MASM-style programs run, but it has no ' +
+            'real segmentation (see "Segmented Addressing").',
+          'Press Step below and watch the highlighted row: MOV AH, 12h and MOV AL, 34h build AX = 1234h one byte at ' +
+            'a time, and MOV BL, 99h changes only the low byte of BX while BH stays ABh. SI has no halves column -- ' +
+            'it is always a full 16-bit register.',
         ],
         demo: {
           visual: 'registers',
@@ -159,6 +183,27 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'MOV SI, 500    ; SI has no 8-bit halves -- always a full 16-bit register\n' +
             'HLT\n',
         },
+      },
+      {
+        id: 'data-movement',
+        title: 'Moving Data: MOV and XCHG',
+        summary: 'Copy values between registers and memory, swap them, and learn the rules the assembler checks.',
+        content: [
+          'Most instructions in a program just move data. MOV dest, src copies src into dest. The source is never ' +
+            'changed, and whatever dest held before is lost.',
+          'The source can be a number (an immediate), a register or a memory location. The destination can be a ' +
+            'register or a memory location. The assembler checks four rules:',
+          { kind: 'movRules' },
+          'Writing an 8-bit register changes only that half. MOV AL, 7 leaves AH as it was, so only the low byte of ' +
+            'AX changes. This matters at the end of every program: MOV AH, 4Ch, the first half of the exit-to-DOS ' +
+            'sequence, overwrites the high byte of AX.',
+          'XCHG op1, op2 swaps two operands in one instruction. Without it a swap needs a third register: ' +
+            'MOV DX, AX / MOV AX, BX / MOV BX, DX. The same size rule applies, and at least one operand must be a ' +
+            'register.',
+          'Try the five challenges below. Each starts from the register values shown. Write the instruction(s) that ' +
+            'reach the goal and press Check.',
+        ],
+        interactive: 'move-it',
       },
       {
         id: 'alu-operations',

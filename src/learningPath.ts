@@ -17,17 +17,41 @@ export type ConceptRef =
   | { section: 'numbering'; id: string }
   | { section: 'reference'; id: string } // an Instruction Reference category
 
+/**
+ * Something on a module's checklist that the student has to do, not just
+ * read (issue #25): step through an interactive view, run a demo or an
+ * example to the end, solve challenges. Each completion is recorded in
+ * interactive_runs under the item's id, or under each of its `parts` (the
+ * row is done when all of them are).
+ */
+export interface Interactive {
+  id: string
+  /** Shown on the checklist; {n} is replaced by the number of parts done. */
+  label: string
+  /** The Learn page (a concept of the module) where it lives. */
+  topic?: string
+  /** An example (examples.ts) run in the main simulator; its id is `example-<id>`. */
+  example?: string
+  parts?: string[]
+}
+
 export interface LearningModule {
   id: string
   title: string
   summary: string
   concepts: ConceptRef[]
-  observe?: { examples: string[]; panel: AsidePanel }
+  /** `watch` is shown above the editor when the example is opened from Observe. */
+  observe?: { examples: string[]; panel: AsidePanel; watch?: string }
   assignments: string[]
   /** The steps this module shows, in order; the five standard ones when absent. */
   steps?: StepId[]
-  /** Quiz (src/quizzes.ts) that closes the module; it opens once every concept is marked as read. */
+  /**
+   * Quiz (src/quizzes.ts) that closes the module. It opens once everything
+   * else on the module's checklist is done: every concept read, every
+   * interactive done and every assignment passed.
+   */
   quiz?: string
+  interactives?: Interactive[]
   /** Modules that must be done before this one can be opened. */
   requires?: string[]
   /** Tools shown next to this module's Learn pages; all of them when absent. */
@@ -79,15 +103,37 @@ export const LEARNING_PATH: LearningModule[] = [
     title: 'The CPU and Its Registers',
     summary: 'See how the CPU fetches, decodes and executes instructions that move data between registers.',
     requires: ['m0'],
-    concepts: [hw('fetch-decode-execute'), hw('register-file')],
-    observe: { examples: ['arithmetic'], panel: 'registers' },
+    concepts: [hw('fetch-decode-execute'), hw('register-file'), hw('data-movement')],
+    observe: {
+      examples: ['arithmetic'],
+      panel: 'registers',
+      watch:
+        'Open the Registers panel and press Step one line at a time. Before each Step, say what the next line will ' +
+        'change. Watch for three things: ADD AX, BX changes only AX (BX stays 17); MOV CX, AX copies 37 into CX and ' +
+        'leaves AX alone; and MOV AH, 4Ch changes only the high byte of AX, from 0025h to 4C25h -- AL still holds ' +
+        '25h, which is 37.',
+    },
     assignments: ['t1-sensor-registers', 't2-swap-readings'],
+    // Issue #25: read, try every interactive, pass both tasks, then the quiz.
+    steps: ['concept', 'observe', 'task', 'quiz'],
+    quiz: 'm1',
+    interactives: [
+      { id: 'fde-program', label: 'Try: step through the fetch-decode-execute program', topic: 'fetch-decode-execute' },
+      { id: 'register-file-demo', label: 'Run: the Register File demo to the end', topic: 'register-file' },
+      {
+        id: 'move-it',
+        label: 'Solve: the Moving Data challenges ({n}/5)',
+        topic: 'data-movement',
+        parts: ['move-it-1', 'move-it-2', 'move-it-3', 'move-it-4', 'move-it-5'],
+      },
+      { id: 'example-arithmetic', label: 'Observe: run the Arithmetic example to the end', example: 'arithmetic' },
+    ],
   },
   {
     id: 'm2',
     title: 'Memory and the Bus',
     summary: 'Follow data as it travels between the CPU and memory over the address and data buses.',
-    requires: ['m0'],
+    requires: ['m1'],
     concepts: [hw('bus-types'), hw('address-demux'), hw('segmented-addressing')],
     observe: { examples: ['array-sum', 'base-index'], panel: 'memory' },
     assignments: ['t3-snapshot'],
@@ -176,6 +222,8 @@ export interface PathProgress {
   quizzesPassed: Set<string>
   /** Module id -> concept ids marked as read. */
   reads: Map<string, Set<string>>
+  /** Module id -> interactive item ids done (interactive_runs). */
+  interactives: Map<string, Set<string>>
 }
 
 /** The steps Continue walks through, in order: no placeholders, no Task without assignments. */
@@ -184,18 +232,22 @@ export function activeSteps(module: LearningModule): StepId[] {
   return module.assignments.length > 0 ? ['concept', 'observe', 'task'] : ['concept', 'observe']
 }
 
-// A module with a quiz is done only once the quiz is passed, and one with
-// assignments only when every one is passed (both come from graded attempts,
-// not from the step the student is on). Modules with neither close once the
-// student finishes Observe, until Predict (#11) exists.
+// A module with a quiz is done once the quiz and every assignment are
+// passed, and one with only assignments when they are (both come from graded
+// attempts, not from the step the student is on). Modules with neither close
+// once the student finishes Observe, until Predict (#11) exists.
 export function isModuleDone(module: LearningModule, progress: PathProgress, step: StoredStep | undefined): boolean {
-  if (module.quiz) return progress.quizzesPassed.has(module.id)
-  return module.assignments.length > 0 ? module.assignments.every((id) => progress.completed.has(id)) : step === 'done'
+  const tasksPassed = module.assignments.every((id) => progress.completed.has(id))
+  if (module.quiz) return progress.quizzesPassed.has(module.id) && tasksPassed
+  return module.assignments.length > 0 ? tasksPassed : step === 'done'
 }
 
 export function moduleStatus(module: LearningModule, progress: PathProgress, step: StoredStep | undefined): ModuleStatus {
   if (isModuleDone(module, progress, step)) return 'done'
-  if (step !== undefined || module.assignments.some((id) => progress.completed.has(id)) || progress.reads.get(module.id)?.size) {
+  if (
+    step !== undefined || module.assignments.some((id) => progress.completed.has(id)) ||
+    progress.reads.get(module.id)?.size || progress.interactives.get(module.id)?.size
+  ) {
     return 'in-progress'
   }
   return 'not-started'
@@ -205,6 +257,45 @@ export function moduleStatus(module: LearningModule, progress: PathProgress, ste
 export function unreadConcepts(module: LearningModule, progress: PathProgress): ConceptRef[] {
   const read = progress.reads.get(module.id)
   return module.concepts.filter((c) => !read?.has(c.id))
+}
+
+/** The item ids an interactive is recorded under: its parts, or itself. */
+export const interactiveParts = (item: Interactive) => item.parts ?? [item.id]
+
+export function partsDone(module: LearningModule, item: Interactive, progress: PathProgress): number {
+  const done = progress.interactives.get(module.id)
+  return interactiveParts(item).filter((p) => done?.has(p)).length
+}
+
+export type ChecklistRow =
+  | { kind: 'read'; concept: ConceptRef; done: boolean }
+  | { kind: 'interactive'; item: Interactive; done: boolean; partsDone: number }
+  | { kind: 'tasks'; done: boolean }
+  | { kind: 'quiz'; done: boolean }
+
+/**
+ * What a quiz module asks for, in order: read every concept, do every
+ * interactive, pass the assignments, pass the quiz. quiz_draw checks the same
+ * list on the server (quiz_settings.required_*).
+ */
+export function checklist(module: LearningModule, progress: PathProgress): ChecklistRow[] {
+  const read = progress.reads.get(module.id)
+  return [
+    ...module.concepts.map((c): ChecklistRow => ({ kind: 'read', concept: c, done: !!read?.has(c.id) })),
+    ...(module.interactives ?? []).map((item): ChecklistRow => {
+      const n = partsDone(module, item, progress)
+      return { kind: 'interactive', item, done: n === interactiveParts(item).length, partsDone: n }
+    }),
+    ...(module.assignments.length > 0
+      ? [{ kind: 'tasks', done: module.assignments.every((id) => progress.completed.has(id)) } as ChecklistRow]
+      : []),
+    ...(module.quiz ? [{ kind: 'quiz', done: progress.quizzesPassed.has(module.id) } as ChecklistRow] : []),
+  ]
+}
+
+/** How many checklist items still stand between the student and the module's quiz. */
+export function quizBlockers(module: LearningModule, progress: PathProgress): number {
+  return checklist(module, progress).filter((r) => r.kind !== 'quiz' && !r.done).length
 }
 
 /** Whether every module this one requires is done. */
@@ -247,13 +338,15 @@ export function currentModule(rows: Map<string, ModuleProgressRow>, progress: Pa
 
 /**
  * The step to resume a module on: its stored step, or Concept if never opened.
- * A quiz module stays on Concept until every topic is read, and one stored as
- * 'done' before it had a quiz (m0 used to close after Observe) starts over.
+ * A locked quiz sends the student back to the step before it, and a module
+ * stored as 'done' before it had a quiz (m0 used to close after Observe)
+ * starts over.
  */
 export function resumeStep(module: LearningModule, row: ModuleProgressRow | undefined, progress: PathProgress): StepId {
   const step = !row || row.step === 'done' ? 'concept' : row.step
-  if (!activeSteps(module).includes(step)) return 'concept'
-  return step === 'quiz' && unreadConcepts(module, progress).length > 0 ? 'concept' : step
+  const steps = activeSteps(module)
+  if (!steps.includes(step)) return 'concept'
+  return step === 'quiz' && quizBlockers(module, progress) > 0 ? steps[Math.max(0, steps.indexOf('quiz') - 1)] : step
 }
 
 /**

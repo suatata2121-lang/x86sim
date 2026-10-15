@@ -149,23 +149,56 @@ export function runTestCase(cpu: Cpu, testCase: TestCase): TestResult {
   return { name: testCase.name, passed: failures.length === 0, failures, steps: cpu.steps, cycles: cpu.cycles }
 }
 
-export function gradeSource(source: string, testCases: TestCase[]): GradeReport {
+/**
+ * Checks on how a program is written, for tasks whose point is a particular
+ * instruction or notation (the tests alone only see the end state, so e.g. a
+ * swap done with three MOVs would pass an XCHG task).
+ */
+export interface SourceRules {
+  /** Case-insensitive, multiline regexes the source must match, with the message shown when it doesn't. */
+  mustMatch?: { pattern: string; message: string }[]
+  /** Mnemonics that must appear at least once. */
+  mustUse?: { mnemonic: string; message: string }[]
+  /** The most times a mnemonic may appear. */
+  maxCount?: { mnemonic: string; max: number; message: string }[]
+}
+
+// Each rule becomes a result row ahead of the tests, so it counts in the
+// score like a test and shows on its own line when it fails.
+function checkRules(source: string, mnemonics: string[], rules: SourceRules): TestResult[] {
+  // Comments can't satisfy a rule.
+  const code = source.split(/\r?\n/).map((l) => l.replace(/;.*$/, '')).join('\n')
+  const count = (m: string) => mnemonics.filter((x) => x === m.toUpperCase()).length
+  const row = (message: string, ok: boolean): TestResult =>
+    ({ name: `Rule: ${message}`, passed: ok, failures: ok ? [] : [message], steps: 0, cycles: 0 })
+  return [
+    ...(rules.mustMatch ?? []).map((r) => row(r.message, new RegExp(r.pattern, 'im').test(code))),
+    ...(rules.mustUse ?? []).map((r) => row(r.message, count(r.mnemonic) > 0)),
+    ...(rules.maxCount ?? []).map((r) => row(r.message, count(r.mnemonic) <= r.max)),
+  ]
+}
+
+export function gradeSource(source: string, testCases: TestCase[], rules?: SourceRules): GradeReport {
   const { instructions, data, errors } = assemble(source)
+  const ruleCount = rules ? checkRules('', [], rules).length : 0
   if (errors.length > 0) {
-    return { assembled: false, assembleErrors: errors, results: [], passedCount: 0, totalCount: testCases.length }
+    return { assembled: false, assembleErrors: errors, results: [], passedCount: 0, totalCount: testCases.length + ruleCount }
   }
 
-  const results = testCases.map((testCase) => {
-    const cpu = new Cpu()
-    cpu.load(instructions, data)
-    return runTestCase(cpu, testCase)
-  })
+  const results = [
+    ...(rules ? checkRules(source, instructions.map((i) => i.mnemonic), rules) : []),
+    ...testCases.map((testCase) => {
+      const cpu = new Cpu()
+      cpu.load(instructions, data)
+      return runTestCase(cpu, testCase)
+    }),
+  ]
 
   return {
     assembled: true,
     assembleErrors: [],
     results,
     passedCount: results.filter((r) => r.passed).length,
-    totalCount: testCases.length,
+    totalCount: results.length,
   }
 }

@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { assemble } from '../core/assembler'
 import type { Base, NumVisual } from '../numberingSystems'
 
 // Draws the worked examples on the Numbering Systems pages (issue #22).
@@ -678,5 +679,76 @@ export function NumberVisual({ visual: v }: { visual: NumVisual }) {
     case 'register': return <Block legend={REGISTER_LEGEND}><Register {...v} /></Block>
     case 'mul': return <Mul {...v} />
     case 'div': return <Div {...v} />
+    case 'registerRoles': return <RegisterRoles />
+    case 'movRules': return <MovRules />
   }
+}
+
+const REGISTER_ROLES: [string, string, string][] = [
+  ['AX', 'Accumulator', 'The default operand of MUL, DIV, IN and OUT.'],
+  ['BX', 'Base', 'Can hold a memory address: MOV AL, [BX].'],
+  ['CX', 'Count', 'The counter for LOOP; CL holds the shift count.'],
+  ['DX', 'Data', 'The port number for IN/OUT; the upper half of a 32-bit MUL or DIV result.'],
+  ['SI', 'Source Index', 'The address of source data, e.g. in string copies.'],
+  ['DI', 'Destination Index', 'The address of destination data.'],
+  ['BP', 'Base Pointer', 'The address of data on the stack, such as subroutine parameters.'],
+  ['SP', 'Stack Pointer', "The top of the stack. PUSH, POP, CALL and RET change it -- don't use it for ordinary data."],
+]
+
+function RegisterRoles() {
+  return (
+    <Block legend={[]}>
+      <table className="nv-table nv-roles">
+        <thead><tr><th>Register</th><th>Name</th><th>Its special job</th></tr></thead>
+        <tbody>
+          {REGISTER_ROLES.map(([reg, name, job]) => (
+            <tr key={reg}>
+              <td><span className="nv-reg-chip">{reg}</span></td>
+              <td>{name}</td>
+              <td>{job}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Block>
+  )
+}
+
+const MOV_RULES: { rule: string; ok: string[]; bad: string[] }[] = [
+  { rule: 'Both operands must be the same size.', ok: ['MOV AL, BL'], bad: ['MOV AX, BL'] },
+  { rule: 'At most one operand can be in memory. Copy through a register instead.', ok: ['MOV AX, [Y]', 'MOV [X], AX'], bad: ['MOV [X], [Y]'] },
+  { rule: "The destination can't be a number.", ok: [], bad: ['MOV 5, AX'] },
+  { rule: 'Segment registers are special.', ok: [], bad: ['MOV CS, AX', 'MOV DS, 5'] },
+]
+
+// The message shown next to a rejected line is whatever this simulator's
+// assembler really says about it, so the box can't drift from the assembler.
+function assemblerMessage(line: string): string | null {
+  const { errors } = assemble(`X DW 0
+Y DW 0
+${line}`)
+  return errors[0]?.message ?? null
+}
+
+function MovRules() {
+  return (
+    <Block legend={[['var(--success-text)', 'accepted'], ['var(--num-carry)', 'rejected by the assembler']]}>
+      <ol className="nv-rules-list">
+        {MOV_RULES.map(({ rule, ok, bad }) => (
+          <li key={rule}>
+            <p className="nv-rule-text">{rule}</p>
+            {ok.length > 0 && (
+              <p className="nv-ok"><span aria-label="accepted">✓</span> <code>{ok.join(' then ')}</code></p>
+            )}
+            {bad.map((line) => (
+              <p key={line} className="nv-bad">
+                <span aria-label="rejected">✗</span> <code>{line}</code>
+                <span className="nv-bad-msg"> → {assemblerMessage(line) ?? '(accepted)'}</span>
+              </p>
+            ))}
+          </li>
+        ))}
+      </ol>
+    </Block>
+  )
 }

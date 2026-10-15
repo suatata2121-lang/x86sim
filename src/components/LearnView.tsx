@@ -11,6 +11,7 @@ import { AluView } from './AluView'
 import { FigureStepper } from './FigureStepper'
 import { BiuEuView } from './BiuEuView'
 import { NumberVisual } from './NumberVisual'
+import { MoveItView } from './MoveItView'
 import type { ConceptRef } from '../learningPath'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -402,12 +403,18 @@ export function LearnDetail({
   activeAssignmentId,
   completedIds,
   topicFooter,
+  interactivesDone,
+  onInteractiveDone,
 }: {
   nav: LearnNav
   activeAssignmentId: string | null
   completedIds: Set<string>
   /** Rendered at the very end of a Hardware or Numbering Systems page (the learning path's "Mark as read"). */
   topicFooter?: (ref: ConceptRef) => ReactNode
+  /** Interactive item ids the student has finished (learning-path checklists, #25). */
+  interactivesDone?: Set<string>
+  /** Called when an interactive on a page is finished; ids match LearningModule.interactives. */
+  onInteractiveDone?: (itemId: string) => void
 }) {
   const stage: Stage | null = CURRICULUM.find((s) => s.id === nav.stageId) ?? null
   const task: Task | null = stage?.tasks.find((t) => t.id === nav.taskId) ?? null
@@ -488,12 +495,23 @@ export function LearnDetail({
       <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
         <h4 className="learn-stage-title">{hwTopic.title}</h4>
         <p className="example-description">{hwTopic.summary}</p>
-        {hwTopic.content.map((p, idx) => <p key={idx} className="example-description">{p}</p>)}
-        {hwTopic.demo && <HardwarePlayground source={hwTopic.demo.source} visual={hwTopic.demo.visual} />}
+        {hwTopic.content.map((p, idx) =>
+          typeof p === 'string'
+            ? <p key={idx} className="example-description">{p}</p>
+            : <NumberVisual key={idx} visual={p} />
+        )}
+        {hwTopic.demo && (
+          <HardwarePlayground
+            source={hwTopic.demo.source}
+            visual={hwTopic.demo.visual}
+            onHalted={() => onInteractiveDone?.(`${hwTopic.id}-demo`)}
+          />
+        )}
         {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
         {hwTopic.timing && <TimingDiagramView />}
         {hwTopic.figure && <FigureStepper spec={hwTopic.figure} />}
-        {hwTopic.interactive === 'fde' && <FetchDecodeExecuteView />}
+        {hwTopic.interactive === 'fde' && <FetchDecodeExecuteView onFinish={() => onInteractiveDone?.('fde-program')} />}
+        {hwTopic.interactive === 'move-it' && <MoveItView solved={interactivesDone} onSolved={onInteractiveDone} />}
         {hwTopic.interactive === 'alu' && <AluView />}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (

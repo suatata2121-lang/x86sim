@@ -32,7 +32,7 @@ ADD AX, BX      ; AX = 42
 SUB AX, 5       ; AX = 37
 MOV CX, AX      ; copy the result into CX
 
-MOV AH, 4Ch
+MOV AH, 4Ch     ; exit to DOS: this overwrites AH, so AX changes from 0025h to 4C25h
 INT 21h
 `,
   },

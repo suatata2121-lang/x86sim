@@ -203,16 +203,135 @@ header p {
   border-bottom: 1px solid var(--border);
 }
 
-.fde-state td:first-child {
+.fde-state td {
   font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.fde-state td:nth-child(odd) {
   color: var(--text-dim);
-  width: 40%;
+}
+
+.fde-state td.changed,
+.fde-memory tr.changed td {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 700;
 }
 
 .fde-controls {
   display: flex;
+  align-items: center;
   gap: 0.6rem;
   margin: 0.5rem 0;
+}
+
+.fde-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.fde-progress-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fde-progress-line code {
+  min-width: 9.5rem;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+.fde-progress-line .fde-stage {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.fde-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.fde-memory {
+  border-collapse: collapse;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
+.fde-memory th {
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  font-weight: normal;
+  text-align: left;
+}
+
+.fde-memory td {
+  padding: 0.05rem 0.6rem 0.05rem 0;
+}
+
+.fde-memory tr.fde-hit td {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.fde-gap td {
+  color: var(--text-faint);
+}
+
+.fde-ip {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.fde-diagram {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.4rem;
+  min-width: 16rem;
+}
+
+.fde-unit,
+.fde-bus {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  transition: background 0.2s, color 0.2s;
+}
+
+.fde-bus {
+  justify-content: center;
+  border-style: dashed;
+}
+
+.fde-unit.on,
+.fde-bus.on,
+.fde-part.on {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.fde-eu {
+  flex: 1;
+}
+
+.fde-part {
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .alu-result {
@@ -848,6 +967,26 @@ aside .panel {
 .flag.on {
   background: var(--success-bg);
   color: var(--success-text);
+}
+
+/* What the last step changed (RegisterView): the row, the half, the flag. */
+.reg-table tr.reg-changed td {
+  background: var(--accent-bg);
+}
+
+.reg-table tr.reg-changed td:first-child {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.reg-half-changed {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.flag.changed {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
 }
 
 .errors {
@@ -2948,4 +3087,185 @@ aside .panel {
 .nv-op {
   font-size: 1.2rem;
   color: var(--text-dim);
+}
+
+.nv-roles td {
+  text-align: left;
+  white-space: normal;
+  font-family: system-ui, sans-serif;
+}
+
+.nv-reg-chip {
+  display: inline-block;
+  min-width: 2.2rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--num-hex);
+  border-radius: 4px;
+  color: var(--num-hex);
+  font-family: ui-monospace, Consolas, monospace;
+  font-weight: 700;
+  text-align: center;
+}
+
+.nv-rules-list {
+  margin: 0;
+  padding-left: 1.3rem;
+}
+
+.nv-rules-list li {
+  margin-bottom: 0.6rem;
+}
+
+.nv-rule-text {
+  margin: 0 0 0.2rem;
+  font-weight: 600;
+}
+
+.nv-ok,
+.nv-bad {
+  margin: 0.1rem 0;
+}
+
+.nv-ok {
+  color: var(--success-text);
+}
+
+.nv-bad {
+  color: var(--num-carry);
+}
+
+.nv-ok code,
+.nv-bad code {
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.nv-bad-msg {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* ---- Move It challenges (components/MoveItView.tsx) ---- */
+
+.moveit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moveit-card {
+  margin-bottom: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.moveit-card.solved {
+  border-color: var(--success-bg);
+}
+
+.moveit-title,
+.moveit-regs {
+  margin: 0 0 0.35rem;
+}
+
+.moveit-regs {
+  color: var(--text-dim);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
+.moveit-input {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.moveit-input textarea {
+  flex: 1;
+  max-width: 22rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  color: var(--text);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  resize: vertical;
+}
+
+.moveit-error {
+  margin: 0.35rem 0 0;
+  color: var(--error-text);
+  font-size: 0.85rem;
+}
+
+.moveit-hint {
+  margin: 0.35rem 0 0;
+  color: var(--warning-text);
+  font-size: 0.85rem;
+}
+
+.moveit-table {
+  margin-top: 0.4rem;
+  border-collapse: collapse;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
+.moveit-table th,
+.moveit-table td {
+  padding: 0.1rem 0.6rem;
+  text-align: right;
+}
+
+.moveit-table th {
+  color: var(--text-faint);
+  font-weight: normal;
+}
+
+.moveit-table td:first-child {
+  color: var(--text-dim);
+  text-align: left;
+}
+
+.moveit-table td.changed {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.watch-note {
+  margin-bottom: 0.6rem;
+  border-color: var(--accent-border);
+}
+
+.watch-note h3 {
+  margin: 0;
+}
+
+.path-checklist {
+  margin: 0.25rem 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.path-checklist li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.1rem 0;
+}
+
+.path-checklist li.done .link-button {
+  color: var(--text-dim);
+}
+
+.path-check {
+  width: 1.1rem;
+  color: var(--success-text);
+  text-align: center;
+}
+
+.quiz-code {
+  margin: 0.2rem 0 0.4rem;
 }

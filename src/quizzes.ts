@@ -11,7 +11,7 @@ export interface Quiz {
   intro: string
   /** Shown on the module card until every topic is read; the count left follows it. */
   lockedNote: string
-  /** Correct answers needed to pass; quiz_submit applies the same 70 %. */
+  /** Correct answers needed to pass, for the texts; quiz_settings.pass_count is what counts. */
   passCount: number
   /** Shown under the score on a pass. */
   passNote: string
@@ -28,6 +28,17 @@ export const QUIZZES: Quiz[] = [
     passCount: 7,
     passNote: 'Module 1 is now unlocked.',
   },
+  {
+    id: 'm1',
+    title: 'Module 1 Quiz: The CPU and Its Registers',
+    intro:
+      '10 questions on the fetch-decode-execute cycle, registers and moving data. Some questions show a short ' +
+      'program: work out the result in your head, as if you were pressing Step. You need 7 correct answers to pass ' +
+      'and finish the module. You can retake the quiz as many times as you need.',
+    lockedNote: 'Finish every item on the checklist above to unlock the quiz.',
+    passCount: 7,
+    passNote: 'Module 2 is now unlocked.',
+  },
 ]
 
 export function findQuiz(id: string): Quiz | undefined {
@@ -40,6 +51,8 @@ export interface DrawnQuestion {
   /** Concept id (a Learn page) the question comes from, linked as "Review". */
   topic: string
   question: string
+  /** A short program shown under the question, if it has one. */
+  code?: string | null
   options: string[]
 }
 

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../backend/client'
 import { CURRICULUM, type Assignment } from '../curriculum'
-import { LEARNING_PATH, STEPS, moduleStatus, type ModuleProgressRow } from '../learningPath'
+import {
+  LEARNING_PATH, STEPS, checklist, moduleStatus, type ChecklistRow, type LearningModule, type ModuleProgressRow,
+  type PathProgress,
+} from '../learningPath'
 import { QUIZZES, type QuizAnswer } from '../quizzes'
-import { conceptTitle } from './LearningPathCard'
+import { checklistRowLabel, conceptTitle } from './LearningPathCard'
 import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
 
 // Instructor-only panel: who is using the lab, how long, and how far each
@@ -88,9 +91,35 @@ interface QuizQuestion {
 }
 
 interface ConceptRead {
+  user_id?: string
   module_id: string
   concept_id: string
   read_at: string
+}
+
+interface InteractiveRun {
+  user_id?: string
+  module_id: string
+  item_id: string
+  done_at: string
+}
+
+const QUIZ_MODULES = LEARNING_PATH.filter((m) => m.quiz)
+
+function groupIds<T>(rows: T[], module: (r: T) => string, id: (r: T) => string) {
+  const byModule = new Map<string, Set<string>>()
+  for (const r of rows) byModule.set(module(r), (byModule.get(module(r)) ?? new Set()).add(id(r)))
+  return byModule
+}
+
+/** One student's checklist state, from rows already filtered to that student. */
+function progressOf(passedIds: Set<string>, attempts: QuizAttempt[], reads: ConceptRead[], runs: InteractiveRun[]): PathProgress {
+  return {
+    completed: passedIds,
+    quizzesPassed: new Set(attempts.filter((q) => q.passed).map((q) => q.module_id)),
+    reads: groupIds(reads, (r) => r.module_id, (r) => r.concept_id),
+    interactives: groupIds(runs, (r) => r.module_id, (r) => r.item_id),
+  }
 }
 
 type FeedbackStatus = 'new' | 'seen' | 'done'
@@ -170,6 +199,8 @@ export function AdminView({ onClose }: { onClose: () => void }) {
   const [progress, setProgress] = useState<Progress[]>([])
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([])
+  const [allReads, setAllReads] = useState<ConceptRead[]>([])
+  const [allRuns, setAllRuns] = useState<InteractiveRun[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -187,13 +218,17 @@ export function AdminView({ onClose }: { onClose: () => void }) {
       // Until schema.sql is re-run the table doesn't exist; the rest of the report still loads.
       fetchAll<QuizAttempt>('quiz_attempts', 'id, user_id, module_id, score, total, passed, answers, created_at').catch(() => []),
       fetchAll<QuizQuestion>('quiz_questions', 'id, module_id, topic_id, question, active').catch(() => []),
+      fetchAll<ConceptRead>('concept_reads', 'user_id, module_id, concept_id, read_at').catch(() => []),
+      fetchAll<InteractiveRun>('interactive_runs', 'user_id, module_id, item_id, done_at').catch(() => []),
     ])
-      .then(([s, p, q, qq]) => {
+      .then(([s, p, q, qq, cr, ir]) => {
         if (cancelled) return
         setStudents(s.filter((row) => row.role === 'student'))
         setProgress(p)
         setQuizAttempts(q)
         setQuizQuestions(qq)
+        setAllReads(cr)
+        setAllRuns(ir)
       })
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => !cancelled && setLoading(false))
@@ -242,9 +277,28 @@ export function AdminView({ onClose }: { onClose: () => void }) {
           })
           .filter((q) => q.question.active || q.asked > 0)
           .sort((a, b) => b.rate - a.rate || b.asked - a.asked)
-        return { quiz, attempts: rows.length, tried: triedBy.size, passed: passedBy.size, questions }
+        // Where students get stuck: how many finished each checklist row.
+        const module = LEARNING_PATH.find((m) => m.id === quiz.id)
+        const rowCounts: { label: string; done: number }[] = []
+        if (module) {
+          for (const sid of visibleIds) {
+            const passedIds = new Set(progress.filter((p) => p.user_id === sid && p.passed).map((p) => p.assignment_id))
+            const list = checklist(module, progressOf(
+              passedIds,
+              quizAttempts.filter((a) => a.user_id === sid),
+              allReads.filter((r) => r.user_id === sid),
+              allRuns.filter((r) => r.user_id === sid),
+            ))
+            list.forEach((r, i) => {
+              // Without the student's own "(n/5)" counter.
+              rowCounts[i] ??= { label: checklistRowLabel(module, r).replace(/\s*\(\d+\/\d+\)$/, ''), done: 0 }
+              if (r.done) rowCounts[i].done++
+            })
+          }
+        }
+        return { quiz, attempts: rows.length, tried: triedBy.size, passed: passedBy.size, questions, rowCounts }
       }),
-    [quizAttempts, quizQuestions, visibleIds],
+    [quizAttempts, quizQuestions, visibleIds, progress, allReads, allRuns],
   )
 
   const selected = students.find((s) => s.id === selectedId) ?? null
@@ -359,7 +413,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
             </table>
           </div>
 
-          {perQuiz.map(({ quiz, attempts, tried, passed, questions }) => (
+          {perQuiz.map(({ quiz, attempts, tried, passed, questions, rowCounts }) => (
             <div key={quiz.id}>
               <h3>{quiz.title}</h3>
               <div className="admin-stats">
@@ -370,6 +424,21 @@ export function AdminView({ onClose }: { onClose: () => void }) {
                 <div><strong>{tried}</strong><span>took the quiz</span></div>
                 <div><strong>{tried ? (attempts / tried).toFixed(1) : '0'}</strong><span>avg. attempts per student who took it</span></div>
               </div>
+              {rowCounts.length > 0 && (
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead><tr><th>Checklist item</th><th>Students who finished it</th></tr></thead>
+                    <tbody>
+                      {rowCounts.map((r) => (
+                        <tr key={r.label}>
+                          <td>{r.label}</td>
+                          <td><ProgressBar value={r.done} max={visible.length} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead><tr><th>Most missed questions</th><th>Topic</th><th>Asked</th><th>Wrong</th></tr></thead>
@@ -560,6 +629,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const [sessions, setSessions] = useState<StudySession[]>([])
   const [pathRows, setPathRows] = useState<ModuleProgressRow[]>([])
   const [reads, setReads] = useState<ConceptRead[]>([])
+  const [runs, setRuns] = useState<InteractiveRun[]>([])
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
   const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -573,8 +643,9 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       supabase.from('module_progress').select('module_id, step, updated_at').eq('user_id', student.id),
       supabase.from('concept_reads').select('module_id, concept_id, read_at').eq('user_id', student.id).order('read_at'),
       supabase.from('quiz_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }),
-    ]).then(([a, e, s, m, r, q]) => {
-      const err = a.error ?? e.error ?? s.error ?? m.error ?? r.error ?? q.error
+      supabase.from('interactive_runs').select('module_id, item_id, done_at').eq('user_id', student.id),
+    ]).then(([a, e, s, m, r, q, ir]) => {
+      const err = a.error ?? e.error ?? s.error ?? m.error ?? r.error ?? q.error ?? ir.error
       if (err) setError(err.message)
       setAttempts((a.data ?? []) as Attempt[])
       setEvents((e.data ?? []) as ActivityEvent[])
@@ -582,6 +653,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       setPathRows((m.data ?? []) as ModuleProgressRow[])
       setReads((r.data ?? []) as ConceptRead[])
       setQuizAttempts((q.data ?? []) as QuizAttempt[])
+      setRuns((ir.data ?? []) as InteractiveRun[])
     })
   }, [student.id])
 
@@ -597,12 +669,21 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const byAssignment = new Map(progress.map((p) => [p.assignment_id, p]))
   const passedIds = new Set(progress.filter((p) => p.passed).map((p) => p.assignment_id))
   const byModule = new Map(pathRows.map((r) => [r.module_id, r]))
-  const readsByModule = new Map<string, Set<string>>()
-  for (const r of reads) readsByModule.set(r.module_id, (readsByModule.get(r.module_id) ?? new Set()).add(r.concept_id))
-  const pathProgress = {
-    completed: passedIds,
-    quizzesPassed: new Set(quizAttempts.filter((q) => q.passed).map((q) => q.module_id)),
-    reads: readsByModule,
+  const pathProgress = progressOf(passedIds, quizAttempts, reads, runs)
+
+  // When a checklist row was finished, as far as the data says.
+  function rowDate(m: LearningModule, r: ChecklistRow): string | null {
+    if (r.kind === 'read') return reads.find((x) => x.module_id === m.id && x.concept_id === r.concept.id)?.read_at ?? null
+    if (r.kind === 'interactive') {
+      const ids = r.item.parts ?? [r.item.id]
+      const dates = runs.filter((x) => x.module_id === m.id && ids.includes(x.item_id)).map((x) => x.done_at).sort()
+      return r.done ? dates[dates.length - 1] ?? null : null
+    }
+    if (r.kind === 'tasks') {
+      const dates = m.assignments.map((id) => byAssignment.get(id)?.first_passed_at ?? null)
+      return dates.every(Boolean) ? (dates as string[]).sort()[dates.length - 1] : null
+    }
+    return quizAttempts.filter((q) => q.module_id === m.id && q.passed).map((q) => q.created_at).sort()[0] ?? null
   }
 
   function exportAttempts() {
@@ -669,19 +750,23 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
         </table>
       </div>
 
-      <h3>Topics read</h3>
+      <h3>Module checklists</h3>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Module</th><th>Topic</th><th>Marked as read</th></tr></thead>
+          <thead><tr><th>Module</th><th>Item</th><th>Done</th></tr></thead>
           <tbody>
-            {LEARNING_PATH.filter((m) => m.quiz).flatMap((m) =>
-              m.concepts.map((c) => {
-                const read = reads.find((r) => r.module_id === m.id && r.concept_id === c.id)
+            {QUIZ_MODULES.flatMap((m) =>
+              checklist(m, pathProgress).map((r, i) => {
+                const date = rowDate(m, r)
                 return (
-                  <tr key={`${m.id}-${c.id}`}>
+                  <tr key={`${m.id}-${i}`}>
                     <td>{moduleLabel(m.id)}</td>
-                    <td>{conceptTitle(c)}</td>
-                    <td>{read ? formatDate(read.read_at) : 'not yet'}</td>
+                    <td>{checklistRowLabel(m, r)}</td>
+                    <td>
+                      {r.done
+                        ? <span className="admin-badge passed">{date ? formatDate(date) : 'Done'}</span>
+                        : 'not yet'}
+                    </td>
                   </tr>
                 )
               }),
