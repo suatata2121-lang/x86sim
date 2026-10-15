@@ -265,16 +265,30 @@ export class Cpu {
 
   // af, when given, is whatever the caller already knows about a carry/borrow into bit 4 (see the
   // Flags.AF doc comment) -- callers that don't track it (INC/DEC/NEG's current callers, SHL/etc.
-  // which use their own flag logic instead) simply leave AF at its last value, same simplification
-  // this simulator already applies to OF for those instructions.
-  private setArithFlags(result: number, isWord: boolean, af?: boolean) {
+  // which use their own flag logic instead) simply leave AF at its last value. of is the signed
+  // overflow (see addOverflow/subOverflow). keepCf is for INC and DEC, which leave CF alone on a
+  // real 8086 so a loop counter can't wipe out the carry of an earlier ADD.
+  private setArithFlags(result: number, isWord: boolean, af?: boolean, of?: boolean, keepCf = false) {
     const mask = isWord ? 0xffff : 0xff
     const signBit = isWord ? 0x8000 : 0x80
     this.flags.ZF = (result & mask) === 0
     this.flags.SF = (result & signBit) !== 0
-    this.flags.CF = result < 0 || result > mask
+    if (!keepCf) this.flags.CF = result < 0 || result > mask
     this.flags.PF = this.parity(result)
     if (af !== undefined) this.flags.AF = af
+    if (of !== undefined) this.flags.OF = of
+  }
+
+  // Signed overflow of a + b (+ carry): both operands have the same sign and the result's differs.
+  private addOverflow(a: number, b: number, result: number, isWord: boolean): boolean {
+    const signBit = isWord ? 0x8000 : 0x80
+    return ((a ^ result) & (b ^ result) & signBit) !== 0
+  }
+
+  // Signed overflow of a - b (- borrow): the operands differ in sign and the result's sign is b's.
+  private subOverflow(a: number, b: number, result: number, isWord: boolean): boolean {
+    const signBit = isWord ? 0x8000 : 0x80
+    return ((a ^ b) & (a ^ result) & signBit) !== 0
   }
 
   private setLogicalFlags(result: number, isWord: boolean) {
@@ -356,12 +370,18 @@ export class Cpu {
       case 'LODS':
         this.setReg(accReg, readAt(this.regs.SI))
         break
-      case 'CMPS':
-        this.setArithFlags(readAt(this.regs.SI) - readAt(this.regs.DI), isWord)
+      case 'CMPS': {
+        const a = readAt(this.regs.SI)
+        const b = readAt(this.regs.DI)
+        this.setArithFlags(a - b, isWord, undefined, this.subOverflow(a, b, a - b, isWord))
         break
-      case 'SCAS':
-        this.setArithFlags(this.getReg(accReg) - readAt(this.regs.DI), isWord)
+      }
+      case 'SCAS': {
+        const a = this.getReg(accReg)
+        const b = readAt(this.regs.DI)
+        this.setArithFlags(a - b, isWord, undefined, this.subOverflow(a, b, a - b, isWord))
         break
+      }
     }
     const delta = (this.flags.DF ? -1 : 1) * (isWord ? 2 : 1)
     if (base === 'MOVS' || base === 'CMPS' || base === 'LODS') this.regs.SI = (this.regs.SI + delta) & 0xffff
@@ -394,7 +414,7 @@ export class Cpu {
         const b = this.readOperand(op2, isWord)
         const result = a + b
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord, ((a & 0xf) + (b & 0xf)) > 0xf)
+        this.setArithFlags(result, isWord, ((a & 0xf) + (b & 0xf)) > 0xf, this.addOverflow(a, b, result, isWord))
         break
       }
       case 'SUB': {
@@ -402,7 +422,7 @@ export class Cpu {
         const b = this.readOperand(op2, isWord)
         const result = a - b
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf))
+        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf), this.subOverflow(a, b, result, isWord))
         break
       }
       case 'ADC': {
@@ -411,7 +431,7 @@ export class Cpu {
         const cfIn = this.flags.CF ? 1 : 0
         const result = a + b + cfIn
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord, ((a & 0xf) + (b & 0xf) + cfIn) > 0xf)
+        this.setArithFlags(result, isWord, ((a & 0xf) + (b & 0xf) + cfIn) > 0xf, this.addOverflow(a, b, result, isWord))
         break
       }
       case 'SBB': {
@@ -420,26 +440,28 @@ export class Cpu {
         const cfIn = this.flags.CF ? 1 : 0
         const result = a - b - cfIn
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf) + cfIn)
+        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf) + cfIn, this.subOverflow(a, b, result, isWord))
         break
       }
       case 'CMP': {
         const a = this.readOperand(op1, isWord)
         const b = this.readOperand(op2, isWord)
         const result = a - b
-        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf))
+        this.setArithFlags(result, isWord, (a & 0xf) < (b & 0xf), this.subOverflow(a, b, result, isWord))
         break
       }
       case 'INC': {
-        const result = this.readOperand(op1, isWord) + 1
+        const a = this.readOperand(op1, isWord)
+        const result = a + 1
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord)
+        this.setArithFlags(result, isWord, undefined, this.addOverflow(a, 1, result, isWord), true)
         break
       }
       case 'DEC': {
-        const result = this.readOperand(op1, isWord) - 1
+        const a = this.readOperand(op1, isWord)
+        const result = a - 1
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord)
+        this.setArithFlags(result, isWord, undefined, this.subOverflow(a, 1, result, isWord), true)
         break
       }
       case 'MUL': {
@@ -558,9 +580,10 @@ export class Cpu {
         break
       }
       case 'NEG': {
-        const result = -this.readOperand(op1, isWord)
+        const a = this.readOperand(op1, isWord)
+        const result = -a
         this.writeOperand(op1, result, isWord)
-        this.setArithFlags(result, isWord)
+        this.setArithFlags(result, isWord, undefined, this.subOverflow(0, a, result, isWord))
         break
       }
       case 'TEST': {
