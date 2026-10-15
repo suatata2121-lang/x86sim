@@ -903,7 +903,7 @@ export default function App() {
           )}
         </section>
         {asideTabs.length > 0 && (
-        <aside>
+        <aside className={shownAsideTab === 'registers' ? 'aside-compact' : undefined}>
           <div className="mode-tabs aside-tabs">
             {asideTabs.map((t) => (
               <button

@@ -91,14 +91,7 @@ export function RegisterView({ regs, flags, stepKey }: { regs: Record<Reg16, num
         <h3>Registers</h3>
         <RegisterFormatPicker />
       </div>
-      <table className="reg-table">
-        <thead>
-          <tr>
-            <th>Reg</th>
-            <th>Value</th>
-            {showHalves && <th>Halves</th>}
-          </tr>
-        </thead>
+      <table className="reg-table" data-format={fmt}>
         <tbody>
           {REG_ORDER.map((name) => {
             const halves = HALF_REGS[name]
@@ -113,11 +106,11 @@ export function RegisterView({ regs, flags, stepKey }: { regs: Record<Reg16, num
                     {halves && (
                       <>
                         <span className={change.halves.has(halves[0]) ? 'reg-half-changed' : undefined} title={allFormatsByte(hi)}>
-                          {halves[0]} {formatByte(hi, fmt)}
+                          {halves[0]} <span className="reg-half-value">{formatByte(hi, fmt)}</span>
                         </span>
                         {' · '}
                         <span className={change.halves.has(halves[1]) ? 'reg-half-changed' : undefined} title={allFormatsByte(lo)}>
-                          {halves[1]} {formatByte(lo, fmt)}
+                          {halves[1]} <span className="reg-half-value">{formatByte(lo, fmt)}</span>
                         </span>
                       </>
                     )}
