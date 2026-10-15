@@ -1,18 +1,31 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { supabase } from '../backend/client'
+import { useAuth } from '../backend/auth'
 
-// The site is static (GitHub Pages), so submissions go through Web3Forms,
-// which forwards them to the site owner's inbox. The access key only lets
-// people send to that inbox -- it is meant to be public.
+// With the Supabase backend configured, feedback is stored in the feedback
+// table and read in the admin panel's inbox. Builds without it (forks, local
+// dev) fall back to Web3Forms, which forwards the message to the site owner's
+// inbox; its access key only lets people send there, so it is meant to be public.
 const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit'
 const WEB3FORMS_ACCESS_KEY = '38a82224-9a0e-4d77-a606-f0cf0dd3b3b9'
 
 const MAX_ATTACHED_CODE_CHARS = 20000
+const MAX_MESSAGE_CHARS = 5000
 
-type Kind = 'bug' | 'suggestion' | 'other'
-const KIND_LABELS: Record<Kind, string> = {
+export type FeedbackKind = 'bug' | 'suggestion' | 'question' | 'other'
+type Kind = FeedbackKind
+export const KIND_LABELS: Record<Kind, string> = {
   bug: 'Bug report',
   suggestion: 'Suggestion',
+  question: 'Question',
   other: 'Other',
+}
+
+/** Where the student was when they wrote, so the report makes sense on its own. */
+export interface FeedbackContext {
+  tab: string
+  assignment: string | null
+  section: string
 }
 
 type Status = { state: 'idle' } | { state: 'sending' } | { state: 'sent' } | { state: 'error'; message: string }
@@ -22,9 +35,12 @@ interface Props {
   // Source of the editor tab that is open right now, offered as an optional
   // attachment since most bug reports are about a specific program.
   currentSource: string
+  context: FeedbackContext
 }
 
-export function FeedbackDialog({ onClose, currentSource }: Props) {
+export function FeedbackDialog({ onClose, currentSource, context }: Props) {
+  const auth = useAuth()
+  const userId = auth.session?.user.id ?? null
   const [kind, setKind] = useState<Kind>('bug')
   const [message, setMessage] = useState('')
   const [email, setEmail] = useState('')
@@ -48,6 +64,26 @@ export function FeedbackDialog({ onClose, currentSource }: Props) {
     setStatus({ state: 'sending' })
 
     const code = attachCode ? currentSource.slice(0, MAX_ATTACHED_CODE_CHARS) : ''
+
+    if (supabase) {
+      // Bots that tick the honeypot get a normal "sent" screen and no row.
+      if (botcheck) {
+        setStatus({ state: 'sent' })
+        return
+      }
+      const { error } = await supabase.from('feedback').insert({
+        user_id: userId,
+        kind,
+        message: message.trim().slice(0, MAX_MESSAGE_CHARS),
+        reply_email: userId ? null : email.trim().slice(0, 200) || null,
+        code: code || null,
+        context: { ...context, page: window.location.pathname },
+        user_agent: navigator.userAgent.slice(0, 300),
+      })
+      setStatus(error ? { state: 'error', message: error.message } : { state: 'sent' })
+      return
+    }
+
     const body = {
       access_key: WEB3FORMS_ACCESS_KEY,
       subject: `[x86sim] ${KIND_LABELS[kind]}`,
@@ -88,7 +124,7 @@ export function FeedbackDialog({ onClose, currentSource }: Props) {
 
         {status.state === 'sent' ? (
           <div className="feedback-sent">
-            <p>Thanks! Your feedback was sent.</p>
+            <p>Thanks! Your feedback was sent{supabase ? ' to the instructor' : ''}.</p>
             <button onClick={onClose}>Close</button>
           </div>
         ) : (
@@ -109,20 +145,26 @@ export function FeedbackDialog({ onClose, currentSource }: Props) {
             </div>
 
             <label>
-              {kind === 'bug' ? 'What went wrong? What did you expect to happen?' : 'Your message'}
+              {kind === 'bug'
+                ? 'What went wrong? What did you expect to happen?'
+                : kind === 'question' ? 'Your question' : 'Your message'}
               <textarea
                 ref={messageRef}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={6}
+                maxLength={MAX_MESSAGE_CHARS}
                 required
               />
             </label>
 
-            <label>
-              <span>Your email <span className="feedback-optional">(optional, if you'd like a reply)</span></span>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-            </label>
+            {/* Signed-in students are already known by name and email. */}
+            {!userId && (
+              <label>
+                <span>Your email <span className="feedback-optional">(optional, if you'd like a reply)</span></span>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+              </label>
+            )}
 
             <label className="feedback-checkbox">
               <input type="checkbox" checked={attachCode} onChange={(e) => setAttachCode(e.target.checked)} />

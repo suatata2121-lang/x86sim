@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../backend/client'
 import { CURRICULUM, type Assignment } from '../curriculum'
 import { LEARNING_PATH, STEPS, moduleStatus, type ModuleProgressRow } from '../learningPath'
+import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
 
 // Instructor-only panel: who is using the lab, how long, and how far each
 // student got through the curriculum. Row-level security on the database is
 // what actually restricts this data to admins; this component only renders it.
 
 const PAGE_SIZE = 1000
+// The inbox refreshes itself so new messages show up during a lab session.
+const FEEDBACK_REFRESH_MS = 30_000
 
 interface StudentSummary {
   id: string
@@ -60,6 +63,20 @@ interface StudySession {
   started_at: string
   last_seen_at: string
   active_seconds: number
+}
+
+type FeedbackStatus = 'new' | 'seen' | 'done'
+
+interface FeedbackItem {
+  id: number
+  kind: FeedbackKind
+  message: string
+  reply_email: string | null
+  code: string | null
+  context: { tab?: string; assignment?: string | null; section?: string }
+  status: FeedbackStatus
+  created_at: string
+  profiles: { full_name: string; student_no: string; class_group: string; email: string } | null
 }
 
 const ASSIGNMENTS: { assignment: Assignment; stageTitle: string; taskTitle: string }[] = CURRICULUM.flatMap((stage) =>
@@ -219,6 +236,9 @@ export function AdminView({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
+      <FeedbackInbox />
+
+      <h3>Students</h3>
       <div className="admin-filters no-print">
         <input placeholder="Search name, number or email" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select value={group} onChange={(e) => setGroup(e.target.value)}>
@@ -242,7 +262,6 @@ export function AdminView({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <h3>Students</h3>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
@@ -295,6 +314,130 @@ export function AdminView({ onClose }: { onClose: () => void }) {
         </>
       )}
     </div>
+  )
+}
+
+function FeedbackInbox() {
+  const [items, setItems] = useState<FeedbackItem[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [openCode, setOpenCode] = useState<FeedbackItem | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (!supabase) return
+      const { data, error } = await supabase
+        .from('feedback')
+        .select('id, kind, message, reply_email, code, context, status, created_at, profiles(full_name, student_no, class_group, email)')
+        .order('created_at', { ascending: false })
+        .limit(500)
+      if (cancelled) return
+      setError(error ? error.message : null)
+      if (data) setItems(data as unknown as FeedbackItem[])
+    }
+    void load()
+    const timer = window.setInterval(load, FEEDBACK_REFRESH_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!openCode) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpenCode(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [openCode])
+
+  async function setStatus(item: FeedbackItem, status: FeedbackStatus) {
+    if (!supabase) return
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)))
+    const { error } = await supabase.from('feedback').update({ status }).eq('id', item.id)
+    if (error) setError(error.message)
+  }
+
+  const from = (i: FeedbackItem) =>
+    i.profiles ? `${i.profiles.full_name || i.profiles.email}${i.profiles.student_no ? ` (${i.profiles.student_no})` : ''}` : i.reply_email || 'Anonymous'
+  const where = (i: FeedbackItem) =>
+    [i.context.tab, i.context.assignment ? ASSIGNMENT_TITLES.get(i.context.assignment) ?? i.context.assignment : null]
+      .filter(Boolean).join(' · ')
+
+  function exportFeedback() {
+    downloadCsv(
+      `x86sim-feedback-${today()}.csv`,
+      ['Time', 'From', 'Group', 'Type', 'Status', 'Message', 'Where', 'Code'],
+      items.map((i) => [
+        formatDate(i.created_at), from(i), i.profiles?.class_group ?? '', KIND_LABELS[i.kind], i.status,
+        i.message, where(i), i.code ?? '',
+      ]),
+    )
+  }
+
+  const newCount = items.filter((i) => i.status === 'new').length
+  const shown = showAll ? items : items.filter((i) => i.status !== 'done')
+
+  return (
+    <>
+      <div className="admin-header">
+        <h3>Feedback {newCount > 0 && <span className="admin-badge tried">{newCount} new</span>}</h3>
+        <div className="admin-actions no-print">
+          <label className="feedback-checkbox">
+            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show done
+          </label>
+          <button onClick={exportFeedback} disabled={items.length === 0}>⬇ Feedback CSV</button>
+        </div>
+      </div>
+      {error && <p className="feedback-error">Couldn't load feedback: {error}</p>}
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr><th>Time</th><th>From</th><th>Type</th><th>Message</th><th>Where</th><th className="no-print">Status</th></tr>
+          </thead>
+          <tbody>
+            {shown.map((i) => (
+              <tr key={i.id} className={i.status === 'new' ? 'feedback-row-new' : undefined}>
+                <td>{formatDate(i.created_at)}</td>
+                <td>{from(i)}</td>
+                <td>{KIND_LABELS[i.kind]}</td>
+                <td className="feedback-message">
+                  {i.message}
+                  {i.code && <> <button className="link-button no-print" onClick={() => setOpenCode(i)}>View code</button></>}
+                </td>
+                <td>{where(i) || '-'}</td>
+                <td className="no-print">
+                  <div className="feedback-status">
+                    {i.status === 'new' && <button onClick={() => setStatus(i, 'seen')}>Seen</button>}
+                    {i.status !== 'done'
+                      ? <button onClick={() => setStatus(i, 'done')}>Done ✓</button>
+                      : <button onClick={() => setStatus(i, 'seen')}>Reopen</button>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {shown.length === 0 && (
+              <tr><td colSpan={6} className="admin-empty">{items.length ? 'Nothing open.' : 'No feedback yet.'}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {openCode && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setOpenCode(null)}>
+          <div className="modal admin-code-modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <h2>{from(openCode)}</h2>
+              <button className="modal-close" onClick={() => setOpenCode(null)} aria-label="Close">×</button>
+            </div>
+            <p className="admin-meta">{formatDate(openCode.created_at)} · {where(openCode) || '-'}</p>
+            <pre className="admin-code">{openCode.code}</pre>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

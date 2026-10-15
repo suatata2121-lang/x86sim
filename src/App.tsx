@@ -487,7 +487,13 @@ export default function App() {
           </button>
         </div>
       </header>
-      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} currentSource={source} />}
+      {feedbackOpen && (
+        <FeedbackDialog
+          onClose={() => setFeedbackOpen(false)}
+          currentSource={source}
+          context={{ tab: activeTab.title, assignment: activeAssignmentId, section: mode === 'learn' ? `learn/${learnNav.section}` : mode }}
+        />
+      )}
       {(accountOpen || auth.passwordRecovery) && (
         <AccountDialog
           initialView={auth.passwordRecovery ? 'newpassword' : 'signin'}
