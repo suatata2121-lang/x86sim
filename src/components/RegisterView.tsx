@@ -1,7 +1,10 @@
 import { useRef } from 'react'
 import type { Flags, Reg16 } from '../core/types'
+import { RegisterFormatPicker, allFormatsByte, allFormatsWord, formatByte, formatWord, useRegisterFormat } from './regFormat'
 
 const REG_ORDER: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'DS', 'ES', 'SS', 'CS']
+// A signed segment address means nothing, so these stay hex under Signed.
+const SEGMENTS = new Set<Reg16>(['DS', 'ES', 'SS', 'CS'])
 
 // Only AX/BX/CX/DX split into an independently-addressable high/low 8-bit
 // pair (AH/AL, BH/BL, CH/CL, DH/DL) -- SI/DI/BP/SP/DS/ES/SS/CS are always
@@ -13,18 +16,8 @@ const HALF_REGS: Partial<Record<Reg16, [string, string]>> = {
   DX: ['DH', 'DL'],
 }
 
-function hex(value: number) {
-  return value.toString(16).toUpperCase().padStart(4, '0')
-}
 
-function hexByte(value: number) {
-  return value.toString(16).toUpperCase().padStart(2, '0')
-}
 
-function binary(value: number) {
-  const bits = (value & 0xffff).toString(2).padStart(16, '0')
-  return `${bits.slice(0, 8)} ${bits.slice(8)}`
-}
 
 // FLAGS is itself a 16-bit CPU register, just like AX or IP -- each flag is
 // one bit at a fixed position (matching real 8086 bit numbering) rather than
@@ -88,51 +81,55 @@ export function RegisterView({ regs, flags, stepKey }: { regs: Record<Reg16, num
     last.current = { key: stepKey, regs, flags, change }
   }
   const { change } = last.current
+  const [fmt] = useRegisterFormat()
+
+  const showHalves = fmt !== 'bin'
 
   return (
     <div className="panel">
-      <h3>Registers</h3>
+      <div className="reg-header">
+        <h3>Registers</h3>
+        <RegisterFormatPicker />
+      </div>
       <table className="reg-table">
         <thead>
           <tr>
-            <th></th>
-            <th>Hex</th>
-            <th>Decimal</th>
-            <th>Binary</th>
-            <th>8-bit halves</th>
+            <th>Reg</th>
+            <th>Value</th>
+            {showHalves && <th>Halves</th>}
           </tr>
         </thead>
         <tbody>
           {REG_ORDER.map((name) => {
             const halves = HALF_REGS[name]
+            const hi = (regs[name] >> 8) & 0xff
+            const lo = regs[name] & 0xff
             return (
               <tr key={name} className={change.regs.has(name) ? 'reg-changed' : undefined}>
                 <td>{name}</td>
-                <td>{hex(regs[name])}h</td>
-                <td>{regs[name]}</td>
-                <td className="reg-binary">{binary(regs[name])}</td>
-                <td className="reg-halves">
-                  {halves ? (
-                    <>
-                      <span className={change.halves.has(halves[0]) ? 'reg-half-changed' : undefined}>
-                        {halves[0]}={hexByte((regs[name] >> 8) & 0xff)}h
-                      </span>
-                      {'  '}
-                      <span className={change.halves.has(halves[1]) ? 'reg-half-changed' : undefined}>
-                        {halves[1]}={hexByte(regs[name] & 0xff)}h
-                      </span>
-                    </>
-                  ) : '—'}
-                </td>
+                <td className="reg-value" title={allFormatsWord(regs[name])}>{formatWord(regs[name], fmt, SEGMENTS.has(name))}</td>
+                {showHalves && (
+                  <td className="reg-halves">
+                    {halves && (
+                      <>
+                        <span className={change.halves.has(halves[0]) ? 'reg-half-changed' : undefined} title={allFormatsByte(hi)}>
+                          {halves[0]} {formatByte(hi, fmt)}
+                        </span>
+                        {' · '}
+                        <span className={change.halves.has(halves[1]) ? 'reg-half-changed' : undefined} title={allFormatsByte(lo)}>
+                          {halves[1]} {formatByte(lo, fmt)}
+                        </span>
+                      </>
+                    )}
+                  </td>
+                )}
               </tr>
             )
           })}
           <tr className={`reg-flags-row${change.flags.size ? ' reg-changed' : ''}`}>
             <td>FLAGS</td>
-            <td>{hex(fw)}h</td>
-            <td>{fw}</td>
-            <td className="reg-binary">{binary(fw)}</td>
-            <td className="reg-halves">—</td>
+            <td className="reg-value" title={allFormatsWord(fw)}>{formatWord(fw, fmt, true)}</td>
+            {showHalves && <td className="reg-halves" />}
           </tr>
         </tbody>
       </table>

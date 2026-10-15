@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { assemble } from '../core/assembler'
 import { Cpu, type CpuSnapshot } from '../core/cpu'
 import type { Flags, Reg16 } from '../core/types'
+import { RegisterFormatPicker, allFormatsByte, allFormatsWord, formatByte, formatWord, useRegisterFormat, type RegFormat } from './regFormat'
 
 // The Observe step on one screen (issue #27): the example's code, Step
 // controls, the registers the module cares about and a "What happened" line,
@@ -16,8 +17,14 @@ const HALVES: Partial<Record<Reg16, [string, string]>> = {
   AX: ['AH', 'AL'], BX: ['BH', 'BL'], CX: ['CH', 'CL'], DX: ['DH', 'DL'],
 }
 
-const hex4 = (v: number) => `${v.toString(16).toUpperCase().padStart(4, '0')}h`
-const hex2 = (v: number) => v.toString(16).toUpperCase().padStart(2, '0')
+/** What a step did: a module's callout, or the registers it changed (written in the chosen format when shown). */
+type Happened = { callout: string } | { text: string; changes: [Reg16, number, number][] }
+
+function happenedText(h: Happened, fmt: RegFormat): string {
+  if ('callout' in h) return h.callout
+  if (h.changes.length === 0) return `${h.text}: no register changed.`
+  return `${h.text}: ${h.changes.map(([r, a, b]) => `${r} ${formatWord(a, fmt)} → ${formatWord(b, fmt)}`).join(', ')}.`
+}
 
 export interface ObservePanelProps {
   regs: Record<Reg16, number>
@@ -28,8 +35,10 @@ export interface ObservePanelProps {
 
 /** The default right-hand panel: chosen registers with their halves, then the flags. */
 export function CompactRegisters({ regs, flags, before, shown }: ObservePanelProps & { shown: Reg16[] }) {
+  const [fmt] = useRegisterFormat()
   return (
     <div className="observe-regs">
+      <RegisterFormatPicker />
       {shown.map((name) => {
         const changed = before !== null && before[name] !== regs[name]
         const halves = HALVES[name]
@@ -37,14 +46,15 @@ export function CompactRegisters({ regs, flags, before, shown }: ObservePanelPro
         return (
           <div key={name} className={`observe-reg${changed ? ' changed' : ''}`}>
             <span className="observe-reg-name">{name}</span>
-            <span className="observe-reg-value">
-              {hex4(regs[name])}
-              <small>{regs[name]}</small>
-            </span>
-            {halves && (
+            <span className="observe-reg-value" title={allFormatsWord(regs[name])}>{formatWord(regs[name], fmt)}</span>
+            {halves && fmt !== 'bin' && (
               <span className="observe-halves">
-                <span className={changed && (bits >> 8) & 0xff ? 'changed' : undefined}>{halves[0]} {hex2(regs[name] >> 8)}</span>
-                <span className={changed && bits & 0xff ? 'changed' : undefined}>{halves[1]} {hex2(regs[name] & 0xff)}</span>
+                <span className={changed && (bits >> 8) & 0xff ? 'changed' : undefined} title={allFormatsByte(regs[name] >> 8)}>
+                  {halves[0]} {formatByte(regs[name] >> 8, fmt)}
+                </span>
+                <span className={changed && bits & 0xff ? 'changed' : undefined} title={allFormatsByte(regs[name] & 0xff)}>
+                  {halves[1]} {formatByte(regs[name] & 0xff, fmt)}
+                </span>
               </span>
             )}
           </div>
@@ -90,9 +100,10 @@ export function ObserveView({ title, source, summary, registers = ['AX', 'BX', '
   }, [program])
 
   const cpuRef = useRef<Cpu>(new Cpu())
-  const historyRef = useRef<{ snap: CpuSnapshot; happened: string | null; before: Record<Reg16, number> | null }[]>([])
+  const historyRef = useRef<{ snap: CpuSnapshot; happened: Happened | null; before: Record<Reg16, number> | null }[]>([])
   const [, setTick] = useState(0)
-  const [happened, setHappened] = useState<string | null>(null)
+  const [happened, setHappened] = useState<Happened | null>(null)
+  const [fmt] = useRegisterFormat()
   const [before, setBefore] = useState<Record<Reg16, number> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -115,11 +126,11 @@ export function ObserveView({ title, source, summary, registers = ['AX', 'BX', '
   useEffect(load, [program]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => stop, [])
 
-  function describe(line: number, prev: Record<Reg16, number>, cpu: Cpu): string {
-    if (callouts?.[line]) return callouts[line]
+  function describe(line: number, prev: Record<Reg16, number>, cpu: Cpu): Happened {
+    if (callouts?.[line]) return { callout: callouts[line] }
     const text = (sourceLines[line - 1] ?? '').replace(/;.*$/, '').trim()
-    const changes = GENERAL.filter((r) => prev[r] !== cpu.regs[r]).map((r) => `${r} ${hex4(prev[r])} → ${hex4(cpu.regs[r])}`)
-    return changes.length ? `${text}: ${changes.join(', ')}.` : `${text}: no register changed.`
+    const changes = GENERAL.filter((r) => prev[r] !== cpu.regs[r]).map((r): [Reg16, number, number] => [r, prev[r], cpu.regs[r]])
+    return { text, changes }
   }
 
   function step(): boolean {
@@ -233,7 +244,7 @@ export function ObserveView({ title, source, summary, registers = ['AX', 'BX', '
       <div className="observe-happened" aria-live="polite">
         {error
           ? <span className="moveit-error">Runtime error: {error}</span>
-          : happened ?? 'Press Step to run the first line.'}
+          : happened ? happenedText(happened, fmt) : 'Press Step to run the first line.'}
         {cpu.halted && <strong className="observe-done"> Done. You watched the whole program run.</strong>}
       </div>
       <div className="observe-footer">
