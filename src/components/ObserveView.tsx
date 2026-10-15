@@ -37,7 +37,7 @@ export interface ObservePanelProps {
 export function CompactRegisters({ regs, flags, before, shown }: ObservePanelProps & { shown: Reg16[] }) {
   const [fmt] = useRegisterFormat()
   return (
-    <div className="observe-regs">
+    <div className="observe-regs" data-format={fmt}>
       <RegisterFormatPicker />
       {shown.map((name) => {
         const changed = before !== null && before[name] !== regs[name]
@@ -50,10 +50,10 @@ export function CompactRegisters({ regs, flags, before, shown }: ObservePanelPro
             {halves && fmt !== 'bin' && (
               <span className="observe-halves">
                 <span className={changed && (bits >> 8) & 0xff ? 'changed' : undefined} title={allFormatsByte(regs[name] >> 8)}>
-                  {halves[0]} {formatByte(regs[name] >> 8, fmt)}
+                  {halves[0]} <span className="reg-half-value">{formatByte(regs[name] >> 8, fmt)}</span>
                 </span>
                 <span className={changed && bits & 0xff ? 'changed' : undefined} title={allFormatsByte(regs[name] & 0xff)}>
-                  {halves[1]} {formatByte(regs[name] & 0xff, fmt)}
+                  {halves[1]} <span className="reg-half-value">{formatByte(regs[name] & 0xff, fmt)}</span>
                 </span>
               </span>
             )}

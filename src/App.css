@@ -3328,7 +3328,8 @@ aside .panel {
 
 .observe-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* The registers take what they need; the code gets the rest (#31). */
+  grid-template-columns: minmax(0, 1fr) max-content;
   gap: 0.75rem;
 }
 
@@ -3375,7 +3376,7 @@ aside .panel {
 }
 
 .observe-tag {
-  margin-left: auto;
+  margin-left: 1rem;
   color: var(--text-dim);
   font-family: system-ui, sans-serif;
   font-size: 0.75rem;
@@ -3540,7 +3541,9 @@ aside .panel {
 /* Wide enough for the longest format (binary), so switching or a new value never shifts the table. */
 .reg-value,
 .observe-reg-value {
-  min-width: 18ch;
+  /* Enough for the chosen format, so values changing never shift the
+     table; only binary needs the full 16 digits (#31). */
+  min-width: 6ch;
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
@@ -3573,4 +3576,65 @@ aside .panel {
   .reg-halves span {
     white-space: nowrap;
   }
+}
+
+[data-format='bin'] .reg-value,
+[data-format='bin'] .observe-reg-value {
+  min-width: 18ch;
+}
+
+/* ---- Compact side panel for the registers (#31) ---- */
+
+/* With the Registers tab open the side panel is only as wide as the table,
+   and the editor gets the rest; the other tabs keep their width. */
+aside.aside-compact {
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 22rem;
+}
+
+.aside-tabs {
+  flex-wrap: wrap;
+}
+
+aside .panel {
+  padding: 0.6rem 0.75rem;
+}
+
+.reg-table {
+  width: auto;
+  font-size: 0.85rem;
+}
+
+.reg-table td {
+  padding: 0.1rem 0.35rem;
+}
+
+.flags {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  justify-content: start;
+  gap: 0.3rem;
+}
+
+.flag {
+  padding: 0.1rem 0.35rem;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 700px) {
+  aside.aside-compact {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* A half's value keeps the width of its longest reading (-128, 255, FFh),
+   so the table doesn't shift as values change. */
+.reg-half-value {
+  display: inline-block;
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
