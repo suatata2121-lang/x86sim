@@ -2539,3 +2539,413 @@ aside .panel {
     border-color: #999 !important;
   }
 }
+
+/* ---- Number-system worked examples (components/NumberVisual.tsx) ---- */
+
+.nv-block {
+  max-width: 100%;
+  margin: 0.5rem 0 0.9rem;
+  padding: 0.75rem 0.9rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel-alt);
+  font-size: 0.9rem;
+}
+
+/* Wide examples scroll inside their own box instead of widening the page. */
+.nv-scroll {
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+}
+
+.nv-block.nv-invalid {
+  border: 2px solid var(--num-carry);
+}
+
+.nv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  margin-top: 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.nv-swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.3rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  vertical-align: -0.05rem;
+}
+
+.nv-title {
+  margin-bottom: 0.5rem;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.nv-num {
+  font-family: ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.nv-num.strong,
+.nv-cell.strong,
+.nv-lit-text.strong {
+  font-weight: 700;
+}
+
+.nv-sub {
+  font-size: 0.7em;
+  opacity: 0.85;
+}
+
+.nv-grid {
+  display: inline-grid;
+  align-items: center;
+  gap: 0.2rem 0.15rem;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.nv-rowlabel {
+  padding-right: 0.6rem;
+  color: var(--text-dim);
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.nv-cell {
+  min-width: 1.2rem;
+  padding: 0.1rem 0.15rem;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.nv-cell.box {
+  border-color: currentColor;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.nv-cell.faint {
+  opacity: 0.35;
+}
+
+.nv-cell.mark {
+  background: var(--accent-bg);
+  outline: 1px solid var(--accent-text);
+}
+
+.nv-cell.sign {
+  border-color: var(--num-carry);
+}
+
+.nv-cell.nv-small {
+  min-height: 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.nv-cell.out {
+  border-color: var(--num-flag);
+  background: var(--warning-bg);
+  font-weight: 700;
+}
+
+.nv-rule {
+  height: 0;
+  border-top: 1px solid var(--text-dim);
+}
+
+.nv-total,
+.nv-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.nv-check {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.nv-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nv-chip.flag {
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--num-flag);
+}
+
+.nv-chip.carry {
+  border: 1px solid var(--num-carry);
+  color: var(--num-carry);
+}
+
+.nv-arrow {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.nv-division {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  width: max-content;
+}
+
+.nv-div-row {
+  padding: 0.15rem 0;
+  font-family: ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.nv-upward {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--num-hex);
+  font-size: 0.75rem;
+}
+
+.nv-result {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.nv-nibbles {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: max-content;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.nv-nibble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  letter-spacing: 0.15em;
+}
+
+.nv-nibble-hex {
+  font-weight: 700;
+}
+
+.nv-nibbles .nv-result {
+  margin-left: 0.75rem;
+}
+
+.nv-digit-tables {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.nv-table {
+  border-collapse: collapse;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.nv-table th,
+.nv-table td {
+  padding: 0.1rem 0.6rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.nv-table th {
+  border-bottom: 1px solid var(--border-strong);
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
+}
+
+.nv-table .nv-note,
+.nv-steps td:nth-child(3) {
+  color: var(--text-dim);
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.nv-steps {
+  margin-top: 0.5rem;
+}
+
+.nv-truth td.nv-one {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.nv-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 22rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+
+.nv-range-half {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.nv-range-half.neg {
+  border-left: 2px solid var(--num-carry);
+}
+
+.nv-range-sign {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.nv-range-half.neg .nv-range-sign,
+.nv-range-half.neg .nv-range-reading {
+  color: var(--num-carry);
+}
+
+.nv-shift {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: max-content;
+}
+
+.nv-shift-cf.left {
+  order: -1;
+}
+
+.nv-shift-row {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin: 0.15rem 0;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.nv-shift-row .nv-rowlabel {
+  width: 3.5rem;
+}
+
+.nv-shift-cf {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--num-flag);
+}
+
+.nv-cf-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--warning-border);
+  border-radius: 4px;
+  background: var(--warning-bg);
+  font-family: ui-monospace, Consolas, monospace;
+  font-weight: 700;
+}
+
+.nv-cf-box small {
+  font-size: 0.65rem;
+  font-weight: normal;
+}
+
+.nv-tail {
+  padding-left: 0.6rem;
+  white-space: nowrap;
+}
+
+.nv-literal {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: max-content;
+}
+
+.nv-lit-part {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.nv-lit-part small {
+  max-width: 9rem;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.nv-lit-text {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 1.4rem;
+}
+
+.nv-lit-value {
+  align-self: center;
+  max-width: 18rem;
+}
+
+.nv-register {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  font-family: ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.nv-reg-name {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.nv-reg-note {
+  color: var(--text-dim);
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+}
+
+.nv-op-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.nv-op {
+  font-size: 1.2rem;
+  color: var(--text-dim);
+}

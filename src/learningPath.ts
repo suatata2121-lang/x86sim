@@ -54,8 +54,11 @@ export const LEARNING_PATH: LearningModule[] = [
   {
     id: 'm0',
     title: 'Number Systems',
-    summary: 'Read and convert the binary, hexadecimal and signed numbers every later module is written in.',
-    concepts: [num('bases'), num('conversions'), num('signed-numbers'), num('literals')],
+    summary: 'Read and convert the binary, hexadecimal and signed numbers every later module is written in, and do arithmetic and logic on them.',
+    concepts: [
+      num('bases'), num('conversions'), num('signed-numbers'), num('literals'),
+      num('add-sub'), num('mul-div'), num('logic'),
+    ],
     assignments: [],
     // Read every topic, then pass the quiz (issue #20); no program to run yet.
     steps: ['concept', 'quiz'],

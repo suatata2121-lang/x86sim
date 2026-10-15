@@ -10,6 +10,7 @@ import { FetchDecodeExecuteView } from './FetchDecodeExecuteView'
 import { AluView } from './AluView'
 import { FigureStepper } from './FigureStepper'
 import { BiuEuView } from './BiuEuView'
+import { NumberVisual } from './NumberVisual'
 import type { ConceptRef } from '../learningPath'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -444,12 +445,13 @@ export function LearnDetail({
         <h4 className="learn-stage-title">{numTopic.title}</h4>
         <p className="example-description">{numTopic.summary}</p>
         {numTopic.content.map((p, idx) =>
-          // A paragraph containing a newline is a worked example or table (see numberingSystems.ts)
-          // rather than prose -- render it in the same monospace box the Instruction Reference uses
-          // for code examples, so its alignment survives instead of being collapsed.
-          p.includes('\n')
-            ? <pre key={idx} className="instr-example">{p}</pre>
-            : <p key={idx} className="example-description">{p}</p>
+          // Worked examples are drawn (NumberVisual); a string containing a newline is a code
+          // snippet and keeps the Instruction Reference's monospace box.
+          typeof p !== 'string'
+            ? <NumberVisual key={idx} visual={p} />
+            : p.includes('\n')
+              ? <pre key={idx} className="instr-example">{p}</pre>
+              : <p key={idx} className="example-description">{p}</p>
         )}
         {numTopic.notes && (
           <ul className="instr-notes">

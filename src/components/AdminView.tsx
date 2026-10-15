@@ -78,6 +78,15 @@ interface QuizAttempt {
   created_at: string
 }
 
+/** A row of the question pool; admins can read it, students can't (answers stay server-side). */
+interface QuizQuestion {
+  id: string
+  module_id: string
+  topic_id: string
+  question: string
+  active: boolean
+}
+
 interface ConceptRead {
   module_id: string
   concept_id: string
@@ -160,6 +169,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
   const [students, setStudents] = useState<StudentSummary[]>([])
   const [progress, setProgress] = useState<Progress[]>([])
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -176,12 +186,14 @@ export function AdminView({ onClose }: { onClose: () => void }) {
       fetchAll<Progress>('assignment_progress', '*'),
       // Until schema.sql is re-run the table doesn't exist; the rest of the report still loads.
       fetchAll<QuizAttempt>('quiz_attempts', 'id, user_id, module_id, score, total, passed, answers, created_at').catch(() => []),
+      fetchAll<QuizQuestion>('quiz_questions', 'id, module_id, topic_id, question, active').catch(() => []),
     ])
-      .then(([s, p, q]) => {
+      .then(([s, p, q, qq]) => {
         if (cancelled) return
         setStudents(s.filter((row) => row.role === 'student'))
         setProgress(p)
         setQuizAttempts(q)
+        setQuizQuestions(qq)
       })
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => !cancelled && setLoading(false))
@@ -220,16 +232,19 @@ export function AdminView({ onClose }: { onClose: () => void }) {
         const rows = quizAttempts.filter((a) => a.module_id === quiz.id && visibleIds.has(a.user_id))
         const triedBy = new Set(rows.map((a) => a.user_id))
         const passedBy = new Set(rows.filter((a) => a.passed).map((a) => a.user_id))
-        const questions = quiz.questions
+        // Retired questions (active = false) still show if someone was asked them.
+        const questions = quizQuestions
+          .filter((q) => q.module_id === quiz.id)
           .map((q) => {
             const answers = rows.flatMap((a) => a.answers.filter((x) => x.question_id === q.id))
             const wrong = answers.filter((x) => !x.correct).length
             return { question: q, asked: answers.length, wrong, rate: answers.length ? wrong / answers.length : 0 }
           })
+          .filter((q) => q.question.active || q.asked > 0)
           .sort((a, b) => b.rate - a.rate || b.asked - a.asked)
         return { quiz, attempts: rows.length, tried: triedBy.size, passed: passedBy.size, questions }
       }),
-    [quizAttempts, visibleIds],
+    [quizAttempts, quizQuestions, visibleIds],
   )
 
   const selected = students.find((s) => s.id === selectedId) ?? null
@@ -362,11 +377,18 @@ export function AdminView({ onClose }: { onClose: () => void }) {
                     {questions.map(({ question, asked, wrong, rate }) => (
                       <tr key={question.id}>
                         <td>{question.question}</td>
-                        <td>{topicTitle(quiz.id, question.topic)}</td>
+                        <td>{topicTitle(quiz.id, question.topic_id)}</td>
                         <td>{asked}</td>
                         <td>{asked ? `${Math.round(rate * 100)}% (${wrong})` : '-'}</td>
                       </tr>
                     ))}
+                    {questions.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="admin-empty">
+                          No questions loaded yet: run the question seed files in the Supabase SQL editor.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

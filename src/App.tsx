@@ -556,9 +556,11 @@ export default function App() {
           <QuizDialog
             quiz={quiz}
             topicTitle={(topic) => conceptTitle(module.concepts.find((c) => c.id === topic) ?? { section: 'numbering', id: topic })}
-            onSubmit={(r) => {
-              moduleProgress.recordQuizAttempt(module.id, { score: r.score, total: r.total, passed: r.passed, answers: r.answers })
+            draw={() => moduleProgress.drawQuiz(module.id)}
+            submit={async (answers) => {
+              const r = await moduleProgress.submitQuiz(module.id, answers)
               if (r.passed) moduleProgress.setStep(module.id, 'done')
+              return r
             }}
             onReview={(topic) => {
               setQuizModuleId(null)

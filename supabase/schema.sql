@@ -248,11 +248,16 @@ create policy "module progress: update own" on public.module_progress
 
 -- ------------------------------------------------------- module quizzes --
 -- Modules that close with a quiz (Module 0, issue #20): the Learn pages a
--- student marked as read, which unlock the quiz, and every attempt with its
--- answers ([{question_id, chosen, correct}]) for the admin's "most missed
--- questions". A module counts as done only with a passed attempt. Scoring
--- happens in the browser, so a student could in principle insert a fake
--- pass; acceptable for a self-check quiz.
+-- student marked as read, which unlock the quiz, the question pool, and
+-- every attempt with its answers ([{question_id, chosen, correct}]) for the
+-- admin's "most missed questions". A module counts as done only with a
+-- passed attempt.
+--
+-- The questions and their answers live only in quiz_questions, which only
+-- admins can read; they are loaded from a private seed file in the SQL
+-- editor, never from this public repo. Students get questions without
+-- answers from quiz_draw() and are graded by quiz_submit(), which is also
+-- the only way to write a quiz_attempts row, so a pass can't be faked.
 
 create table if not exists public.concept_reads (
   user_id    uuid not null references public.profiles (id) on delete cascade,
@@ -292,9 +297,143 @@ drop policy if exists "quiz attempts: read own or admin" on public.quiz_attempts
 create policy "quiz attempts: read own or admin" on public.quiz_attempts
   for select using (user_id = auth.uid() or public.is_admin());
 
+-- No insert policy: attempts are written by quiz_submit() only.
 drop policy if exists "quiz attempts: insert own" on public.quiz_attempts;
-create policy "quiz attempts: insert own" on public.quiz_attempts
-  for insert with check (user_id = auth.uid() and length(answers::text) <= 10000);
+
+create table if not exists public.quiz_questions (
+  id            text primary key,
+  module_id     text not null,
+  topic_id      text not null,
+  question      text not null,
+  options       jsonb not null check (jsonb_typeof(options) = 'array' and jsonb_array_length(options) between 2 and 8),
+  correct_index integer not null check (correct_index >= 0),
+  explanation   text not null default '',
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  check (correct_index < jsonb_array_length(options))
+);
+
+create index if not exists quiz_questions_module_idx on public.quiz_questions (module_id) where active;
+
+alter table public.quiz_questions enable row level security;
+
+-- Admins read the pool (question text for the report); nobody writes it
+-- from the browser -- the seed file runs in the SQL editor.
+drop policy if exists "quiz questions: admin reads" on public.quiz_questions;
+create policy "quiz questions: admin reads" on public.quiz_questions
+  for select using (public.is_admin());
+
+-- One attempt's questions, answers left out: one per topic, the rest of the
+-- 10 at random, questions and options in random order.
+create or replace function public.quiz_draw(p_module text)
+returns jsonb
+language plpgsql
+volatile
+security definer set search_path = public
+as $$
+declare
+  result jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in to take the quiz';
+  end if;
+  with pool as (
+    select * from public.quiz_questions where module_id = p_module and active
+  ), firsts as (
+    select distinct on (topic_id) id from pool order by topic_id, random()
+  ), rest as (
+    select id from pool where id not in (select id from firsts)
+    order by random()
+    limit greatest(0, 10 - (select count(*) from firsts))
+  ), picked as (
+    select id from firsts union all select id from rest
+  )
+  select jsonb_agg(
+           jsonb_build_object(
+             'id', q.id,
+             'topic', q.topic_id,
+             'question', q.question,
+             'options', (select jsonb_agg(o order by random()) from jsonb_array_elements_text(q.options) o)
+           ) order by random())
+    into result
+    from pool q join picked using (id);
+  return coalesce(result, '[]'::jsonb);
+end;
+$$;
+
+-- Grades an attempt (p_answers = [{question_id, chosen}], chosen = the
+-- option text), records it, and returns the score. The right answers and
+-- explanations come back only on a pass, so a retake can't be looked up.
+create or replace function public.quiz_submit(p_module text, p_answers jsonb)
+returns jsonb
+language plpgsql
+volatile
+security definer set search_path = public
+as $$
+declare
+  graded jsonb;
+  v_total integer;
+  v_score integer;
+  v_passed boolean;
+  v_expected integer;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in to take the quiz';
+  end if;
+  if jsonb_typeof(p_answers) <> 'array' then
+    raise exception 'Answers must be a list';
+  end if;
+  select least(10, count(*)) into v_expected
+    from public.quiz_questions where module_id = p_module and active;
+
+  with given as (
+    select a ->> 'question_id' as question_id, a ->> 'chosen' as chosen, ord
+      from jsonb_array_elements(p_answers) with ordinality as t(a, ord)
+  ), checked as (
+    select g.ord, q.id, g.chosen,
+           g.chosen = q.options ->> q.correct_index as correct,
+           q.options ->> q.correct_index as answer,
+           q.explanation
+      from given g
+      join public.quiz_questions q on q.id = g.question_id and q.module_id = p_module and q.active
+  )
+  select jsonb_agg(jsonb_build_object('question_id', id, 'chosen', chosen, 'correct', correct,
+                                      'answer', answer, 'explanation', explanation) order by ord),
+         count(*), count(*) filter (where correct)
+    into graded, v_total, v_score
+    from checked;
+
+  if v_total is distinct from v_expected
+     or v_total <> jsonb_array_length(p_answers)
+     or v_total <> (select count(distinct a ->> 'question_id') from jsonb_array_elements(p_answers) a) then
+    raise exception 'Answer every question of one quiz exactly once';
+  end if;
+
+  -- 7 of 10 to pass.
+  v_passed := v_score * 10 >= v_total * 7;
+
+  insert into public.quiz_attempts (user_id, module_id, score, total, passed, answers)
+  values (
+    auth.uid(), p_module, v_score, v_total, v_passed,
+    (select jsonb_agg(jsonb_build_object('question_id', x ->> 'question_id', 'chosen', x ->> 'chosen',
+                                         'correct', (x ->> 'correct')::boolean))
+       from jsonb_array_elements(graded) x)
+  );
+
+  return jsonb_build_object(
+    'score', v_score,
+    'total', v_total,
+    'passed', v_passed,
+    'answers', case when v_passed then graded
+                    else (select jsonb_agg(x - 'answer' - 'explanation') from jsonb_array_elements(graded) x) end
+  );
+end;
+$$;
+
+revoke all on function public.quiz_draw(text) from public, anon;
+revoke all on function public.quiz_submit(text, jsonb) from public, anon;
+grant execute on function public.quiz_draw(text) to authenticated;
+grant execute on function public.quiz_submit(text, jsonb) to authenticated;
 
 -- ---------------------------------------------------------------- feedback --
 -- Problems and requests sent from the site's Feedback button, read in the

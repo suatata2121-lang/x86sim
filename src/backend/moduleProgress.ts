@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './client'
 import { trackActivity } from './tracking'
 import type { ModuleProgressRow, StoredStep } from '../learningPath'
-import type { QuizAnswer } from '../quizzes'
+import type { DrawnQuestion, QuizResult } from '../quizzes'
 
 // The signed-in student's position in each learning-path module, kept in
 // module_progress so it follows them across devices, plus the topics they
 // marked as read (concept_reads) and which module quizzes they passed
-// (quiz_attempts). Updates are applied locally first; a failed write only
+// (quiz_attempts, written only by the quiz_submit function). Updates are applied locally first; a failed write only
 // costs the server copy, never the UI.
 
 export function useModuleProgress(userId: string | null) {
@@ -63,15 +63,24 @@ export function useModuleProgress(userId: string | null) {
       .then(() => undefined)
   }, [userId])
 
-  const recordQuizAttempt = useCallback((moduleId: string, attempt: { score: number; total: number; passed: boolean; answers: QuizAnswer[] }) => {
-    if (!supabase || !userId) return
-    if (attempt.passed) setQuizzesPassed((prev) => new Set(prev).add(moduleId))
-    trackActivity('quiz_attempt', null, { module: moduleId, score: `${attempt.score}/${attempt.total}`, passed: attempt.passed })
-    void supabase
-      .from('quiz_attempts')
-      .insert({ user_id: userId, module_id: moduleId, ...attempt })
-      .then(() => undefined)
-  }, [userId])
+  // Questions and grading are server-side (quiz_draw / quiz_submit in
+  // schema.sql) so the answer key never reaches the browser.
+  const drawQuiz = useCallback(async (moduleId: string): Promise<DrawnQuestion[]> => {
+    if (!supabase) throw new Error('Accounts are not available')
+    const { data, error } = await supabase.rpc('quiz_draw', { p_module: moduleId })
+    if (error) throw new Error(error.message)
+    return (data ?? []) as DrawnQuestion[]
+  }, [])
 
-  return { rows, reads, quizzesPassed, loaded, setStep, markRead, recordQuizAttempt }
+  const submitQuiz = useCallback(async (moduleId: string, answers: { question_id: string; chosen: string }[]): Promise<QuizResult> => {
+    if (!supabase) throw new Error('Accounts are not available')
+    const { data, error } = await supabase.rpc('quiz_submit', { p_module: moduleId, p_answers: answers })
+    if (error) throw new Error(error.message)
+    const result = data as QuizResult
+    if (result.passed) setQuizzesPassed((prev) => new Set(prev).add(moduleId))
+    trackActivity('quiz_attempt', null, { module: moduleId, score: `${result.score}/${result.total}`, passed: result.passed })
+    return result
+  }, [])
+
+  return { rows, reads, quizzesPassed, loaded, setStep, markRead, drawQuiz, submitQuiz }
 }
