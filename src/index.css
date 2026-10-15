@@ -23,6 +23,15 @@
   --warning-border: #7a5a1f;
   --warning-bg-strong: #4a3a1f;
   --warning-text: #ffd699;
+  /* Number-system visuals (components/NumberVisual.tsx): one colour per base and role. */
+  --num-dec: #7cb7ff;
+  --num-bin: #6fd49a;
+  --num-hex: #ffb454;
+  --num-oct: #c9a0ff;
+  --num-carry: #ff7a7a;
+  --num-flag: #ffd666;
+  --num-nibble-a: #ffffff0f;
+  --num-nibble-b: #ffffff1f;
   color-scheme: dark;
 }
 
@@ -51,6 +60,14 @@
   --warning-border: #d6a34d;
   --warning-bg-strong: #ffe4a3;
   --warning-text: #7a5000;
+  --num-dec: #1f5fae;
+  --num-bin: #1d7a45;
+  --num-hex: #a35a00;
+  --num-oct: #6b3fb3;
+  --num-carry: #c0262d;
+  --num-flag: #8a6200;
+  --num-nibble-a: #0000000a;
+  --num-nibble-b: #00000017;
   color-scheme: light;
 }
 

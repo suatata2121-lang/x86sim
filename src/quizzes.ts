@@ -35,11 +35,12 @@ export const QUIZZES: Quiz[] = [
     id: 'm0',
     title: 'Module 0 Quiz: Number Systems',
     intro:
-      '10 questions from the four Number Systems topics. You need 7 correct answers to pass and unlock Module 1. ' +
+      '10 questions from the seven Number Systems topics. You need 7 correct answers to pass and unlock Module 1. ' +
       'You can retake the quiz as many times as you need.',
-    lockedNote: 'Read all four Number Systems topics to unlock the quiz.',
+    lockedNote: 'Read all seven Number Systems topics to unlock the quiz.',
     questionCount: 10,
-    perTopic: 2,
+    // At least one question from every topic that has questions in the pool (#22).
+    perTopic: 1,
     passCount: 7,
     passNote: 'Module 1 is now unlocked.',
     questions: [
