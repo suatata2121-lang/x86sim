@@ -4,7 +4,24 @@
 // existing content by id (Learn pages, EXAMPLES, CURRICULUM) -- nothing is
 // copied here.
 
+import type { Reg16 } from './core/types'
+
 export type AsidePanel = 'registers' | 'stack' | 'devices' | 'databus' | 'memory' | 'profiler'
+
+export interface ObserveSpec {
+  examples: string[]
+  panel: AsidePanel
+  /**
+   * What to look for. Modules whose panel is 'registers' open the compact
+   * one-screen viewer (ObserveView), which shows this as a line under its
+   * title; others show it in a box above the editor.
+   */
+  watch?: string
+  /** Registers the compact viewer shows; AX, BX, CX, DX when absent. */
+  registers?: Reg16[]
+  /** Example id -> source line -> the "What happened" text after that line runs. */
+  callouts?: Record<string, Record<number, string>>
+}
 
 /**
  * The lab tools a module's pages show: 'editor' (the code tabs), 'run' (the
@@ -40,8 +57,7 @@ export interface LearningModule {
   title: string
   summary: string
   concepts: ConceptRef[]
-  /** `watch` is shown above the editor when the example is opened from Observe. */
-  observe?: { examples: string[]; panel: AsidePanel; watch?: string }
+  observe?: ObserveSpec
   assignments: string[]
   /** The steps this module shows, in order; the five standard ones when absent. */
   steps?: StepId[]
@@ -107,11 +123,20 @@ export const LEARNING_PATH: LearningModule[] = [
     observe: {
       examples: ['arithmetic'],
       panel: 'registers',
-      watch:
-        'Open the Registers panel and press Step one line at a time. Before each Step, say what the next line will ' +
-        'change. Watch for three things: ADD AX, BX changes only AX (BX stays 17); MOV CX, AX copies 37 into CX and ' +
-        'leaves AX alone; and MOV AH, 4Ch changes only the high byte of AX, from 0025h to 4C25h -- AL still holds ' +
-        '25h, which is 37.',
+      watch: 'Press Step one line at a time. Before each Step, guess what the next line will change.',
+      registers: ['AX', 'BX', 'CX'],
+      // Line numbers in the arithmetic example's source (examples.ts), checked by running it.
+      callouts: {
+        arithmetic: {
+          2: 'MOV AX, 25: AX 0000h → 0019h (25 in hex is 19h).',
+          3: 'MOV BX, 17: BX 0000h → 0011h. AX is untouched.',
+          4: 'ADD AX, BX: AX 0019h → 002Ah (25 + 17 = 42). BX stays 0011h -- only the destination changes.',
+          5: 'SUB AX, 5: AX 002Ah → 0025h (42 - 5 = 37).',
+          6: 'MOV CX, AX: CX 0000h → 0025h. MOV copies, so AX keeps 0025h.',
+          8: 'MOV AH, 4Ch: only the high byte of AX changes, 0025h → 4C25h. AL still holds 25h (37).',
+          9: 'INT 21h with AH = 4Ch ends the program and returns to DOS.',
+        },
+      },
     },
     assignments: ['t1-sensor-registers', 't2-swap-readings'],
     // Issue #25: read, try every interactive, pass both tasks, then the quiz.

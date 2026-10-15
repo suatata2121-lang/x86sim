@@ -3269,3 +3269,255 @@ aside .panel {
 .quiz-code {
   margin: 0.2rem 0 0.4rem;
 }
+
+/* ---- Observe on one screen (components/ObserveView.tsx) ---- */
+
+.observe {
+  margin-bottom: 0.6rem;
+  border-color: var(--accent-border);
+}
+
+/* The buttons stay in reach while a narrow screen scrolls the code. */
+.observe-controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin: -0.25rem 0 0.4rem;
+  padding: 0.25rem 0;
+  background: var(--bg-panel);
+}
+
+.observe-controls h3 {
+  margin: 0;
+}
+
+.observe-count {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+.observe-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.observe-buttons button.primary {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.observe-summary {
+  margin-bottom: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.observe-summary summary {
+  cursor: pointer;
+}
+
+.observe-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 600px) {
+  .observe-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.observe-code {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.9rem;
+}
+
+.observe-code li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+.observe-code li.ran {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.observe-code li.next {
+  color: var(--text-dim);
+}
+
+.observe-line-no {
+  min-width: 1.8rem;
+  color: var(--text-faint);
+  text-align: right;
+}
+
+.observe-code li.ran .observe-line-no {
+  color: var(--accent-text);
+}
+
+.observe-tag {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: normal;
+}
+
+.observe-regs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.observe-reg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.observe-reg.changed {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.observe-reg-name {
+  width: 1.8rem;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.observe-reg.changed .observe-reg-name {
+  color: var(--accent-text);
+}
+
+.observe-reg-value {
+  display: flex;
+  flex-direction: column;
+  min-width: 3.6rem;
+  line-height: 1.1;
+}
+
+.observe-reg-value small {
+  color: var(--text-faint);
+  font-size: 0.7rem;
+}
+
+.observe-halves {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.observe-halves span {
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.observe-halves span.changed {
+  border-color: var(--accent-text);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.observe-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.2rem 0.4rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.observe-happened {
+  margin-top: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  font-size: 0.9rem;
+}
+
+.observe-done {
+  color: var(--success-text);
+}
+
+.observe-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.4rem;
+}
+
+.path-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.6rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  font-size: 0.9rem;
+}
+
+.path-collapsed button {
+  margin-left: auto;
+}
+
+.observe-input {
+  margin-top: 0.5rem;
+}
+
+.observe-output {
+  margin: 0.5rem 0 0;
+}
+
+/* Phones: stack the side menu above the work area and let the header
+   buttons wrap, so nothing is wider than the screen (#27). */
+@media (max-width: 700px) {
+  header {
+    flex-wrap: wrap;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+  }
+
+  .editor-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mode-sidebar {
+    flex: 0 0 auto;
+  }
+
+  .editor-col {
+    width: 100%;
+  }
+}

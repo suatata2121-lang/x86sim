@@ -48,11 +48,16 @@ interface Props {
   progress: PathProgress
   onSetStep: (moduleId: string, step: StoredStep) => void
   onOpenConcept: (ref: ConceptRef) => void
-  onOpenExample: (exampleId: string, panel: AsidePanel, watch?: string) => void
+  /** moduleId says which module's Observe step asked, so its viewer settings apply. */
+  onOpenExample: (exampleId: string, panel: AsidePanel, watch: string | undefined, moduleId: string) => void
   onOpenAssignment: (assignmentId: string) => void
   onOpenQuiz: (moduleId: string) => void
   onStepOpened: (moduleId: string, step: StepId) => void
   onHide: () => void
+  /** Shown as a single line instead of the card (while the Observe viewer is open). */
+  collapsed?: string
+  onExpand?: () => void
+  onCollapse?: () => void
 }
 
 // The "Continue" home for signed-in students (issue #9): the module they are
@@ -62,6 +67,7 @@ interface Props {
 // also shows its checklist (#25): what to read, try, pass, then the quiz.
 export function LearningPathCard({
   rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onStepOpened, onHide,
+  collapsed, onExpand, onCollapse,
 }: Props) {
   const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
@@ -76,7 +82,7 @@ export function LearningPathCard({
     if (!isModuleDone(m, progress, rows.get(m.id)?.step)) onSetStep(m.id, step)
     onStepOpened(m.id, step)
     if (step === 'concept') onOpenConcept(m.concepts[index ?? Math.max(0, m.concepts.indexOf(unreadConcepts(m, progress)[0]))])
-    else if (step === 'observe' && m.observe) onOpenExample(m.observe.examples[index ?? 0], m.observe.panel, m.observe.watch)
+    else if (step === 'observe' && m.observe) onOpenExample(m.observe.examples[index ?? 0], m.observe.panel, m.observe.watch, m.id)
     else if (step === 'quiz') onOpenQuiz(m.id)
     else if (step === 'task') {
       const id = index !== undefined ? m.assignments[index] : m.assignments.find((a) => !completed.has(a)) ?? m.assignments[0]
@@ -103,7 +109,7 @@ export function LearningPathCard({
     else if (r.kind === 'quiz') openStep(m, 'quiz')
     else if (r.item.example) {
       onSetStep(m.id, 'observe')
-      onOpenExample(r.item.example, m.observe?.panel ?? 'registers', m.observe?.watch)
+      onOpenExample(r.item.example, m.observe?.panel ?? 'registers', m.observe?.watch, m.id)
     } else {
       const ref = m.concepts.find((c) => c.id === r.item.topic)
       if (ref) openStep(m, 'concept', m.concepts.indexOf(ref))
@@ -142,6 +148,15 @@ export function LearningPathCard({
     </div>
   )
 
+  if (collapsed) {
+    return (
+      <div className="path-collapsed">
+        <span>{collapsed}</span>
+        <button onClick={onExpand}>Show card</button>
+      </div>
+    )
+  }
+
   if (!module) {
     return (
       <div className="panel path-card">
@@ -176,6 +191,7 @@ export function LearningPathCard({
           <span className="path-module-no">Module {index}</span> {module.title}
           {moduleDone && <span className="admin-badge passed">Done</span>}
         </h3>
+        {onCollapse && <button onClick={onCollapse}>Collapse</button>}
         <button className="modal-close" onClick={onHide} aria-label="Hide learning path" title="Hide (reopen from the header)">×</button>
       </div>
       <p className="example-description">{module.summary}</p>
