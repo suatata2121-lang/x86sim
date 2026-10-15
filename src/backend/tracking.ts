@@ -6,6 +6,11 @@ import { supabase } from './client'
 // is dropped silently rather than ever getting in the way of the simulator.
 
 const HEARTBEAT_MS = 60_000
+// A visible tab with no mouse, keyboard, scroll or touch for this long stops
+// counting, so a screen left open doesn't add lab time. Time up to this
+// limit still counts -- reading a page is quiet too.
+const IDLE_MS = 5 * 60_000
+const ACTIVITY_EVENTS = ['pointermove', 'pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart'] as const
 const FLUSH_MS = 15_000
 
 export type ActivityKind =
@@ -114,21 +119,33 @@ export function useStudySession(userId: string | null) {
         if (!cancelled && data) currentSessionId = (data as { id: string }).id
       })
 
-    // Time only accrues while the tab is visible.
+    // Time only accrues while the tab is visible and someone is using it.
     let paused = document.visibilityState !== 'visible'
+    let lastActivity = Date.now()
 
     function beat() {
       const now = Date.now()
-      const seconds = Math.round((now - lastBeat) / 1000)
+      // Credit up to IDLE_MS after the last input, never the idle time beyond it.
+      const seconds = Math.max(0, Math.round((Math.min(now, lastActivity + IDLE_MS) - lastBeat) / 1000))
       lastBeat = now
-      if (paused || !currentSessionId) return
+      if (paused || !currentSessionId || seconds === 0) return
       void client!.rpc('session_heartbeat', { p_session_id: currentSessionId, p_seconds: seconds }).then(() => undefined)
+    }
+
+    // Coming back after an idle spell: settle what is owed so far (beat()
+    // credits only up to the idle limit and restarts the interval), so the
+    // idle gap is never credited.
+    function onActivity() {
+      const now = Date.now()
+      if (now - lastActivity > IDLE_MS) beat()
+      lastActivity = now
     }
 
     function onVisibility() {
       if (document.visibilityState === 'visible') {
         paused = false
         lastBeat = Date.now()
+        lastActivity = Date.now()
       } else {
         beat()
         paused = true
@@ -140,6 +157,7 @@ export function useStudySession(userId: string | null) {
     const flusher = window.setInterval(flush, FLUSH_MS)
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('pagehide', flush)
+    for (const name of ACTIVITY_EVENTS) window.addEventListener(name, onActivity, { passive: true, capture: true })
 
     return () => {
       cancelled = true
@@ -150,6 +168,7 @@ export function useStudySession(userId: string | null) {
       window.clearInterval(flusher)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('pagehide', flush)
+      for (const name of ACTIVITY_EVENTS) window.removeEventListener(name, onActivity, { capture: true })
       currentUserId = null
       currentSessionId = null
     }
