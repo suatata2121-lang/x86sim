@@ -1607,7 +1607,8 @@ aside .panel {
   background: var(--bg-button-hover);
 }
 
-.feedback-actions button.primary {
+.feedback-actions button.primary,
+.path-actions button.primary {
   border-color: var(--accent-border);
   background: var(--accent-bg);
   color: var(--accent-text);
@@ -2089,6 +2090,122 @@ aside .panel {
   background: var(--accent-bg);
   color: var(--text);
   font-size: 0.9rem;
+}
+
+/* ---- Learning path card (components/LearningPathCard.tsx) ---- */
+
+.path-card {
+  margin: 0 0 0.75rem;
+  border-color: var(--accent-border);
+}
+
+.path-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.path-header h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.path-module-no {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: normal;
+}
+
+.path-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.path-step {
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.path-step.passed {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.path-step.active {
+  border-color: var(--accent-text);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.path-step:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.path-soon {
+  font-size: 0.75rem;
+}
+
+.path-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.path-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.path-count {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.path-bar {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  gap: 3px;
+  margin-top: 0.6rem;
+}
+
+.path-segment {
+  padding: 0.15rem 0;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.path-segment.in-progress {
+  background: var(--warning-bg-strong);
+  color: var(--warning-text);
+}
+
+.path-segment.done {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.path-segment.current {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
 }
 
 /* ---- Admin panel (components/AdminView.tsx) ---- */

@@ -211,6 +211,35 @@ drop policy if exists "attempts: insert own" on public.assignment_attempts;
 create policy "attempts: insert own" on public.assignment_attempts
   for insert with check (user_id = auth.uid() and length(source) <= 50000);
 
+-- -------------------------------------------------------- learning path --
+-- Where each student is in each module of the learning path
+-- (src/learningPath.ts). Only the current step is stored; a module with
+-- assignments counts as done once they are all passed (assignment_attempts),
+-- so a student can't mark one done by editing this row. updated_at picks the
+-- module the "Continue" card resumes on any device.
+
+create table if not exists public.module_progress (
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  module_id  text not null,
+  step       text not null check (step in ('concept', 'observe', 'predict', 'task', 'reflect', 'done')),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, module_id)
+);
+
+alter table public.module_progress enable row level security;
+
+drop policy if exists "module progress: read own or admin" on public.module_progress;
+create policy "module progress: read own or admin" on public.module_progress
+  for select using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "module progress: insert own" on public.module_progress;
+create policy "module progress: insert own" on public.module_progress
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "module progress: update own" on public.module_progress;
+create policy "module progress: update own" on public.module_progress
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+
 -- ------------------------------------------------------------------ report --
 -- One row per student for the admin panel. security_invoker makes the view
 -- obey the RLS above, so a student querying it sees only their own row.

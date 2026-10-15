@@ -15,6 +15,7 @@ export type ActivityKind =
   | 'animate'
   | 'open_assignment'
   | 'load_example'
+  | 'path_step'
 
 interface QueuedEvent {
   user_id: string
