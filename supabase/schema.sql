@@ -221,10 +221,16 @@ create policy "attempts: insert own" on public.assignment_attempts
 create table if not exists public.module_progress (
   user_id    uuid not null references public.profiles (id) on delete cascade,
   module_id  text not null,
-  step       text not null check (step in ('concept', 'observe', 'predict', 'task', 'reflect', 'done')),
+  step       text not null check (step in ('concept', 'observe', 'predict', 'task', 'quiz', 'reflect', 'done')),
   updated_at timestamptz not null default now(),
   primary key (user_id, module_id)
 );
+
+-- `create table if not exists` leaves an older table's check as it was, so
+-- replace it to allow the 'quiz' step (#20).
+alter table public.module_progress drop constraint if exists module_progress_step_check;
+alter table public.module_progress add constraint module_progress_step_check
+  check (step in ('concept', 'observe', 'predict', 'task', 'quiz', 'reflect', 'done'));
 
 alter table public.module_progress enable row level security;
 
@@ -239,6 +245,56 @@ create policy "module progress: insert own" on public.module_progress
 drop policy if exists "module progress: update own" on public.module_progress;
 create policy "module progress: update own" on public.module_progress
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- ------------------------------------------------------- module quizzes --
+-- Modules that close with a quiz (Module 0, issue #20): the Learn pages a
+-- student marked as read, which unlock the quiz, and every attempt with its
+-- answers ([{question_id, chosen, correct}]) for the admin's "most missed
+-- questions". A module counts as done only with a passed attempt. Scoring
+-- happens in the browser, so a student could in principle insert a fake
+-- pass; acceptable for a self-check quiz.
+
+create table if not exists public.concept_reads (
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  module_id  text not null,
+  concept_id text not null,
+  read_at    timestamptz not null default now(),
+  primary key (user_id, module_id, concept_id)
+);
+
+alter table public.concept_reads enable row level security;
+
+drop policy if exists "concept reads: read own or admin" on public.concept_reads;
+create policy "concept reads: read own or admin" on public.concept_reads
+  for select using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "concept reads: insert own" on public.concept_reads;
+create policy "concept reads: insert own" on public.concept_reads
+  for insert with check (user_id = auth.uid());
+
+create table if not exists public.quiz_attempts (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  module_id  text not null,
+  score      integer not null check (score >= 0),
+  total      integer not null check (total > 0),
+  passed     boolean not null,
+  answers    jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  check (score <= total)
+);
+
+create index if not exists quiz_attempts_user_idx on public.quiz_attempts (user_id, module_id, created_at desc);
+
+alter table public.quiz_attempts enable row level security;
+
+drop policy if exists "quiz attempts: read own or admin" on public.quiz_attempts;
+create policy "quiz attempts: read own or admin" on public.quiz_attempts
+  for select using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "quiz attempts: insert own" on public.quiz_attempts;
+create policy "quiz attempts: insert own" on public.quiz_attempts
+  for insert with check (user_id = auth.uid() and length(answers::text) <= 10000);
 
 -- ---------------------------------------------------------------- feedback --
 -- Problems and requests sent from the site's Feedback button, read in the

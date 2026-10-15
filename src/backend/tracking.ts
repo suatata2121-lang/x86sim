@@ -16,6 +16,8 @@ export type ActivityKind =
   | 'open_assignment'
   | 'load_example'
   | 'path_step'
+  | 'read_topic'
+  | 'quiz_attempt'
 
 interface QueuedEvent {
   user_id: string

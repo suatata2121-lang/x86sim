@@ -5,15 +5,18 @@ import { HARDWARE_REFERENCE } from '../hardwareReference'
 import { NUMBERING_REFERENCE } from '../numberingSystems'
 import { INSTRUCTION_REFERENCE } from '../instructionReference'
 import {
-  LEARNING_PATH, STEPS, activeSteps, currentModule, isModuleDone, moduleStatus, nextStep, resumeStep,
-  type AsidePanel, type ConceptRef, type LearningModule, type ModuleProgressRow, type StepId, type StoredStep,
+  LEARNING_PATH, STEPS, activeSteps, currentModule, isModuleDone, isUnlocked, moduleStatus, nextStep, resumeStep,
+  shownSteps, unreadConcepts,
+  type AsidePanel, type ConceptRef, type LearningModule, type ModuleProgressRow, type PathProgress, type StepId,
+  type StoredStep,
 } from '../learningPath'
+import { findQuiz } from '../quizzes'
 
 const ASSIGNMENT_TITLES = new Map(
   CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments)).map((a) => [a.id, a.title]),
 )
 
-function conceptTitle(ref: ConceptRef): string {
+export function conceptTitle(ref: ConceptRef): string {
   if (ref.section === 'hardware') {
     return HARDWARE_REFERENCE.flatMap((c) => c.topics).find((t) => t.id === ref.id)?.title ?? ref.id
   }
@@ -29,34 +32,38 @@ const STATUS_LABELS = { done: 'done', 'in-progress': 'in progress', 'not-started
 
 interface Props {
   rows: Map<string, ModuleProgressRow>
-  completed: Set<string>
+  progress: PathProgress
   onSetStep: (moduleId: string, step: StoredStep) => void
   onOpenConcept: (ref: ConceptRef) => void
   onOpenExample: (exampleId: string, panel: AsidePanel) => void
   onOpenAssignment: (assignmentId: string) => void
+  onOpenQuiz: (moduleId: string) => void
   onStepOpened: (moduleId: string, step: StepId) => void
   onHide: () => void
 }
 
 // The "Continue" home for signed-in students (issue #9): the module they are
-// on, its five steps, and an 11-segment bar of the whole path. The lock is
-// soft -- any module can be picked from the bar; only the next one is offered.
+// on, its steps, and an 11-segment bar of the whole path. Modules can be
+// picked from the bar in any order, except ones whose `requires` aren't done
+// yet (Module 0's quiz gates the rest, #20).
 export function LearningPathCard({
-  rows, completed, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onStepOpened, onHide,
+  rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onStepOpened, onHide,
 }: Props) {
+  const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
   // the student moves on; otherwise the card follows currentModule().
   const [viewedId, setViewedId] = useState<string | null>(null)
-  const current = currentModule(rows, completed)
+  const current = currentModule(rows, progress)
   const module = LEARNING_PATH.find((m) => m.id === viewedId) ?? current
-  const doneCount = LEARNING_PATH.filter((m) => isModuleDone(m, completed, rows.get(m.id)?.step)).length
+  const doneCount = LEARNING_PATH.filter((m) => isModuleDone(m, progress, rows.get(m.id)?.step)).length
 
   function openStep(m: LearningModule, step: StepId, index?: number) {
-    // Never move a finished code-free module back from 'done' just by revisiting it.
-    if (rows.get(m.id)?.step !== 'done') onSetStep(m.id, step)
+    // Never move a finished module back from 'done' just by revisiting it.
+    if (!isModuleDone(m, progress, rows.get(m.id)?.step)) onSetStep(m.id, step)
     onStepOpened(m.id, step)
-    if (step === 'concept') onOpenConcept(m.concepts[index ?? 0])
-    else if (step === 'observe') onOpenExample(m.observe.examples[index ?? 0], m.observe.panel)
+    if (step === 'concept') onOpenConcept(m.concepts[index ?? Math.max(0, m.concepts.indexOf(unreadConcepts(m, progress)[0]))])
+    else if (step === 'observe' && m.observe) onOpenExample(m.observe.examples[index ?? 0], m.observe.panel)
+    else if (step === 'quiz') onOpenQuiz(m.id)
     else if (step === 'task') {
       const id = index !== undefined ? m.assignments[index] : m.assignments.find((a) => !completed.has(a)) ?? m.assignments[0]
       onOpenAssignment(id)
@@ -64,8 +71,16 @@ export function LearningPathCard({
   }
 
   function pickModule(m: LearningModule) {
+    if (!isUnlocked(m, progress, rows)) return
     setViewedId(m.id)
-    if (!isModuleDone(m, completed, rows.get(m.id)?.step)) onSetStep(m.id, resumeStep(rows.get(m.id)))
+    if (!isModuleDone(m, progress, rows.get(m.id)?.step)) onSetStep(m.id, resumeStep(m, rows.get(m.id), progress))
+  }
+
+  function lockedTitle(m: LearningModule) {
+    const missing = LEARNING_PATH.find((r) => m.requires?.includes(r.id) && !isModuleDone(r, progress, rows.get(r.id)?.step))
+    if (!missing) return ''
+    const i = LEARNING_PATH.indexOf(missing)
+    return missing.quiz ? `Pass the Module ${i} quiz to unlock` : `Finish Module ${i} to unlock`
   }
 
   function advance(m: LearningModule, step: StepId) {
@@ -81,17 +96,19 @@ export function LearningPathCard({
   const bar = (
     <div className="path-bar" role="list" aria-label="Learning path modules">
       {LEARNING_PATH.map((m, i) => {
-        const status = moduleStatus(m, completed, rows.get(m.id)?.step)
+        const status = moduleStatus(m, progress, rows.get(m.id)?.step)
+        const locked = !isUnlocked(m, progress, rows)
         return (
           <button
             key={m.id}
             role="listitem"
-            className={`path-segment ${status}${m.id === module?.id ? ' current' : ''}`}
-            title={`${i}. ${m.title} (${STATUS_LABELS[status]})`}
-            aria-label={`Module ${i}: ${m.title}, ${STATUS_LABELS[status]}`}
+            className={`path-segment ${locked ? 'locked' : status}${m.id === module?.id ? ' current' : ''}`}
+            title={locked ? `${i}. ${m.title} -- ${lockedTitle(m)}` : `${i}. ${m.title} (${STATUS_LABELS[status]})`}
+            aria-label={`Module ${i}: ${m.title}, ${locked ? 'locked' : STATUS_LABELS[status]}`}
+            aria-disabled={locked}
             onClick={() => pickModule(m)}
           >
-            {i}
+            {locked ? `🔒${i}` : i}
           </button>
         )
       })}
@@ -113,10 +130,14 @@ export function LearningPathCard({
 
   const index = LEARNING_PATH.indexOf(module)
   const row = rows.get(module.id)
-  const moduleDone = isModuleDone(module, completed, row?.step)
-  const step = resumeStep(row)
+  const moduleDone = isModuleDone(module, progress, row?.step)
+  const step = resumeStep(module, row, progress)
   const steps = activeSteps(module)
   const isLastStep = steps[steps.length - 1] === step
+  // Quiz modules: every topic has to be marked as read before the quiz opens.
+  const unread = module.quiz ? unreadConcepts(module, progress) : []
+  const readsLeft = unread.length
+  const lockedNote = `${(module.quiz && findQuiz(module.quiz)?.lockedNote) ?? ''} ${readsLeft} left.`
 
   return (
     <div className="panel path-card">
@@ -130,15 +151,20 @@ export function LearningPathCard({
       <p className="example-description">{module.summary}</p>
 
       <ol className="path-steps">
-        {STEPS.map((s) => {
-          const available = steps.includes(s.id)
+        {shownSteps(module).map((s) => {
+          const quizLocked = s.id === 'quiz' && readsLeft > 0
+          const available = steps.includes(s.id) && !quizLocked
           const passed = moduleDone || steps.indexOf(s.id) < steps.indexOf(step)
           return (
             <li key={s.id}>
               <button
                 className={`path-step${s.id === step && !moduleDone ? ' active' : ''}${available && passed ? ' passed' : ''}`}
                 disabled={!available}
-                title={s.comingSoon ? 'Coming soon' : !available ? 'This module has no assignment' : undefined}
+                title={
+                  s.comingSoon ? 'Coming soon'
+                    : quizLocked ? lockedNote
+                      : !available ? 'This module has no assignment' : undefined
+                }
                 onClick={() => openStep(module, s.id)}
               >
                 {s.label}{s.comingSoon && <span className="path-soon"> · soon</span>}
@@ -151,9 +177,12 @@ export function LearningPathCard({
       {!moduleDone && (
         <ul className="path-items">
           {step === 'concept' && module.concepts.map((c, i) => (
-            <li key={c.id}><button className="link-button" onClick={() => openStep(module, 'concept', i)}>{conceptTitle(c)}</button></li>
+            <li key={c.id}>
+              <button className="link-button" onClick={() => openStep(module, 'concept', i)}>{conceptTitle(c)}</button>
+              {module.quiz && (unread.includes(c) ? <span className="path-unread"> · not read</span> : ' ✓')}
+            </li>
           ))}
-          {step === 'observe' && module.observe.examples.map((id, i) => (
+          {step === 'observe' && module.observe?.examples.map((id, i) => (
             <li key={id}><button className="link-button" onClick={() => openStep(module, 'observe', i)}>{exampleTitle(id)}</button></li>
           ))}
           {step === 'task' && module.assignments.map((id, i) => (
@@ -163,6 +192,9 @@ export function LearningPathCard({
             </li>
           ))}
         </ul>
+      )}
+      {!moduleDone && module.quiz && readsLeft > 0 && (
+        <p className="path-note">{lockedNote} Use <em>Mark as read</em> at the end of each page.</p>
       )}
 
       <div className="path-actions">
@@ -175,9 +207,14 @@ export function LearningPathCard({
             <button className="primary" onClick={() => openStep(module, step)}>
               Continue: {STEPS.find((s) => s.id === step)?.label} ▶
             </button>
-            {step !== 'task' && (
-              <button onClick={() => advance(module, step)}>
+            {step !== 'task' && step !== 'quiz' && (
+              <button
+                onClick={() => advance(module, step)}
+                disabled={readsLeft > 0}
+                title={readsLeft > 0 ? 'Mark every topic as read first' : undefined}
+              >
                 {isLastStep ? 'Finish module ✓' : 'Next step →'}
+                {readsLeft > 0 && ` (${readsLeft} ${readsLeft === 1 ? 'topic' : 'topics'} left)`}
               </button>
             )}
           </>

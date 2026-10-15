@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../backend/client'
 import { CURRICULUM, type Assignment } from '../curriculum'
 import { LEARNING_PATH, STEPS, moduleStatus, type ModuleProgressRow } from '../learningPath'
+import { QUIZZES, type QuizAnswer } from '../quizzes'
+import { conceptTitle } from './LearningPathCard'
 import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
 
 // Instructor-only panel: who is using the lab, how long, and how far each
@@ -65,6 +67,23 @@ interface StudySession {
   active_seconds: number
 }
 
+interface QuizAttempt {
+  id: number
+  user_id: string
+  module_id: string
+  score: number
+  total: number
+  passed: boolean
+  answers: QuizAnswer[]
+  created_at: string
+}
+
+interface ConceptRead {
+  module_id: string
+  concept_id: string
+  read_at: string
+}
+
 type FeedbackStatus = 'new' | 'seen' | 'done'
 
 interface FeedbackItem {
@@ -85,6 +104,16 @@ const ASSIGNMENTS: { assignment: Assignment; stageTitle: string; taskTitle: stri
   ),
 )
 const ASSIGNMENT_TITLES = new Map(ASSIGNMENTS.map((a) => [a.assignment.id, a.assignment.title]))
+
+const moduleLabel = (id: string) => {
+  const i = LEARNING_PATH.findIndex((m) => m.id === id)
+  return i >= 0 ? `Module ${i}` : id
+}
+
+function topicTitle(moduleId: string, conceptId: string): string {
+  const ref = LEARNING_PATH.find((m) => m.id === moduleId)?.concepts.find((c) => c.id === conceptId)
+  return ref ? conceptTitle(ref) : conceptId
+}
 
 // Supabase caps a single select at 1000 rows, so page through bigger tables.
 async function fetchAll<T>(table: string, columns: string): Promise<T[]> {
@@ -130,6 +159,7 @@ function today() {
 export function AdminView({ onClose }: { onClose: () => void }) {
   const [students, setStudents] = useState<StudentSummary[]>([])
   const [progress, setProgress] = useState<Progress[]>([])
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -144,11 +174,14 @@ export function AdminView({ onClose }: { onClose: () => void }) {
     Promise.all([
       fetchAll<StudentSummary>('student_summary', '*'),
       fetchAll<Progress>('assignment_progress', '*'),
+      // Until schema.sql is re-run the table doesn't exist; the rest of the report still loads.
+      fetchAll<QuizAttempt>('quiz_attempts', 'id, user_id, module_id, score, total, passed, answers, created_at').catch(() => []),
     ])
-      .then(([s, p]) => {
+      .then(([s, p, q]) => {
         if (cancelled) return
         setStudents(s.filter((row) => row.role === 'student'))
         setProgress(p)
+        setQuizAttempts(q)
       })
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => !cancelled && setLoading(false))
@@ -178,6 +211,25 @@ export function AdminView({ onClose }: { onClose: () => void }) {
         return { assignment, taskTitle, tried: rows.length, passed, attempts }
       }),
     [progress, visibleIds],
+  )
+
+  // Per quiz: who passed, how many tries it takes, and which questions are missed most.
+  const perQuiz = useMemo(
+    () =>
+      QUIZZES.map((quiz) => {
+        const rows = quizAttempts.filter((a) => a.module_id === quiz.id && visibleIds.has(a.user_id))
+        const triedBy = new Set(rows.map((a) => a.user_id))
+        const passedBy = new Set(rows.filter((a) => a.passed).map((a) => a.user_id))
+        const questions = quiz.questions
+          .map((q) => {
+            const answers = rows.flatMap((a) => a.answers.filter((x) => x.question_id === q.id))
+            const wrong = answers.filter((x) => !x.correct).length
+            return { question: q, asked: answers.length, wrong, rate: answers.length ? wrong / answers.length : 0 }
+          })
+          .sort((a, b) => b.rate - a.rate || b.asked - a.asked)
+        return { quiz, attempts: rows.length, tried: triedBy.size, passed: passedBy.size, questions }
+      }),
+    [quizAttempts, visibleIds],
   )
 
   const selected = students.find((s) => s.id === selectedId) ?? null
@@ -291,6 +343,35 @@ export function AdminView({ onClose }: { onClose: () => void }) {
               </tbody>
             </table>
           </div>
+
+          {perQuiz.map(({ quiz, attempts, tried, passed, questions }) => (
+            <div key={quiz.id}>
+              <h3>{quiz.title}</h3>
+              <div className="admin-stats">
+                <div>
+                  <strong>{passed} / {visible.length}</strong>
+                  <span>passed ({visible.length ? Math.round((100 * passed) / visible.length) : 0}%)</span>
+                </div>
+                <div><strong>{tried}</strong><span>took the quiz</span></div>
+                <div><strong>{tried ? (attempts / tried).toFixed(1) : '0'}</strong><span>avg. attempts per student who took it</span></div>
+              </div>
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead><tr><th>Most missed questions</th><th>Topic</th><th>Asked</th><th>Wrong</th></tr></thead>
+                  <tbody>
+                    {questions.map(({ question, asked, wrong, rate }) => (
+                      <tr key={question.id}>
+                        <td>{question.question}</td>
+                        <td>{topicTitle(quiz.id, question.topic)}</td>
+                        <td>{asked}</td>
+                        <td>{asked ? `${Math.round(rate * 100)}% (${wrong})` : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
 
           <h3>Assignments</h3>
           <div className="admin-table-wrap">
@@ -456,6 +537,8 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const [events, setEvents] = useState<ActivityEvent[]>([])
   const [sessions, setSessions] = useState<StudySession[]>([])
   const [pathRows, setPathRows] = useState<ModuleProgressRow[]>([])
+  const [reads, setReads] = useState<ConceptRead[]>([])
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
   const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -466,13 +549,17 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).order('created_at', { ascending: false }).limit(300),
       supabase.from('study_sessions').select('id, started_at, last_seen_at, active_seconds').eq('user_id', student.id).order('started_at', { ascending: false }).limit(200),
       supabase.from('module_progress').select('module_id, step, updated_at').eq('user_id', student.id),
-    ]).then(([a, e, s, m]) => {
-      const err = a.error ?? e.error ?? s.error ?? m.error
+      supabase.from('concept_reads').select('module_id, concept_id, read_at').eq('user_id', student.id).order('read_at'),
+      supabase.from('quiz_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }),
+    ]).then(([a, e, s, m, r, q]) => {
+      const err = a.error ?? e.error ?? s.error ?? m.error ?? r.error ?? q.error
       if (err) setError(err.message)
       setAttempts((a.data ?? []) as Attempt[])
       setEvents((e.data ?? []) as ActivityEvent[])
       setSessions((s.data ?? []) as StudySession[])
       setPathRows((m.data ?? []) as ModuleProgressRow[])
+      setReads((r.data ?? []) as ConceptRead[])
+      setQuizAttempts((q.data ?? []) as QuizAttempt[])
     })
   }, [student.id])
 
@@ -488,6 +575,13 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const byAssignment = new Map(progress.map((p) => [p.assignment_id, p]))
   const passedIds = new Set(progress.filter((p) => p.passed).map((p) => p.assignment_id))
   const byModule = new Map(pathRows.map((r) => [r.module_id, r]))
+  const readsByModule = new Map<string, Set<string>>()
+  for (const r of reads) readsByModule.set(r.module_id, (readsByModule.get(r.module_id) ?? new Set()).add(r.concept_id))
+  const pathProgress = {
+    completed: passedIds,
+    quizzesPassed: new Set(quizAttempts.filter((q) => q.passed).map((q) => q.module_id)),
+    reads: readsByModule,
+  }
 
   function exportAttempts() {
     downloadCsv(
@@ -534,7 +628,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
           <tbody>
             {LEARNING_PATH.map((m, i) => {
               const row = byModule.get(m.id)
-              const status = moduleStatus(m, passedIds, row?.step)
+              const status = moduleStatus(m, pathProgress, row?.step)
               return (
                 <tr key={m.id}>
                   <td>{i}. {m.title}</td>
@@ -549,6 +643,45 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
                 </tr>
               )
             })}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Topics read</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Module</th><th>Topic</th><th>Marked as read</th></tr></thead>
+          <tbody>
+            {LEARNING_PATH.filter((m) => m.quiz).flatMap((m) =>
+              m.concepts.map((c) => {
+                const read = reads.find((r) => r.module_id === m.id && r.concept_id === c.id)
+                return (
+                  <tr key={`${m.id}-${c.id}`}>
+                    <td>{moduleLabel(m.id)}</td>
+                    <td>{conceptTitle(c)}</td>
+                    <td>{read ? formatDate(read.read_at) : 'not yet'}</td>
+                  </tr>
+                )
+              }),
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Quiz attempts</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Time</th><th>Quiz</th><th>Score</th><th>Result</th></tr></thead>
+          <tbody>
+            {quizAttempts.map((q) => (
+              <tr key={q.id}>
+                <td>{formatDate(q.created_at)}</td>
+                <td>{moduleLabel(q.module_id)}</td>
+                <td>{q.score}/{q.total}</td>
+                <td><span className={`admin-badge ${q.passed ? 'passed' : 'tried'}`}>{q.passed ? 'Passed' : 'Failed'}</span></td>
+              </tr>
+            ))}
+            {quizAttempts.length === 0 && <tr><td colSpan={4} className="admin-empty">No quiz attempts yet.</td></tr>}
           </tbody>
         </table>
       </div>
