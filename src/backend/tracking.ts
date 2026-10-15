@@ -23,6 +23,7 @@ export type ActivityKind =
   | 'path_step'
   | 'read_topic'
   | 'quiz_attempt'
+  | 'interactive_done'
 
 interface QueuedEvent {
   user_id: string

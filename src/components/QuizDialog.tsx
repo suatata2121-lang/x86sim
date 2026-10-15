@@ -94,6 +94,7 @@ export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, 
               {questions.map((q) => (
                 <li key={q.id}>
                   <p className="quiz-question">{q.question}</p>
+                  {q.code && <pre className="instr-example quiz-code">{q.code}</pre>}
                   {q.options.map((option) => (
                     <label key={option} className="quiz-option">
                       <input
@@ -150,6 +151,9 @@ export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, 
               {result.answers.map((a) => (
                 <li key={a.question_id}>
                   <p className="quiz-question">{questions.find((q) => q.id === a.question_id)?.question}</p>
+                  {questions.find((q) => q.id === a.question_id)?.code && (
+                    <pre className="instr-example quiz-code">{questions.find((q) => q.id === a.question_id)?.code}</pre>
+                  )}
                   {a.correct ? (
                     <p className="quiz-answer correct">✓ {a.answer}</p>
                   ) : (

@@ -32,6 +32,10 @@ export type NumVisual =
   | { kind: 'mul'; a: number; b: number }
   /** DIV BL: AX ÷ BL, quotient in AL and remainder in AH. */
   | { kind: 'div'; dividend: number; divisor: number }
+  /** The general registers and the job each one has (Register File page). */
+  | { kind: 'registerRoles' }
+  /** MOV's operand rules with valid and rejected lines (Moving Data page). */
+  | { kind: 'movRules' }
 
 export interface NumberingTopic {
   id: string

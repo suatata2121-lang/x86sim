@@ -258,6 +258,7 @@ create policy "module progress: update own" on public.module_progress
 -- editor, never from this public repo. Students get questions without
 -- answers from quiz_draw() and are graded by quiz_submit(), which is also
 -- the only way to write a quiz_attempts row, so a pass can't be faked.
+-- quiz_settings holds each quiz's size, pass mark and checklist (#25).
 
 create table if not exists public.concept_reads (
   user_id    uuid not null references public.profiles (id) on delete cascade,
@@ -315,6 +316,9 @@ create table if not exists public.quiz_questions (
 
 create index if not exists quiz_questions_module_idx on public.quiz_questions (module_id) where active;
 
+-- A short program shown under a question, for code-tracing questions (#25).
+alter table public.quiz_questions add column if not exists code text;
+
 alter table public.quiz_questions enable row level security;
 
 -- Admins read the pool (question text for the report); nobody writes it
@@ -323,8 +327,94 @@ drop policy if exists "quiz questions: admin reads" on public.quiz_questions;
 create policy "quiz questions: admin reads" on public.quiz_questions
   for select using (public.is_admin());
 
--- One attempt's questions, answers left out: one per topic, the rest of the
--- 10 at random, questions and options in random order.
+-- Interactive items on a module's checklist that a student finished (#25):
+-- stepping through a view, running a demo or an example to its end, solving
+-- a challenge. item_id matches LearningModule.interactives in the site code.
+create table if not exists public.interactive_runs (
+  user_id   uuid not null references public.profiles (id) on delete cascade,
+  module_id text not null,
+  item_id   text not null,
+  done_at   timestamptz not null default now(),
+  primary key (user_id, module_id, item_id)
+);
+
+alter table public.interactive_runs enable row level security;
+
+drop policy if exists "interactive runs: read own or admin" on public.interactive_runs;
+create policy "interactive runs: read own or admin" on public.interactive_runs
+  for select using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "interactive runs: insert own" on public.interactive_runs;
+create policy "interactive runs: insert own" on public.interactive_runs
+  for insert with check (user_id = auth.uid());
+
+-- Per-module quiz rules, read by quiz_draw / quiz_submit so a student can't
+-- change them from the browser. required_* is the module's checklist: the
+-- quiz opens only when every concept is read, every interactive done and
+-- every assignment passed. Without a row: 10 questions, 1 per topic, 7 to
+-- pass, nothing required.
+create table if not exists public.quiz_settings (
+  module_id             text primary key,
+  question_count        integer not null default 10 check (question_count > 0),
+  min_per_topic         integer not null default 1 check (min_per_topic >= 0),
+  pass_count            integer not null default 7 check (pass_count > 0),
+  required_concepts     text[] not null default '{}',
+  required_interactives text[] not null default '{}',
+  required_assignments  text[] not null default '{}',
+  check (pass_count <= question_count)
+);
+
+alter table public.quiz_settings enable row level security;
+
+drop policy if exists "quiz settings: admin reads" on public.quiz_settings;
+create policy "quiz settings: admin reads" on public.quiz_settings
+  for select using (public.is_admin());
+
+drop policy if exists "quiz settings: admin writes" on public.quiz_settings;
+create policy "quiz settings: admin writes" on public.quiz_settings
+  for all using (public.is_admin()) with check (public.is_admin());
+
+-- The settings the site was built with. "do nothing" keeps any values an
+-- admin has changed since; delete a row to get these back.
+insert into public.quiz_settings (module_id, question_count, min_per_topic, pass_count,
+                                  required_concepts, required_interactives, required_assignments)
+values
+  ('m0', 10, 1, 7,
+   array['bases', 'conversions', 'signed-numbers', 'literals', 'add-sub', 'mul-div', 'logic'],
+   array[]::text[], array[]::text[]),
+  ('m1', 10, 3, 7,
+   array['fetch-decode-execute', 'register-file', 'data-movement'],
+   array['fde-program', 'register-file-demo', 'move-it-1', 'move-it-2', 'move-it-3', 'move-it-4', 'move-it-5',
+         'example-arithmetic'],
+   array['t1-sensor-registers', 't2-swap-readings'])
+on conflict (module_id) do nothing;
+
+-- Whether the signed-in student has done everything the quiz requires.
+create or replace function public.quiz_ready(p_module text)
+returns boolean
+language sql
+stable
+security definer set search_path = public
+as $$
+  select not exists (
+    select 1 from public.quiz_settings s
+     where s.module_id = p_module
+       and (
+         exists (select 1 from unnest(s.required_concepts) c
+                  where not exists (select 1 from public.concept_reads r
+                                     where r.user_id = auth.uid() and r.module_id = p_module and r.concept_id = c))
+         or exists (select 1 from unnest(s.required_interactives) i
+                     where not exists (select 1 from public.interactive_runs r
+                                        where r.user_id = auth.uid() and r.module_id = p_module and r.item_id = i))
+         or exists (select 1 from unnest(s.required_assignments) a
+                     where not exists (select 1 from public.assignment_attempts t
+                                        where t.user_id = auth.uid() and t.assignment_id = a and t.passed))
+       )
+  );
+$$;
+
+-- One attempt's questions, answers left out: at least min_per_topic from
+-- every topic, the rest at random, questions and options in random order.
 create or replace function public.quiz_draw(p_module text)
 returns jsonb
 language plpgsql
@@ -333,18 +423,28 @@ security definer set search_path = public
 as $$
 declare
   result jsonb;
+  v_count integer;
+  v_min integer;
 begin
   if auth.uid() is null then
     raise exception 'Sign in to take the quiz';
   end if;
+  if not public.quiz_ready(p_module) then
+    raise exception 'Finish every item on the checklist first';
+  end if;
+  select coalesce(max(question_count), 10), coalesce(max(min_per_topic), 1)
+    into v_count, v_min
+    from public.quiz_settings where module_id = p_module;
+
   with pool as (
-    select * from public.quiz_questions where module_id = p_module and active
+    select *, row_number() over (partition by topic_id order by random()) as topic_rank
+      from public.quiz_questions where module_id = p_module and active
   ), firsts as (
-    select distinct on (topic_id) id from pool order by topic_id, random()
+    select id from pool where topic_rank <= v_min
   ), rest as (
     select id from pool where id not in (select id from firsts)
     order by random()
-    limit greatest(0, 10 - (select count(*) from firsts))
+    limit greatest(0, v_count - (select count(*) from firsts))
   ), picked as (
     select id from firsts union all select id from rest
   )
@@ -353,6 +453,7 @@ begin
              'id', q.id,
              'topic', q.topic_id,
              'question', q.question,
+             'code', q.code,
              'options', (select jsonb_agg(o order by random()) from jsonb_array_elements_text(q.options) o)
            ) order by random())
     into result
@@ -376,14 +477,22 @@ declare
   v_score integer;
   v_passed boolean;
   v_expected integer;
+  v_count integer;
+  v_pass integer;
 begin
   if auth.uid() is null then
     raise exception 'Sign in to take the quiz';
   end if;
+  if not public.quiz_ready(p_module) then
+    raise exception 'Finish every item on the checklist first';
+  end if;
   if jsonb_typeof(p_answers) <> 'array' then
     raise exception 'Answers must be a list';
   end if;
-  select least(10, count(*)) into v_expected
+  select coalesce(max(question_count), 10), coalesce(max(pass_count), 7)
+    into v_count, v_pass
+    from public.quiz_settings where module_id = p_module;
+  select least(v_count, count(*)) into v_expected
     from public.quiz_questions where module_id = p_module and active;
 
   with given as (
@@ -409,8 +518,8 @@ begin
     raise exception 'Answer every question of one quiz exactly once';
   end if;
 
-  -- 7 of 10 to pass.
-  v_passed := v_score * 10 >= v_total * 7;
+  -- pass_count of question_count (7 of 10), scaled if the pool is smaller.
+  v_passed := v_score * v_count >= v_pass * v_total;
 
   insert into public.quiz_attempts (user_id, module_id, score, total, passed, answers)
   values (
@@ -434,6 +543,8 @@ revoke all on function public.quiz_draw(text) from public, anon;
 revoke all on function public.quiz_submit(text, jsonb) from public, anon;
 grant execute on function public.quiz_draw(text) to authenticated;
 grant execute on function public.quiz_submit(text, jsonb) to authenticated;
+revoke all on function public.quiz_ready(text) from public, anon;
+grant execute on function public.quiz_ready(text) to authenticated;
 
 -- ---------------------------------------------------------------- feedback --
 -- Problems and requests sent from the site's Feedback button, read in the

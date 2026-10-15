@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './client'
 import { trackActivity } from './tracking'
 import type { ModuleProgressRow, StoredStep } from '../learningPath'
@@ -6,20 +6,32 @@ import type { DrawnQuestion, QuizResult } from '../quizzes'
 
 // The signed-in student's position in each learning-path module, kept in
 // module_progress so it follows them across devices, plus the topics they
-// marked as read (concept_reads) and which module quizzes they passed
-// (quiz_attempts, written only by the quiz_submit function). Updates are applied locally first; a failed write only
-// costs the server copy, never the UI.
+// marked as read (concept_reads), the interactive items they finished
+// (interactive_runs) and which module quizzes they passed (quiz_attempts,
+// written only by the quiz_submit function). Updates are applied locally
+// first; a failed write only costs the server copy, never the UI.
+
+function groupByModule(rows: { module_id: string; id: string }[]) {
+  const byModule = new Map<string, Set<string>>()
+  for (const r of rows) byModule.set(r.module_id, (byModule.get(r.module_id) ?? new Set()).add(r.id))
+  return byModule
+}
 
 export function useModuleProgress(userId: string | null) {
   const [rows, setRows] = useState<Map<string, ModuleProgressRow>>(new Map())
   const [reads, setReads] = useState<Map<string, Set<string>>>(new Map())
   const [quizzesPassed, setQuizzesPassed] = useState<Set<string>>(new Set())
+  const [interactives, setInteractives] = useState<Map<string, Set<string>>>(new Map())
+  // The same set, readable synchronously, so a repeat completion writes nothing.
+  const interactivesRef = useRef(interactives)
+  interactivesRef.current = interactives
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     setRows(new Map())
     setReads(new Map())
     setQuizzesPassed(new Set())
+    setInteractives(new Map())
     setLoaded(false)
     if (!supabase || !userId) return
     let cancelled = false
@@ -27,14 +39,14 @@ export function useModuleProgress(userId: string | null) {
       supabase.from('module_progress').select('module_id, step, updated_at').eq('user_id', userId),
       supabase.from('concept_reads').select('module_id, concept_id').eq('user_id', userId),
       supabase.from('quiz_attempts').select('module_id').eq('user_id', userId).eq('passed', true),
-    ]).then(([progress, conceptReads, passes]) => {
+      supabase.from('interactive_runs').select('module_id, item_id').eq('user_id', userId),
+    ]).then(([progress, conceptReads, passes, runs]) => {
       if (cancelled) return
       setRows(new Map(((progress.data ?? []) as ModuleProgressRow[]).map((r) => [r.module_id, r])))
-      const byModule = new Map<string, Set<string>>()
-      for (const r of (conceptReads.data ?? []) as { module_id: string; concept_id: string }[]) {
-        byModule.set(r.module_id, (byModule.get(r.module_id) ?? new Set()).add(r.concept_id))
-      }
-      setReads(byModule)
+      setReads(groupByModule(((conceptReads.data ?? []) as { module_id: string; concept_id: string }[])
+        .map((r) => ({ module_id: r.module_id, id: r.concept_id }))))
+      setInteractives(groupByModule(((runs.data ?? []) as { module_id: string; item_id: string }[])
+        .map((r) => ({ module_id: r.module_id, id: r.item_id }))))
       setQuizzesPassed(new Set(((passes.data ?? []) as { module_id: string }[]).map((r) => r.module_id)))
       setLoaded(true)
     })
@@ -63,6 +75,21 @@ export function useModuleProgress(userId: string | null) {
       .then(() => undefined)
   }, [userId])
 
+  // Called whenever an interactive item finishes; only the first time per
+  // module is written.
+  const markInteractive = useCallback((moduleId: string, itemId: string) => {
+    if (!supabase || !userId) return
+    if (interactivesRef.current.get(moduleId)?.has(itemId)) return
+    const next = new Map(interactivesRef.current).set(moduleId, new Set(interactivesRef.current.get(moduleId)).add(itemId))
+    interactivesRef.current = next
+    setInteractives(next)
+    trackActivity('interactive_done', null, { module: moduleId, item: itemId })
+    void supabase
+      .from('interactive_runs')
+      .upsert({ user_id: userId, module_id: moduleId, item_id: itemId }, { ignoreDuplicates: true })
+      .then(() => undefined)
+  }, [userId])
+
   // Questions and grading are server-side (quiz_draw / quiz_submit in
   // schema.sql) so the answer key never reaches the browser.
   const drawQuiz = useCallback(async (moduleId: string): Promise<DrawnQuestion[]> => {
@@ -82,5 +109,5 @@ export function useModuleProgress(userId: string | null) {
     return result
   }, [])
 
-  return { rows, reads, quizzesPassed, loaded, setStep, markRead, drawQuiz, submitQuiz }
+  return { rows, reads, quizzesPassed, interactives, loaded, setStep, markRead, markInteractive, drawQuiz, submitQuiz }
 }

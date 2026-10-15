@@ -21,10 +21,13 @@ export function HardwarePlayground({
   source,
   visual,
   autoplay,
+  onHalted,
 }: {
   source: string
   visual: HardwareVisual
   autoplay?: boolean
+  /** Called when the program reaches its end, by Step or Play (learning-path checklists, #25). */
+  onHalted?: () => void
 }) {
   const cpuRef = useRef(new Cpu())
   const [regs, setRegs] = useState<Record<Reg16, number>>(cpuRef.current.regs)
@@ -123,6 +126,11 @@ export function HardwarePlayground({
     load()
   }
 
+  useEffect(() => {
+    if (halted && steps > 0) onHalted?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halted])
+
   const currentLine = cpuRef.current.instructions[cpuRef.current.ip]?.line ?? null
   const lines = source.split('\n')
 
@@ -140,7 +148,7 @@ export function HardwarePlayground({
         <span className="hw-playground-status">{halted ? 'Halted' : `Step ${steps}`}</span>
       </div>
       <div className="hw-playground-visual">
-        {visual === 'registers' && <RegisterView regs={regs} flags={flags} />}
+        {visual === 'registers' && <RegisterView regs={regs} flags={flags} stepKey={steps} />}
         {visual === 'databus' && (
           <DataBusView key={`bus-${generation}`} lastInstruction={lastInstruction} steps={steps} />
         )}

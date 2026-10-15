@@ -430,6 +430,8 @@ function isAmbiguousMem(op: Operand | undefined): op is Operand & { kind: 'mem' 
   return op?.kind === 'mem' && !op.size && !op.label
 }
 
+const SEGMENT_REGS = new Set(['CS', 'DS', 'ES', 'SS'])
+
 function validateOperands(
   mnemonic: Mnemonic,
   opsText: string,
@@ -481,6 +483,20 @@ function validateOperands(
       length: mnemonicLen,
     })
     return false
+  }
+  // The 8086 has no encoding for either: CS only changes through far jumps
+  // and calls, and a segment register is loaded from a general register or
+  // memory, never from a number.
+  if (mnemonic === 'MOV' && ops[0].kind === 'reg' && SEGMENT_REGS.has(ops[0].name)) {
+    const message = ops[0].name === 'CS'
+      ? 'MOV: CS cannot be a destination -- it only changes through jumps and calls'
+      : ops[1].kind === 'imm'
+        ? "MOV: a segment register can't be loaded with a number -- load a general register first (MOV AX, 5 / MOV DS, AX)"
+        : null
+    if (message) {
+      errors.push({ line: lineNo, message, column: mnemonicCol, length: mnemonicLen })
+      return false
+    }
   }
   if (mnemonic === 'IN' || mnemonic === 'OUT') {
     const regIndex = mnemonic === 'IN' ? 0 : 1
