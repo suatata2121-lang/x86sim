@@ -662,6 +662,7 @@ export default function App() {
               if (ref) openConcept(ref)
             }}
             onClose={() => setQuizModuleId(null)}
+            storageKey={userId ? `quiz-attempt:${module.id}:${userId}` : undefined}
             next={nextModule && { label: `Next module: ${nextModule.title} →`, onClick: () => setQuizModuleId(null) }}
           />
         )
