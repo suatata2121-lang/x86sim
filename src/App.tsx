@@ -674,9 +674,14 @@ export default function App() {
           context={{ tab: activeTab.title, assignment: activeAssignmentId, section: mode === 'learn' ? `learn/${learnNav.section}` : mode }}
         />
       )}
-      {(accountOpen || auth.passwordRecovery) && (
+      {(accountOpen || auth.passwordRecovery || auth.linkExpired) && (
         <AccountDialog
-          initialView={auth.passwordRecovery ? 'newpassword' : 'signin'}
+          initialView={auth.passwordRecovery ? 'newpassword' : auth.linkExpired ? 'reset' : 'signin'}
+          initialError={
+            auth.linkExpired && !auth.passwordRecovery
+              ? 'This reset link has expired or was already used. Enter your email to get a new one, or use the 6-digit code from the email.'
+              : undefined
+          }
           onClose={() => {
             setAccountOpen(false)
             auth.dismissPasswordRecovery()
