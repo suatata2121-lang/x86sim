@@ -14,6 +14,7 @@ import { NumberVisual } from './NumberVisual'
 import { MoveItView } from './MoveItView'
 import { ArchCompareView, BankSelectorView, ChipCheckView } from './MemoryBusViews'
 import { BsrBuilder, ControlWordBuilder, PpiBlockDiagram } from './Ppi8255Views'
+import { Dma8257Diagram } from './Dma8257View'
 import type { ConceptRef } from '../learningPath'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -513,6 +514,7 @@ export function LearnDetail({
         {hwTopic.timing && <TimingDiagramView />}
         {hwTopic.staticDiagram === 'von-neumann-harvard' && <ArchCompareView />}
         {hwTopic.staticDiagram === 'ppi-8255' && <PpiBlockDiagram />}
+        {hwTopic.staticDiagram === 'dma-8257' && <Dma8257Diagram />}
         {hwTopic.figure && (
           <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
         )}

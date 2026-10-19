@@ -291,9 +291,12 @@ export const LEARNING_PATH: LearningModule[] = [
     title: 'Interrupts and Sharing the Bus',
     summary: 'Use software interrupts for input and output and see how other devices borrow the bus.',
     requires: ['m0'],
-    concepts: [hw('software-vs-hardware-interrupts'), hw('bus-request-grant'), hw('lock-signal')],
+    concepts: [hw('software-vs-hardware-interrupts'), hw('bus-request-grant'), hw('dma-8257'), hw('lock-signal')],
     observe: { examples: ['keyboard-echo'], panel: 'registers' },
     assignments: ['t9-print-status'],
+    interactives: [
+      { id: 'dma-8257-figure', label: 'Step: the DMA transfer figure to the end', topic: 'dma-8257' },
+    ],
   },
   {
     id: 'm9',

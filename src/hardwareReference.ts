@@ -3,8 +3,9 @@
 // Architecture), how the stack/call mechanism works (Stack & Call Mechanism),
 // and how it talks to the outside world (I/O Ports & Interrupts). The
 // "Support Chips" category covers the 8255 PPI, which the simulator models
-// at ports 80h-83h (core/ppi8255.ts); the rest of the classic support-chip
-// set (8284/8282/8283/8288/8259/8253/8254/8251/8237) is not simulated.
+// at ports 80h-83h (core/ppi8255.ts), and the 8257 DMA controller as a
+// figure only; the rest of the classic support-chip set
+// (8284/8282/8283/8288/8259/8253/8254/8251/8237) is not simulated.
 //
 // Each demo's `source` is a small, self-contained program run in its own Cpu
 // instance by HardwarePlayground (components/HardwarePlayground.tsx) -- fully
@@ -25,7 +26,7 @@ export interface HardwareTopic {
   // A purely illustrative diagram for topics with nothing to actually step
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
-  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255'
+  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255' | 'dma-8257'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
   // A purpose-built interactive view instead of a Cpu demo: 'fde' is the
@@ -978,6 +979,102 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         ],
         interactive: 'ppi-bsr',
         notes: ['BSR words only touch Port C. Ports A and B have no bit set/reset.'],
+      },
+      {
+        id: 'dma-8257',
+        title: 'Direct Memory Access and the 8257',
+        summary: 'A controller that borrows the bus and moves data between a device and memory without the CPU.',
+        content: [
+          'Moving a block from an I/O device to memory with the CPU means, for every byte, fetching and executing ' +
+            'an IN, a store and the loop instructions -- several bus cycles per byte, and the CPU can do nothing else ' +
+            'meanwhile. A DMA (Direct Memory Access) controller moves each byte in a single bus cycle, directly ' +
+            'between the device and memory, bypassing the CPU.',
+          'The 8257 is a 4-channel programmable DMA controller for high-speed transfers between I/O devices and ' +
+            'memory. To use the buses it asks the CPU through HOLD and waits for HLDA; while it is bus master the ' +
+            'CPU\'s address, data and control lines are tri-stated. When HOLD goes low again, the CPU becomes bus ' +
+            'master again.',
+          'On the 8086 side, HOLD is an active-high input: a request for the address and data buses. The CPU gives ' +
+            'up the buses at the end of the current bus cycle, tri-states them and raises HLDA, an active-high output ' +
+            'meaning "the CPU has released the buses". It takes them back after HOLD goes low. "Bus Request & Bus ' +
+            'Grant" shows this handshake from the CPU\'s side; this topic shows the controller\'s side.',
+          {
+            kind: 'table',
+            head: ['8257 pin', 'What it does'],
+            rows: [
+              ['DRQ0–DRQ3', 'Requests from the devices, one per channel'],
+              ['DACK̅0–DACK̅3', 'Acknowledge to the device whose channel is being served'],
+              ['HRQ', 'Hold request, wired to the 8086\'s HOLD'],
+              ['HLDA', 'Hold acknowledge from the 8086'],
+              ['MEMR̅, MEMW̅, IOR̅, IOW̅', 'Bus control while the 8257 is bus master'],
+              ['AEN, ADSTB', 'Address enable, and the strobe that latches the upper address byte in an external latch'],
+              ['TC', 'Terminal count: the block is finished'],
+              ['MARK', 'Pulses every 128th byte'],
+              ['A0–A7, D0–D7, CS̅, CLK, RESET, READY', 'Address, data, chip select, clock, reset, wait states'],
+            ],
+          },
+          'In short: the I/O device sends DRQ → the DMA controller sends HOLD to the CPU → the CPU answers HLDA and ' +
+            'the DMA controller is bus master → data moves between memory and I/O without the CPU → HOLD goes low ' +
+            'and the CPU is bus master again. Step through one transfer below.',
+        ],
+        staticDiagram: 'dma-8257',
+        figure: {
+          title: 'One DMA transfer, step by step',
+          blocks: ['CPU', '8257', 'Memory', 'I/O device'],
+          steps: [
+            {
+              name: 'CPU owns the bus',
+              where: 'The CPU runs instructions and owns the bus. No DMA request is pending.',
+              active: ['CPU', 'Memory'],
+              flow: 'Bus master: CPU',
+              state: [['DRQ', 'inactive'], ['HRQ / HOLD', 'inactive'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+            {
+              name: 'Device requests',
+              where: 'The I/O device has data ready and raises DRQ on its 8257 channel.',
+              active: ['CPU', 'I/O device', '8257'],
+              flow: 'I/O device → 8257: DRQ',
+              state: [['DRQ', 'active'], ['HRQ / HOLD', 'inactive'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+            {
+              name: '8257 asks for the bus',
+              where: 'The 8257 raises HRQ, which is wired to the 8086\'s HOLD input.',
+              active: ['8257', 'CPU'],
+              flow: '8257 → CPU: HRQ = HOLD',
+              state: [['DRQ', 'active'], ['HRQ / HOLD', 'active'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+            {
+              name: 'CPU hands over',
+              where: 'The 8086 finishes its current bus cycle, floats its address, data and control lines and raises HLDA. The 8257 is now bus master.',
+              active: ['CPU', '8257'],
+              flow: 'CPU → 8257: HLDA · bus master: 8257',
+              state: [['DRQ', 'active'], ['HRQ / HOLD', 'active'], ['HLDA', 'active'], ['CPU bus lines', 'tri-stated']],
+            },
+            {
+              name: 'Transfer',
+              where: 'The 8257 puts the memory address on the bus (AEN, ADSTB latch the upper byte), activates DACK̅ to the device, and drives IOR̅ + MEMW̅ together (I/O → memory) or MEMR̅ + IOW̅ (memory → I/O). The byte goes straight from device to memory and never passes through the CPU. This repeats for every byte while the count register counts down.',
+              active: ['8257', 'Memory', 'I/O device'],
+              flow: 'I/O device → Memory, one bus cycle per byte',
+              state: [
+                ['DACK̅', 'active (low)'],
+                ['Strobes', 'IOR̅ + MEMW̅ (or MEMR̅ + IOW̅)'],
+                ['AEN / ADSTB', 'address out, upper byte latched'],
+                ['HLDA', 'active'],
+              ],
+            },
+            {
+              name: 'Done',
+              where: 'At the last byte the 8257 raises TC (terminal count) and drops HRQ. The 8086 drops HLDA and resumes exactly where it stopped.',
+              active: ['CPU', '8257'],
+              flow: 'Bus master: CPU again',
+              state: [['TC', 'pulsed'], ['HRQ / HOLD', 'inactive'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+          ],
+        },
+        notes: [
+          'The 8257 was designed around the 8085; IBM PC-class 8086/8088 systems used its successor, the 8237, which ' +
+            'works the same way.',
+          'This simulator does not model DMA; the figure is a teaching illustration.',
+        ],
       },
     ],
   },

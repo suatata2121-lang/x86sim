@@ -8,7 +8,7 @@ function hex2(v: number) {
   return v.toString(16).toUpperCase().padStart(2, '0') + 'h'
 }
 
-function Box({ x, y, w, h, title, sub, className }: {
+export function Box({ x, y, w, h, title, sub, className }: {
   x: number; y: number; w: number; h: number; title: string; sub?: string; className?: string
 }) {
   return (
