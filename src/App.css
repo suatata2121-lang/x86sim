@@ -4356,3 +4356,41 @@ aside .panel {
 .attempt-comment {
   margin: 0.25rem 0;
 }
+
+/* ---- First-sign-in tour (components/Onboarding.tsx) ---- */
+
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+/* The big shadow dims everything except the highlighted element. */
+.tour-highlight {
+  position: fixed;
+  border: 2px solid var(--accent-border);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.tour-callout {
+  position: fixed;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.tour-callout p {
+  margin: 0 0 0.6rem;
+}
+
+.tour-count {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}

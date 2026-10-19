@@ -33,6 +33,9 @@ interface StudentSummary {
   attempt_count: number
   completed_count: number
   event_count: number
+  /** First-sign-in placement (#14); undefined until schema.sql adds the columns. */
+  placement_score?: number | null
+  placement_credit?: boolean
 }
 
 interface Progress {
@@ -149,10 +152,15 @@ function groupIds<T>(rows: T[], module: (r: T) => string, id: (r: T) => string) 
 }
 
 /** One student's checklist state, from rows already filtered to that student. */
-function progressOf(passedIds: Set<string>, attempts: QuizAttempt[], reads: ConceptRead[], runs: InteractiveRun[]): PathProgress {
+function progressOf(
+  passedIds: Set<string>, attempts: QuizAttempt[], reads: ConceptRead[], runs: InteractiveRun[], placementCredit = false,
+): PathProgress {
+  const quizzesPassed = new Set(attempts.filter((q) => q.passed).map((q) => q.module_id))
+  // 6+ in the placement quiz counts Module 0 as done, like passing its quiz.
+  if (placementCredit) quizzesPassed.add('m0')
   return {
     completed: passedIds,
-    quizzesPassed: new Set(attempts.filter((q) => q.passed).map((q) => q.module_id)),
+    quizzesPassed,
     reads: groupIds(reads, (r) => r.module_id, (r) => r.concept_id),
     interactives: groupIds(runs, (r) => r.module_id, (r) => r.item_id),
     // The admin checklist doesn't count Predict answers.
@@ -383,6 +391,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
       quizAttempts.filter((q) => q.user_id === studentId),
       allReads.filter((r) => r.user_id === studentId),
       allRuns.filter((r) => r.user_id === studentId),
+      !!students.find((s) => s.id === studentId)?.placement_credit,
     )
     return isModuleDone(m, pp, step as ModuleProgressRow['step'] | undefined)
   }
@@ -456,7 +465,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>Name</th><th>Student no</th><th>Group</th><th>Lab time</th><th>Visits</th>
+                  <th>Name</th><th>Student no</th><th>Group</th><th>Placement</th><th>Lab time</th><th>Visits</th>
                   <th>Passed</th><th>Test runs</th><th>Last seen</th>
                 </tr>
               </thead>
@@ -466,6 +475,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
                     <td>{s.full_name || s.email}</td>
                     <td>{s.student_no}</td>
                     <td>{s.class_group}</td>
+                    <td>{s.placement_score == null ? '–' : `${s.placement_score}/8${s.placement_credit ? ' → M1' : ''}`}</td>
                     <td>{formatDuration(s.total_seconds)}</td>
                     <td>{s.session_count}</td>
                     <td>
@@ -476,7 +486,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
                   </tr>
                 ))}
                 {visible.length === 0 && (
-                  <tr><td colSpan={8} className="admin-empty">No students yet.</td></tr>
+                  <tr><td colSpan={9} className="admin-empty">No students yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -769,7 +779,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const byAssignment = new Map(progress.map((p) => [p.assignment_id, p]))
   const passedIds = new Set(progress.filter((p) => p.passed).map((p) => p.assignment_id))
   const byModule = new Map(pathRows.map((r) => [r.module_id, r]))
-  const pathProgress = progressOf(passedIds, quizAttempts, reads, runs)
+  const pathProgress = progressOf(passedIds, quizAttempts, reads, runs, !!student.placement_credit)
 
   // When a checklist row was finished, as far as the data says.
   function rowDate(m: LearningModule, r: ChecklistRow): string | null {

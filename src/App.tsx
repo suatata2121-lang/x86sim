@@ -29,6 +29,8 @@ import {
   quizBlockers, unreadConcepts, type AsidePanel, type ConceptRef, type PathProgress,
 } from './learningPath'
 import { PredictDialog } from './components/PredictDialog'
+import { PlacementDialog, Tour } from './components/Onboarding'
+import { PLACEMENT_PASS } from './placement'
 import { findQuiz } from './quizzes'
 import { gradeSource, type GradeReport } from './core/grader'
 import { backendEnabled } from './backend/client'
@@ -123,12 +125,16 @@ export default function App() {
   const pathProgress: PathProgress = useMemo(
     () => ({
       completed: completedAssignments,
-      quizzesPassed: moduleProgress.quizzesPassed,
+      // A placement score of 6+ (when the student chose to skip ahead) counts as passing Module 0's quiz.
+      quizzesPassed: auth.profile?.placement_credit ? new Set(moduleProgress.quizzesPassed).add('m0') : moduleProgress.quizzesPassed,
       reads: moduleProgress.reads,
       interactives: moduleProgress.interactives,
       predicted: moduleProgress.predicted,
     }),
-    [completedAssignments, moduleProgress.quizzesPassed, moduleProgress.reads, moduleProgress.interactives, moduleProgress.predicted],
+    [
+      completedAssignments, moduleProgress.quizzesPassed, moduleProgress.reads, moduleProgress.interactives,
+      moduleProgress.predicted, auth.profile?.placement_credit,
+    ],
   )
   // Every interactive item done, whichever module recorded it (for the ✓ on Learn pages).
   const interactivesDone = useMemo(
@@ -145,6 +151,12 @@ export default function App() {
   const [observeCardOpen, setObserveCardOpen] = useState(false)
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   const [predictModuleId, setPredictModuleId] = useState<string | null>(null)
+  // First sign-in (#14): the tour, then the placement quiz. Only for a
+  // student whose profile says it hasn't been done (null, not undefined:
+  // undefined means the column doesn't exist yet).
+  const [onboarding, setOnboarding] = useState<'tour' | 'placement' | null>(null)
+  const onboardingStarted = useRef(false)
+  const needsOnboarding = backendEnabled && auth.profile?.role === 'student' && auth.profile.onboarded_at === null
   const [pathCardHidden, setPathCardHidden] = useState(() => window.localStorage.getItem(PATH_CARD_HIDDEN_KEY) === '1')
   const animTimerRef = useRef<number | null>(null)
   const stepHistoryRef = useRef<CpuSnapshot[]>([])
@@ -543,6 +555,24 @@ export default function App() {
     return next === 'done' ? 'Done watching: finish module ✓' : `Done watching → ${STEPS.find((s) => s.id === next)?.label ?? next}`
   }
 
+  // The tour runs on the Hello World example with the Registers panel open.
+  useEffect(() => {
+    if (!needsOnboarding || onboardingStarted.current) return
+    onboardingStarted.current = true
+    setMode('examples')
+    setSelectedExampleId('hello')
+    setAsideTab('registers')
+    loadExample('hello')
+    setOnboarding('tour')
+    // loadExample is a fresh closure every render; start once.
+  }, [needsOnboarding])
+
+  function finishPlacement(score: number | null, credit: boolean) {
+    setOnboarding(null)
+    void auth.completeOnboarding(score, credit)
+    if (credit && score !== null && score >= PLACEMENT_PASS) moduleProgress.setStep('m0', 'done')
+  }
+
   // Leaves the Predict step for the next one (or finishes the module).
   function finishPredict(moduleId: string) {
     setPredictModuleId(null)
@@ -724,6 +754,8 @@ export default function App() {
           />
         )
       })()}
+      {onboarding === 'tour' && <Tour onDone={() => setOnboarding('placement')} />}
+      {onboarding === 'placement' && <PlacementDialog onFinish={finishPlacement} />}
       {predictModuleId && (() => {
         const module = LEARNING_PATH.find((m) => m.id === predictModuleId)
         if (!module) return null

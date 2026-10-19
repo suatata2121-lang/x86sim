@@ -22,6 +22,13 @@ create table if not exists public.profiles (
   last_seen_at timestamptz
 );
 
+-- First sign-in (#14): when the tour was done, the placement score (0-8,
+-- null if skipped) and whether it counted Module 0 as done (6+ and the
+-- student chose to start at Module 1).
+alter table public.profiles add column if not exists onboarded_at timestamptz;
+alter table public.profiles add column if not exists placement_score integer check (placement_score between 0 and 8);
+alter table public.profiles add column if not exists placement_credit boolean not null default false;
+
 -- Creates the profile row when someone signs up. The name / student number
 -- come from the sign-up form via `options.data` (auth.users.raw_user_meta_data).
 create or replace function public.handle_new_user()
@@ -91,6 +98,12 @@ begin
     new.role := old.role;
     new.email := old.email;
     new.created_at := old.created_at;
+    -- The placement test is taken once.
+    if old.onboarded_at is not null then
+      new.onboarded_at := old.onboarded_at;
+      new.placement_score := old.placement_score;
+      new.placement_credit := old.placement_credit;
+    end if;
   end if;
   return new;
 end;
@@ -692,7 +705,9 @@ select
   coalesce(s.session_count, 0)        as session_count,
   coalesce(a.attempt_count, 0)        as attempt_count,
   coalesce(a.completed_count, 0)      as completed_count,
-  coalesce(e.event_count, 0)          as event_count
+  coalesce(e.event_count, 0)          as event_count,
+  p.placement_score,
+  p.placement_credit
 from public.profiles p
 left join (
   select user_id, sum(active_seconds)::bigint as total_seconds, count(*) as session_count
@@ -722,6 +737,12 @@ select
   max(created_at)                            as last_attempt_at
 from public.assignment_attempts
 group by user_id, assignment_id;
+
+-- Students who were already on the learning path before the tour existed
+-- don't get it now; only accounts that haven't started anything do (#14).
+update public.profiles p set onboarded_at = p.created_at
+ where p.onboarded_at is null
+   and exists (select 1 from public.module_progress mp where mp.user_id = p.id);
 
 -- ------------------------------------------------------- making an admin --
 -- After signing up on the site with your own email, run (once):
