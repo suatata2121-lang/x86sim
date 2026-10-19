@@ -799,6 +799,82 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'BX, and popping gives you BX back before AX.',
           'Watch the STACK band grow downward (toward lower addresses) on each PUSH below, then shrink back up ' +
             'on each POP.',
+          'The stack is a memory area for temporary data: return addresses, local variables and saved registers ' +
+            'during subroutine calls and interrupts. On the 8086 it lives in the stack segment: SS holds the ' +
+            'segment, SP points to the top of the stack inside it. The logical address is SS:SP (or SS:BP) and the ' +
+            'physical address is SS × 10h + SP. Example: SS = 2000h, SP = FFFEh → 20000h + FFFEh = 2FFFEh.',
+          'The stack is LIFO and grows downward: PUSH decrements SP by 2, POP increments it by 2. Every entry is a ' +
+            '16-bit word.',
+          'PUSH stores the word little-endian: the high byte at SP−1, the low byte at SP−2, then SP = SP−2. POP ' +
+            'reads the low byte from SS:[SP], the high byte from SS:[SP+1], then SP = SP+2. Step through PUSH BX and ' +
+            'POP CX byte by byte below.',
+          'On the 8086, PUSH and POP take only 16-bit registers or memory words: PUSH BL and PUSH 5 are not ' +
+            'allowed (pushing an immediate was added on the 80186).',
+        ],
+        figure: {
+          title: 'PUSH and POP byte by byte',
+          steps: [
+            {
+              name: 'Start',
+              where: 'BX = 2050h, so BH = 20h and BL = 50h. SP = 1002h points at the current top of the stack.',
+              memory: [
+                { addr: '1002h', value: '--', pointer: 'SP' },
+                { addr: '1001h', value: '--' },
+                { addr: '1000h', value: '--' },
+                { addr: '0FFFh', value: '--' },
+                { addr: '0FFEh', value: '--' },
+                { addr: '0FFDh', value: '--' },
+                { addr: '0FFCh', value: '--' },
+              ],
+              state: [['BX', '2050h (BH = 20h, BL = 50h)'], ['CX', '????h'], ['SP', '1002h']],
+            },
+            {
+              name: 'PUSH BX: high byte',
+              where: 'SS:[SP−1] ← BH: the high byte 20h goes to 1001h.',
+              memory: [
+                { addr: '1002h', value: '--', pointer: 'SP' },
+                { addr: '1001h', value: '20', changed: true },
+                { addr: '1000h', value: '--' },
+                { addr: '0FFFh', value: '--' },
+                { addr: '0FFEh', value: '--' },
+                { addr: '0FFDh', value: '--' },
+                { addr: '0FFCh', value: '--' },
+              ],
+              state: [['BX', '2050h (BH = 20h, BL = 50h)'], ['CX', '????h'], ['SP', '1002h']],
+            },
+            {
+              name: 'PUSH BX: low byte, SP − 2',
+              where: 'SS:[SP−2] ← BL: the low byte 50h goes to 1000h, then SP ← 1000h. The word sits low byte first (little-endian).',
+              memory: [
+                { addr: '1002h', value: '--' },
+                { addr: '1001h', value: '20' },
+                { addr: '1000h', value: '50', changed: true, pointer: 'SP' },
+                { addr: '0FFFh', value: '--' },
+                { addr: '0FFEh', value: '--' },
+                { addr: '0FFDh', value: '--' },
+                { addr: '0FFCh', value: '--' },
+              ],
+              state: [['BX', '2050h (unchanged)'], ['CX', '????h'], ['SP', '1000h']],
+            },
+            {
+              name: 'POP CX',
+              where: 'CL ← SS:[SP] (50h), CH ← SS:[SP+1] (20h), then SP ← 1002h. CX = 2050h. The bytes stay in memory, but they are now below the top of the stack.',
+              memory: [
+                { addr: '1002h', value: '--', pointer: 'SP' },
+                { addr: '1001h', value: '20', changed: true },
+                { addr: '1000h', value: '50', changed: true },
+                { addr: '0FFFh', value: '--' },
+                { addr: '0FFEh', value: '--' },
+                { addr: '0FFDh', value: '--' },
+                { addr: '0FFCh', value: '--' },
+              ],
+              state: [['BX', '2050h'], ['CX', '2050h (CH = 20h, CL = 50h)'], ['SP', '1002h']],
+            },
+          ],
+        },
+        notes: [
+          'This simulator\'s memory is flat, so SS is not added to SP here; the physical address formula is what a ' +
+            'real 8086 does.',
         ],
         demo: {
           visual: 'stack',

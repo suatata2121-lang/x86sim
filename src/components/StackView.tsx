@@ -55,6 +55,11 @@ export function StackView({
   const bpFraction = stackBytes > 0 ? (seg.stackEnd - bp) / stackBytes : 0
   const bpY = stackY + Math.min(stackH, Math.max(0, bpFraction * stackH))
 
+  // The bytes around SP, highest address first like a stack drawing: what
+  // PUSH just wrote sits at SP and SP+1 (low byte at the lower address), and
+  // a popped word is still there just below SP until something overwrites it.
+  const byteRows = Array.from({ length: 8 }, (_, i) => sp + 5 - i).filter((a) => a >= 0 && a <= 0xffff)
+
   const hasTopWord = sp <= 0xfffe
   const topWord = hasTopWord ? memory[sp] | (memory[(sp + 1) & 0xffff] << 8) : null
 
@@ -98,6 +103,17 @@ export function StackView({
       <p className="status stack-detail">
         {topWord !== null ? `Top of stack (word @ SP): ${hex(topWord)}` : 'Stack empty'}
       </p>
+      <table className="stack-bytes">
+        <tbody>
+          {byteRows.map((a) => (
+            <tr key={a} className={a === sp ? 'sp' : a < sp ? 'below' : undefined}>
+              <td>{hex(a)}</td>
+              <td>{memory[a].toString(16).toUpperCase().padStart(2, '0')}</td>
+              <td>{a === sp ? '← SP' : ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

@@ -269,8 +269,29 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Call subroutines and watch PUSH, POP, CALL and RET move the stack pointer.',
     requires: ['m0'],
     concepts: [hw('push-pop'), hw('call-ret')],
-    observe: { examples: ['call-ret', 'masm-boilerplate'], panel: 'stack' },
+    observe: { examples: ['call-ret', 'masm-boilerplate', 'stack-trace'], panel: 'stack' },
     assignments: ['t7-average-proc'],
+    interactives: [
+      { id: 'push-pop-figure', label: 'Step: PUSH and POP byte by byte to the end', topic: 'push-pop' },
+    ],
+    predict: [
+      {
+        question: 'SP = 1456h. After these lines, what is SP, and which byte is at SS:1454h?',
+        code: 'MOV AX, 2174h\nPUSH AX',
+        answer: 'SP = 1454h; 74h is at 1454h (21h at 1455h). AX is unchanged.',
+      },
+      {
+        question:
+          'SP = 18FAh and the stack holds 23 14 6B 2C 91 F6 from 18FAh upward. What are CX, DX, BX and SP after these lines?',
+        code: 'POP CX\nPOP DX\nPOP BX',
+        answer: 'CX = 1423h, DX = 2C6Bh, BX = F691h, SP = 1900h.',
+      },
+      {
+        question: 'SP = 1236h, AX = 24B6h, DI = 85C2h, DX = 5F93h. After these lines, what are AX and SP?',
+        code: 'PUSH AX\nPUSH DI\nPUSH DX\nPOP AX',
+        answer: 'AX = 5F93h, SP = 1232h.',
+      },
+    ],
   },
   {
     id: 'm6',

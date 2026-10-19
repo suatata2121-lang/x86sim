@@ -211,6 +211,22 @@ HLT
 `,
   },
   {
+    id: 'stack-trace',
+    title: 'Stack Trace (PUSH / POP Bytes)',
+    description: 'The lecture-slide stack example: three PUSHes and a POP, so you can watch SP move by 2 and each word land low byte first.',
+    source: `; Slide example: watch SP and the stack bytes
+MOV SP, 1236h
+MOV AX, 24B6h
+MOV DI, 85C2h
+MOV DX, 5F93h
+PUSH AX        ; SP = 1234h, bytes B6 24
+PUSH DI        ; SP = 1232h, bytes C2 85
+PUSH DX        ; SP = 1230h, bytes 93 5F
+POP AX         ; AX = 5F93h, SP = 1232h
+HLT
+`,
+  },
+  {
     id: 'traffic-light',
     title: 'Virtual Device: Traffic Light',
     description: 'Cycles a virtual traffic light (port 40h) through red, red+yellow, green, yellow forever. Use "Animate" to watch it change, "Stop" to end it.',
