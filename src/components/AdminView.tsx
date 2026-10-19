@@ -631,6 +631,8 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const [reads, setReads] = useState<ConceptRead[]>([])
   const [runs, setRuns] = useState<InteractiveRun[]>([])
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
+  // Fetched on their own: in "Recent activity" they would drown among steps and runs.
+  const [hintEvents, setHintEvents] = useState<ActivityEvent[]>([])
   const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -644,7 +646,8 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       supabase.from('concept_reads').select('module_id, concept_id, read_at').eq('user_id', student.id).order('read_at'),
       supabase.from('quiz_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }),
       supabase.from('interactive_runs').select('module_id, item_id, done_at').eq('user_id', student.id),
-    ]).then(([a, e, s, m, r, q, ir]) => {
+      supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).eq('kind', 'hint').order('created_at'),
+    ]).then(([a, e, s, m, r, q, ir, h]) => {
       const err = a.error ?? e.error ?? s.error ?? m.error ?? r.error ?? q.error ?? ir.error
       if (err) setError(err.message)
       setAttempts((a.data ?? []) as Attempt[])
@@ -654,6 +657,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       setReads((r.data ?? []) as ConceptRead[])
       setQuizAttempts((q.data ?? []) as QuizAttempt[])
       setRuns((ir.data ?? []) as InteractiveRun[])
+      setHintEvents((h.data ?? []) as ActivityEvent[])
     })
   }, [student.id])
 
@@ -835,6 +839,27 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
               </tr>
             ))}
             {attempts.length === 0 && <tr><td colSpan={4} className="admin-empty">No test runs yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Hints used</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Assignment</th><th>Highest hint opened</th><th>Last opened</th></tr></thead>
+          <tbody>
+            {[...new Set(hintEvents.map((e) => e.assignment_id ?? ''))].map((aid) => {
+              const mine = hintEvents.filter((e) => (e.assignment_id ?? '') === aid)
+              const top = Math.max(...mine.map((e) => Number(e.detail.level) || 0))
+              return (
+                <tr key={aid}>
+                  <td>{ASSIGNMENT_TITLES.get(aid) ?? aid}</td>
+                  <td>{top} of 3</td>
+                  <td>{formatDate(mine[mine.length - 1].created_at)}</td>
+                </tr>
+              )
+            })}
+            {hintEvents.length === 0 && <tr><td colSpan={3} className="admin-empty">No hints opened.</td></tr>}
           </tbody>
         </table>
       </div>

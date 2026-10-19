@@ -17,10 +17,11 @@ export interface Assignment {
   /** How the program must be written, checked before the tests (see grader.ts). */
   sourceRules?: SourceRules
   /**
-   * The #12 hint ladder: direction, a similar example, a partial solution.
-   * Shown once the hint button (#12) exists.
+   * The hint ladder: direction, a similar example, a partial solution. One
+   * step opens per click once the student has failed Run Tests three times.
+   * **bold** and `code` are rendered.
    */
-  hints?: [string, string, string]
+  hints: [string, string, string]
 }
 
 export interface Task {
@@ -69,13 +70,18 @@ MOV AH, 4Ch
 INT 21h
 `,
             testCases: [
-              { name: 'BX = 240 (decimal)', expect: { regs: { BX: 240 } } },
+              { name: 'BX = 240 (decimal)', explain: 'BX is not 240. Did you load BX with the decimal number 240 (not 0F0h written differently)?', expect: { regs: { BX: 240 } } },
               { name: 'CX = copy of AX = 240 (if AX was loaded correctly via hex)', expect: { regs: { CX: 240 } } },
               { name: 'AL = F0h (the low byte of AX, which survives the exit code)', expect: { regs: { AL: 0xf0 } } },
             ],
             sourceRules: {
               mustMatch: [{ pattern: String.raw`^\s*MOV\s+AX\s*,\s*0[0-9A-F]*h\b`, message: 'Load AX with a hex literal, such as 0F0h.' }],
             },
+            hints: [
+              'MOV copies a value into a register. You need three MOVs: one for AX, one for BX, one from AX to CX.',
+              'Open the **Arithmetic** example and Step through its first two lines.',
+              '`MOV AX, 0F0h` / `MOV BX, ___` / `MOV CX, AX`',
+            ],
           },
         ],
       },
@@ -110,6 +116,11 @@ INT 21h
               // The two starting MOVs and the exit's MOV AH, 4Ch.
               maxCount: [{ mnemonic: 'MOV', max: 3, message: 'Do the swap with XCHG alone, without extra MOV instructions.' }],
             },
+            hints: [
+              'One instruction swaps two registers without a third one. Look it up under Data Transfer in the Instruction Reference.',
+              'The **XCHG, NEG, TEST, Unsigned Jumps** example starts with exactly this swap.',
+              '`XCHG ___, ___`',
+            ],
           },
         ],
       },
@@ -140,6 +151,11 @@ INT 21h
                 name: 'SNAPSHOT written to memory, BX read back',
                 expect: { memory: [{ label: 'SNAPSHOT', size: 'word', equals: 500 }], regs: { BX: 500 } },
               },
+            ],
+            hints: [
+              'Writing to memory and reading it back are both MOVs; square brackets around a label mean "the memory at this address".',
+              '**Array Sum** reads memory with `[NUMS+SI]`.',
+              '`MOV [SNAPSHOT], AX` / `MOV BX, ___`',
             ],
           },
         ],
@@ -178,7 +194,12 @@ MOV DX, 99   ; sentinel: your code must actually set this to 0 or 1
 MOV AH, 4Ch
 INT 21h
 `,
-            testCases: [{ name: 'TURBIDITY(30) <= LIMIT(50) -> DX = 0 (normal)', expect: { regs: { DX: 0 } } }],
+            testCases: [{ name: 'TURBIDITY(30) <= LIMIT(50) -> DX = 0 (normal)', explain: 'DX should be 0 because 30 is not above 50. Check that the normal branch runs when JA is not taken.', expect: { regs: { DX: 0 } } }],
+            hints: [
+              'CMP only sets flags. A conditional jump right after it decides which branch runs. Readings are unsigned, so use JA/JBE.',
+              '**Finding the Maximum** compares two values and jumps.',
+              '`MOV AX, [TURBIDITY]` / `CMP AX, [LIMIT]` / `JA ALARM` / `MOV DX, 0` / `JMP DONE` / `ALARM: MOV DX, ___` / `DONE:`',
+            ],
           },
           {
             id: 't4-turbidity-alarm',
@@ -199,7 +220,12 @@ MOV DX, 99   ; sentinel: your code must actually set this to 0 or 1
 MOV AH, 4Ch
 INT 21h
 `,
-            testCases: [{ name: 'TURBIDITY(75) > LIMIT(50) -> DX = 1 (alarm)', expect: { regs: { DX: 1 } } }],
+            testCases: [{ name: 'TURBIDITY(75) > LIMIT(50) -> DX = 1 (alarm)', explain: 'DX should be 1 because 75 is above 50. Check that JA jumps to the alarm branch and that it sets DX to 1.', expect: { regs: { DX: 1 } } }],
+            hints: [
+              'Same code as the previous assignment: only the data changed. If it passed before but fails now, check the alarm branch.',
+              'Your own solution to the previous assignment.',
+              'Make sure the `ALARM:` branch sets `DX` to 1 and that the normal branch jumps over it.',
+            ],
           },
         ],
       },
@@ -226,6 +252,11 @@ MOV AH, 4Ch
 INT 21h
 `,
             testCases: [{ name: 'AL = (STATUS & 18h) >> 3 = 3', expect: { regs: { AL: 3 } } }],
+            hints: [
+              'AND with a mask keeps the bits you want; SHR moves them down to bit 0.',
+              '**Bitwise Operations** shows AND and SHR on a byte.',
+              '`MOV AL, [STATUS]` / `AND AL, 18h` / `SHR AL, ___`',
+            ],
           },
         ],
       },
@@ -260,7 +291,12 @@ READINGS DB 5, 10, 15, 20, 25, 30, 35, 40, 45, 50
 MOV AH, 4Ch
 INT 21h
 `,
-            testCases: [{ name: 'Sum(5..50, 10 elements) = 275', expect: { regs: { BX: 275 } } }],
+            testCases: [{ name: 'Sum(5..50, 10 elements) = 275', explain: 'BX is not 275. Common causes: CX was not 10, SI did not start at 0, or AH was not cleared before adding AX to BX.', expect: { regs: { BX: 275 } } }],
+            hints: [
+              'A loop needs a counter in CX, an index in SI that grows by 1, and an accumulator in BX.',
+              '**Array Sum** is almost the same loop.',
+              '`MOV CX, 10` / `MOV SI, 0` / `MOV BX, 0` / `L: MOV AL, [READINGS+SI]` / `MOV AH, 0` / `ADD BX, AX` / `INC SI` / `LOOP ___`',
+            ],
           },
         ],
       },
@@ -302,9 +338,14 @@ AVERAGE ENDP
 `,
             testCases: [
               {
-                name: 'BX = 27 (average), AX/CX preserved across the call (via DI/DX)',
+                name: 'BX = 27 (average), AX/CX preserved across the call (via DI/DX)', explain: 'Either BX is not 27 or AX/CX changed. Every register you PUSH must be POPped in the opposite order before RET.',
                 expect: { regs: { BX: 27, DI: 999, DX: 888 } },
               },
+            ],
+            hints: [
+              'Inside the procedure, PUSH every register you change (AX, CX) first and POP them in reverse order right before RET.',
+              '**Subroutine (CALL/RET)** and **MASM-Style PUSH/POP**.',
+              '`AVERAGE PROC` / `PUSH AX` / `PUSH CX` / … sum and divide by 10 … / `POP ___` / `POP ___` / `RET` / `AVERAGE ENDP`',
             ],
           },
         ],
@@ -337,6 +378,11 @@ MOV AH, 4Ch
 INT 21h
 `,
             testCases: [{ name: 'Port 41h = 06h (step command)', expect: { ports: [{ port: 0x41, equals: 0x06 }] } }],
+            hints: [
+              'OUT sends AL to a port. Load the command into AL first.',
+              '**Virtual Device: Stepper Motor**.',
+              '`MOV AL, 06h` / `OUT ___, AL`',
+            ],
           },
         ],
       },
@@ -364,6 +410,11 @@ MOV AH, 4Ch
 INT 21h
 `,
             testCases: [{ name: 'Output = "SYSTEM OK"', expect: { output: { equals: 'SYSTEM OK' } } }],
+            hints: [
+              'INT 21h with AH=09h prints the string DX points to, up to `$`.',
+              '**Hello, World** does exactly this.',
+              '`MOV AH, 9` / `MOV DX, ___` / `INT 21h`',
+            ],
           },
         ],
       },
@@ -409,6 +460,11 @@ INT 21h
                 expect: { memory: [{ label: 'DIST_LOW', size: 'word', equals: 0 }, { label: 'DIST_HIGH', size: 'word', equals: 1 }] },
               },
             ],
+            hints: [
+              'ADD the 1 to the low word, then ADC 0 to the high word so the carry from the low word is added in.',
+              '**Multiplication and Division** shows how a result can spill into a second register.',
+              '`ADD [DIST_LOW], 1` / `___ [DIST_HIGH], 0`',
+            ],
           },
         ],
       },
@@ -442,6 +498,11 @@ MOV AH, 4Ch
 INT 21h
 `,
             testCases: [{ name: 'BX = -10 as a 16-bit value (0FFF6h)', expect: { regs: { BX: 0xfff6 } } }],
+            hints: [
+              'DIV treats −40 as a huge positive number. Use IDIV, and sign-extend AX into DX:AX first with CWD.',
+              'Learn → Numbering Systems → Signed Numbers and Two\'s Complement.',
+              '`MOV AX, [TOTAL]` / `CWD` / `IDIV WORD PTR [COUNT]` / `MOV BX, ___`',
+            ],
           },
         ],
       },
@@ -477,6 +538,11 @@ INT 21h
 `,
             testCases: [
               { name: 'AL = 3 (units), AH = 1 (tens) -- 7+6=13 corrected to BCD "13" (captured via DI=0103h)', expect: { regs: { DI: 0x0103 } } },
+            ],
+            hints: [
+              'Add the two digits in AL with ADD, then let AAA fix the result into two BCD digits. Clear AH before the ADD.',
+              'Instruction Reference → AAA.',
+              '`MOV AL, 7` / `MOV AH, 0` / `ADD AL, 6` / `___`',
             ],
           },
         ],
@@ -516,6 +582,11 @@ MOV AH, 4Ch
 INT 21h
 `,
             testCases: [{ name: 'LEDS = 00000001b (LED 0 now lit)', expect: { regs: { BL: 1 } } }],
+            hints: [
+              'SHL would push the top bit out and lose it; ROL brings it back in at bit 0.',
+              'Instruction Reference → ROL.',
+              '`MOV BL, [LEDS]` / `___ BL, 1`',
+            ],
           },
         ],
       },
@@ -563,6 +634,11 @@ CLOBBER ENDP
                 expect: { regs: { BL: 0 }, memory: [{ label: 'RAN', size: 'byte', equals: 1 }] },
               },
             ],
+            hints: [
+              'PUSHF saves all flags on the stack, POPF restores them. Wrap the CALL with them.',
+              'Learn → Stack & Call Mechanism → PUSH / POP.',
+              '`PUSHF` / `CALL CLOBBER` / `___`',
+            ],
           },
         ],
       },
@@ -598,6 +674,11 @@ INT 21h
                 name: 'COPY = [100, 200, 300, 400, 500] (first and last word checked)',
                 expect: { memory: [{ label: 'COPY', size: 'word', equals: 100 }, { label: 'COPY', offset: 8, size: 'word', equals: 500 }] },
               },
+            ],
+            hints: [
+              'REP MOVSW copies CX words from [SI] to [DI]. Set all three registers and the direction flag first.',
+              '**String Copy (REP MOVSB)** does the same with bytes.',
+              '`CLD` / `MOV SI, SAMPLES` / `MOV DI, COPY` / `MOV CX, ___` / `REP MOVSW`',
             ],
           },
         ],

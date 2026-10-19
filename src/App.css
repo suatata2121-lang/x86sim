@@ -4216,3 +4216,37 @@ aside .panel {
 .figure-memory {
   margin: 0.5rem 0;
 }
+
+/* ---- Failed-test explanation and hint ladder (GraderView, HintLadder) ---- */
+
+.grader-explain {
+  margin: 0.25rem 0 0.15rem 1.4rem;
+  color: var(--warning-text);
+  font-size: 0.85rem;
+}
+
+.hint-steps {
+  margin: 0 0 0.6rem;
+  padding-left: 0;
+  list-style: none;
+}
+
+.hint-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-left: 3px solid var(--accent-border);
+  background: var(--bg-panel-alt);
+}
+
+.hint-step-label {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.hint-steps code {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
