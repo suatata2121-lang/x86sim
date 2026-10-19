@@ -440,6 +440,28 @@ drop policy if exists "attempt comments: admin writes" on public.attempt_comment
 create policy "attempt comments: admin writes" on public.attempt_comments
   for all using (public.is_admin()) with check (public.is_admin() and author_id = auth.uid());
 
+-- The optional one-sentence reflection at the end of a module (#16). Only
+-- the student and the admin can read it.
+create table if not exists public.reflections (
+  id          bigint generated always as identity primary key,
+  user_id     uuid not null references public.profiles (id) on delete cascade,
+  module_id   text not null,
+  body        text not null check (char_length(body) between 1 and 500),
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists reflections_module_idx on public.reflections (module_id, created_at desc);
+
+alter table public.reflections enable row level security;
+
+drop policy if exists "reflections: read own or admin" on public.reflections;
+create policy "reflections: read own or admin" on public.reflections
+  for select using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "reflections: insert own" on public.reflections;
+create policy "reflections: insert own" on public.reflections
+  for insert with check (user_id = auth.uid());
+
 -- Per-module quiz rules, read by quiz_draw / quiz_submit so a student can't
 -- change them from the browser. required_* is the module's checklist: the
 -- quiz opens only when every concept is read, every interactive done and

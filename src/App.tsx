@@ -33,6 +33,7 @@ import {
   quizBlockers, unreadConcepts, type AsidePanel, type ConceptRef, type PathProgress,
 } from './learningPath'
 import { PredictDialog } from './components/PredictDialog'
+import { ReflectDialog } from './components/ReflectDialog'
 import { PlacementDialog, Tour } from './components/Onboarding'
 import { PLACEMENT_PASS } from './placement'
 import { findQuiz } from './quizzes'
@@ -156,6 +157,7 @@ export default function App() {
   const [observeCardOpen, setObserveCardOpen] = useState(false)
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   const [predictModuleId, setPredictModuleId] = useState<string | null>(null)
+  const [reflectModuleId, setReflectModuleId] = useState<string | null>(null)
   // Review cards (#15): a finished module's question comes back after 14 and
   // 28 days. The card is frozen once answered so its result stays on screen.
   const doneModuleIds = useMemo(
@@ -577,6 +579,7 @@ export default function App() {
     if (next === 'predict') setPredictModuleId(m.id)
     else if (next === 'task') openAssignment(m.assignments.find((a) => !completedAssignments.has(a)) ?? m.assignments[0])
     else if (next === 'quiz') openQuiz(m.id)
+    else if (next === 'reflect') setReflectModuleId(m.id)
   }
 
   function doneWatchingLabel(moduleId: string) {
@@ -603,6 +606,15 @@ export default function App() {
     if (credit && score !== null && score >= PLACEMENT_PASS) moduleProgress.setStep('m0', 'done')
   }
 
+  // Leaves Reflect (saved or skipped): a module with nothing graded closes
+  // here; otherwise its tasks or quiz decide when it is done.
+  function finishReflect(moduleId: string) {
+    setReflectModuleId(null)
+    const m = LEARNING_PATH.find((x) => x.id === moduleId)
+    if (!m || isModuleDone(m, pathProgress, moduleProgress.rows.get(m.id)?.step)) return
+    moduleProgress.setStep(m.id, nextStep(m, 'reflect'))
+  }
+
   // Leaves the Predict step for the next one (or finishes the module).
   function finishPredict(moduleId: string) {
     setPredictModuleId(null)
@@ -614,6 +626,8 @@ export default function App() {
       openAssignment(m.assignments.find((a) => !completedAssignments.has(a)) ?? m.assignments[0])
     } else if (next === 'quiz') {
       openQuiz(m.id)
+    } else if (next === 'reflect') {
+      setReflectModuleId(m.id)
     }
   }
 
@@ -787,6 +801,20 @@ export default function App() {
       })()}
       {onboarding === 'tour' && <Tour onDone={() => setOnboarding('placement')} />}
       {onboarding === 'placement' && <PlacementDialog onFinish={finishPlacement} />}
+      {reflectModuleId && (() => {
+        const module = LEARNING_PATH.find((m) => m.id === reflectModuleId)
+        if (!module) return null
+        return (
+          <ReflectDialog
+            title={module.title}
+            onSave={(body) => {
+              void moduleProgress.saveReflection(module.id, body)
+              finishReflect(module.id)
+            }}
+            onSkip={() => finishReflect(module.id)}
+          />
+        )
+      })()}
       {predictModuleId && (() => {
         const module = LEARNING_PATH.find((m) => m.id === predictModuleId)
         if (!module) return null
@@ -850,6 +878,7 @@ export default function App() {
               onOpenAssignment={openAssignment}
               onOpenQuiz={openQuiz}
               onOpenPredict={setPredictModuleId}
+              onOpenReflect={setReflectModuleId}
               dates={(moduleId) => effectiveDates(scheduleRows, moduleId, userId, auth.profile?.class_group || null)}
               feedback={{ comments: instructorFeedback.unread, onDismiss: instructorFeedback.dismiss }}
               challengeCount={challenges.done.size}

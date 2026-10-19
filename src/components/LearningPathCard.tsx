@@ -54,6 +54,7 @@ interface Props {
   onOpenAssignment: (assignmentId: string) => void
   onOpenQuiz: (moduleId: string) => void
   onOpenPredict: (moduleId: string) => void
+  onOpenReflect: (moduleId: string) => void
   onStepOpened: (moduleId: string, step: StepId) => void
   onHide: () => void
   /** When a module opens and is due for this student (#13); null when it has no schedule. */
@@ -74,7 +75,8 @@ interface Props {
 // yet (Module 0's quiz gates the rest, #20). A module that closes with a quiz
 // also shows its checklist (#25): what to read, try, pass, then the quiz.
 export function LearningPathCard({
-  rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onStepOpened, onHide,
+  rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onOpenReflect,
+  onStepOpened, onHide,
   dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse,
 }: Props) {
   const { completed } = progress
@@ -93,6 +95,7 @@ export function LearningPathCard({
     else if (step === 'observe' && m.observe) onOpenExample(m.observe.examples[index ?? 0], m.observe.panel, m.observe.watch, m.id)
     else if (step === 'quiz') onOpenQuiz(m.id)
     else if (step === 'predict') onOpenPredict(m.id)
+    else if (step === 'reflect') onOpenReflect(m.id)
     else if (step === 'task') {
       const id = index !== undefined ? m.assignments[index] : m.assignments.find((a) => !completed.has(a)) ?? m.assignments[0]
       onOpenAssignment(id)
@@ -309,7 +312,7 @@ export function LearningPathCard({
             <button className="primary" onClick={() => openStep(module, step)}>
               Continue: {STEPS.find((s) => s.id === step)?.label} ▶
             </button>
-            {step !== 'quiz' && (step !== 'task' || module.quiz) && (
+            {step !== 'quiz' && (step !== 'task' || module.quiz || nextStep(module, 'task') === 'reflect') && (
               <button
                 onClick={() => advance(module, step)}
                 disabled={nextLocked}

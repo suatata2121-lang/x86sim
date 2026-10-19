@@ -85,11 +85,10 @@ export type StoredStep = StepId | 'done'
 export const STEPS: { id: StepId; label: string; comingSoon?: boolean }[] = [
   { id: 'concept', label: 'Concept' },
   { id: 'observe', label: 'Observe' },
-  // Reflect is a placeholder until #16 lands; Continue skips it.
   { id: 'predict', label: 'Predict' },
   { id: 'task', label: 'Task' },
   { id: 'quiz', label: 'Quiz' },
-  { id: 'reflect', label: 'Reflect', comingSoon: true },
+  { id: 'reflect', label: 'Reflect' },
 ]
 
 const STANDARD_STEPS: StepId[] = ['concept', 'observe', 'predict', 'task', 'reflect']
@@ -436,6 +435,7 @@ export function activeSteps(module: LearningModule): StepId[] {
     'concept', 'observe',
     ...(hasPredict ? ['predict' as const] : []),
     ...(module.assignments.length > 0 ? ['task' as const] : []),
+    'reflect',
   ]
 }
 

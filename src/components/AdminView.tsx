@@ -7,6 +7,8 @@ import {
 } from '../learningPath'
 import { QUIZZES, type QuizAnswer } from '../quizzes'
 import { PREDICT_QUESTIONS } from '../predictQuestions'
+import { downloadCsv, fetchAll, formatDate, formatDuration, today } from './adminUtils'
+import { EndOfTermReport, Funnel, MisconceptionsTab } from './AdminInsights'
 import { AttemptComments, ExtendForStudent, NeedsHelp, ScheduleTab } from './AdminSchedule'
 import { checklistRowLabel, conceptTitle } from './LearningPathCard'
 import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
@@ -15,7 +17,6 @@ import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
 // student got through the curriculum. Row-level security on the database is
 // what actually restricts this data to admins; this component only renders it.
 
-const PAGE_SIZE = 1000
 // The inbox refreshes itself so new messages show up during a lab session.
 const FEEDBACK_REFRESH_MS = 30_000
 
@@ -200,46 +201,6 @@ function topicTitle(moduleId: string, conceptId: string): string {
 }
 
 // Supabase caps a single select at 1000 rows, so page through bigger tables.
-async function fetchAll<T>(table: string, columns: string): Promise<T[]> {
-  if (!supabase) return []
-  const rows: T[] = []
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase.from(table).select(columns).range(from, from + PAGE_SIZE - 1)
-    if (error) throw error
-    rows.push(...((data ?? []) as T[]))
-    if (!data || data.length < PAGE_SIZE) return rows
-  }
-}
-
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  return h > 0 ? `${h} h ${m} min` : `${m} min`
-}
-
-function formatDate(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : '-'
-}
-
-function downloadCsv(filename: string, header: string[], rows: (string | number)[][]) {
-  const escape = (v: string | number) => {
-    const s = String(v)
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  // The BOM makes Excel open UTF-8 (Turkish characters) correctly.
-  const csv = '﻿' + [header, ...rows].map((r) => r.map(escape).join(',')).join('\r\n')
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 export function AdminView({ onClose }: { onClose: () => void }) {
   const [students, setStudents] = useState<StudentSummary[]>([])
   const [progress, setProgress] = useState<Progress[]>([])
@@ -253,7 +214,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [group, setGroup] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [tab, setTab] = useState<'report' | 'schedule'>('report')
+  const [tab, setTab] = useState<'report' | 'schedule' | 'misconceptions' | 'end-of-term'>('report')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -416,6 +377,8 @@ export function AdminView({ onClose }: { onClose: () => void }) {
         <div className="admin-actions no-print">
           <button className={tab === 'report' ? 'primary' : undefined} onClick={() => setTab('report')}>Report</button>
           <button className={tab === 'schedule' ? 'primary' : undefined} onClick={() => setTab('schedule')}>Schedule</button>
+          <button className={tab === 'misconceptions' ? 'primary' : undefined} onClick={() => setTab('misconceptions')}>Misconceptions</button>
+          <button className={tab === 'end-of-term' ? 'primary' : undefined} onClick={() => setTab('end-of-term')}>End-of-term report</button>
           <button onClick={() => setReloadKey((k) => k + 1)} disabled={loading}>↻ Refresh</button>
           <button onClick={exportStudents} disabled={loading}>⬇ Students CSV</button>
           <button onClick={exportGradebook} disabled={loading}>⬇ Gradebook CSV</button>
@@ -424,7 +387,11 @@ export function AdminView({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {tab === 'schedule' ? <ScheduleTab groups={groups} /> : (
+      {tab === 'misconceptions' && !loading && <MisconceptionsTab students={students} groups={groups} />}
+      {tab === 'end-of-term' && !loading && (
+        <EndOfTermReport students={students} groups={groups} progress={progress} quizAttempts={quizAttempts} moduleDone={moduleDone} />
+      )}
+      {tab === 'schedule' ? <ScheduleTab groups={groups} /> : tab !== 'report' ? null : (
       <>
       {!loading && (
         <NeedsHelp
@@ -434,6 +401,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
           onOpenStudent={setSelectedId}
         />
       )}
+      {!loading && <Funnel studentIds={visibleIds} moduleDone={moduleDone} />}
 
       <FeedbackInbox />
 
