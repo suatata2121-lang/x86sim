@@ -934,7 +934,7 @@ export default function App() {
               steps={cpuRef.current.steps}
             />
           )}
-          {shownAsideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} />}
+          {shownAsideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />}
           {shownAsideTab === 'memory' && (
             <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
           )}

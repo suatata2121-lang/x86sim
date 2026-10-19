@@ -174,7 +174,7 @@ export function HardwarePlayground({
             steps={steps}
           />
         )}
-        {visual === 'devices' && <DevicesView key={`devices-${generation}`} ports={cpuRef.current.ports} />}
+        {visual === 'devices' && <DevicesView key={`devices-${generation}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />}
       </div>
       <pre className="hw-playground-source">
         {lines.map((line, idx) => (

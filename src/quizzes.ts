@@ -39,6 +39,16 @@ export const QUIZZES: Quiz[] = [
     passCount: 7,
     passNote: 'Module 2 is now unlocked.',
   },
+  {
+    id: 'm11',
+    title: 'Quiz: The 8255 Programmable Peripheral Interface',
+    intro:
+      '10 questions on port selection, control words and modes, and BSR. You need 7 correct answers to pass and ' +
+      'finish the module. You can retake the quiz as many times as you need.',
+    lockedNote: 'Finish every item on the checklist above to unlock the quiz.',
+    passCount: 7,
+    passNote: 'You have finished the 8255 module.',
+  },
 ]
 
 export function findQuiz(id: string): Quiz | undefined {

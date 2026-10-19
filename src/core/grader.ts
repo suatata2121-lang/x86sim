@@ -5,6 +5,7 @@
 // even though they share the same assembled program.
 import { assemble } from './assembler'
 import { Cpu } from './cpu'
+import { PPI_PORT_A, PPI_PORT_B, PPI_PORT_C } from './ppi8255'
 import type { AssembleError, Flags, RegName } from './types'
 
 export interface MemoryAssertion {
@@ -29,11 +30,31 @@ export interface PortAssertion {
   equals: number
 }
 
+/** The 8255 (ports 80h-83h, core/ppi8255.ts) after the run. */
+export interface PpiAssertion {
+  control?: number
+  /** Port values as the pins show them: an output's latch. */
+  portA?: number
+  portB?: number
+  portC?: number
+  /** Port C may only change through BSR words: no write to 82h, no I/O-mode word. */
+  bsrOnly?: boolean
+}
+
+/** How the 8255 and its switches stand before the program starts. */
+export interface PpiSetup {
+  control?: number
+  latchC?: number
+  switchesA?: number
+  switchesC?: number
+}
+
 export interface Expectation {
   regs?: Partial<Record<RegName, number>>
   flags?: Partial<Flags>
   memory?: MemoryAssertion[]
   ports?: PortAssertion[]
+  ppi?: PpiAssertion
   output?: OutputAssertion
   /** Defaults to true: the program must reach HLT / INT 21h AH=4Ch on its own. */
   halted?: boolean
@@ -43,6 +64,7 @@ export interface TestCase {
   name: string
   /** Answers fed in order each time the program requests keyboard input (INT 21h AH=01/0A). */
   input?: string[]
+  ppi?: PpiSetup
   expect: Expectation
   maxSteps?: number
 }
@@ -90,6 +112,14 @@ function runToCompletion(cpu: Cpu, input: string[], maxSteps: number): void {
 export function runTestCase(cpu: Cpu, testCase: TestCase): TestResult {
   const failures: string[] = []
   const maxSteps = testCase.maxSteps ?? DEFAULT_MAX_STEPS
+  // Set straight on the chip, so the setup never counts as the program's own writes.
+  const setup = testCase.ppi
+  if (setup) {
+    if (setup.control !== undefined) cpu.ppi.control = setup.control
+    if (setup.latchC !== undefined) cpu.ppi.latchC = setup.latchC
+    if (setup.switchesA !== undefined) cpu.ppi.switchesA = setup.switchesA
+    if (setup.switchesC !== undefined) cpu.ppi.switchesC = setup.switchesC
+  }
 
   try {
     runToCompletion(cpu, testCase.input ?? [], maxSteps)
@@ -133,6 +163,20 @@ export function runTestCase(cpu: Cpu, testCase: TestCase): TestResult {
     if (actual !== p.equals) {
       failures.push(`Port ${p.port.toString(16)}h: expected ${p.equals}, got ${actual}`)
     }
+  }
+
+  const ppi = testCase.expect.ppi
+  if (ppi) {
+    const hex = (v: number) => `${v.toString(16).toUpperCase().padStart(2, '0')}h`
+    const check = (what: string, expected: number | undefined, actual: number) => {
+      if (expected !== undefined && actual !== expected) failures.push(`8255 ${what}: expected ${hex(expected)}, got ${hex(actual)}`)
+    }
+    check('control register', ppi.control, cpu.ppi.control)
+    check('Port A', ppi.portA, cpu.ppi.read(PPI_PORT_A))
+    check('Port B', ppi.portB, cpu.ppi.read(PPI_PORT_B))
+    check('Port C', ppi.portC, cpu.ppi.read(PPI_PORT_C))
+    if (ppi.bsrOnly && cpu.ppi.portCWrites > 0) failures.push('Port C was written directly (port 82h); use BSR words on port 83h instead')
+    if (ppi.bsrOnly && cpu.ppi.modeWords > 0) failures.push('An I/O-mode control word (D7 = 1) was sent; it clears every output, so use BSR words only')
   }
 
   if (testCase.expect.output) {
