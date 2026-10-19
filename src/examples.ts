@@ -197,6 +197,20 @@ INT 21h
 `,
   },
   {
+    id: 'endian-store',
+    title: 'Little-Endian Store',
+    description: 'Stores the word 1234h in memory, then reads its two bytes back: the low byte 34h sits at the lower address.',
+    source: `; Little-endian: the low byte goes to the lower address
+VALUE DW 0
+MOV AX, 1234h
+MOV [VALUE], AX     ; memory shows 34 12, not 12 34
+MOV BX, OFFSET VALUE
+MOV AL, [BX]        ; AL = 34h, the low byte
+MOV AH, [BX+1]      ; AH = 12h, the high byte
+HLT
+`,
+  },
+  {
     id: 'traffic-light',
     title: 'Virtual Device: Traffic Light',
     description: 'Cycles a virtual traffic light (port 40h) through red, red+yellow, green, yellow forever. Use "Animate" to watch it change, "Stop" to end it.',

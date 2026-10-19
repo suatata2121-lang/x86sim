@@ -40,6 +40,16 @@ export const QUIZZES: Quiz[] = [
     passNote: 'Module 2 is now unlocked.',
   },
   {
+    id: 'm12',
+    title: 'Quiz: Segments, Addressing Modes and Byte Order',
+    intro:
+      '10 questions on segment:offset addresses, addressing modes and default segments, and byte order. You need 7 ' +
+      'correct answers to pass and finish the module. You can retake the quiz as many times as you need.',
+    lockedNote: 'Finish every item on the checklist above to unlock the quiz.',
+    passCount: 7,
+    passNote: 'You have finished the segments and addressing module.',
+  },
+  {
     id: 'm11',
     title: 'Quiz: The 8255 Programmable Peripheral Interface',
     intro:

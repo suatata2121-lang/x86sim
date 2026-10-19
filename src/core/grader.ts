@@ -49,6 +49,13 @@ export interface PpiSetup {
   switchesC?: number
 }
 
+/** Bytes written over a data label before the run, so one program can be tested on several inputs. */
+export interface DataSetup {
+  label: string
+  offset?: number
+  bytes: number[]
+}
+
 export interface Expectation {
   regs?: Partial<Record<RegName, number>>
   flags?: Partial<Flags>
@@ -65,6 +72,7 @@ export interface TestCase {
   /** Answers fed in order each time the program requests keyboard input (INT 21h AH=01/0A). */
   input?: string[]
   ppi?: PpiSetup
+  data?: DataSetup[]
   expect: Expectation
   maxSteps?: number
 }
@@ -112,6 +120,14 @@ function runToCompletion(cpu: Cpu, input: string[], maxSteps: number): void {
 export function runTestCase(cpu: Cpu, testCase: TestCase): TestResult {
   const failures: string[] = []
   const maxSteps = testCase.maxSteps ?? DEFAULT_MAX_STEPS
+  for (const d of testCase.data ?? []) {
+    const base = cpu.dataLabels.get(d.label)?.address
+    if (base === undefined) {
+      failures.push(`Data label ${d.label} is missing -- keep the declarations from the starter code`)
+      return { name: testCase.name, passed: false, failures, steps: 0, cycles: 0 }
+    }
+    d.bytes.forEach((b, i) => { cpu.memory[(base + (d.offset ?? 0) + i) & 0xffff] = b & 0xff })
+  }
   // Set straight on the chip, so the setup never counts as the program's own writes.
   const setup = testCase.ppi
   if (setup) {

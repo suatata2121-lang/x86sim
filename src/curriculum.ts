@@ -719,4 +719,162 @@ INT 21h
       },
     ],
   },
+  {
+    id: 'stage-8',
+    title: 'Stage 8: Segments, Addressing Modes and Byte Order',
+    summary: 'Store and read multi-byte values in the right byte order, and reach table elements with based-indexed addressing.',
+    tasks: [
+      {
+        id: 'task-19-little-endian',
+        title: 'Task 19 - Store a 32-bit Value',
+        scenario: 'A counter that no longer fits in 16 bits is kept in DX:AX and has to be saved to memory the way an x86 stores it.',
+        assignments: [
+          {
+            id: 't19-store-little-endian',
+            title: 'Store a 32-bit Value',
+            concept:
+              'The x86 is little-endian: the low byte of a value goes to the lowest address. A 32-bit value in DX:AX ' +
+              '(DX = high word, AX = low word) is therefore stored low word first, and each word low byte first.',
+            starterSource: `; Task 19: Store a 32-bit value (little-endian)
+; DX:AX holds a 32-bit number: DX is the high word, AX the low word.
+; Store it in RESULT in little-endian order (the x86 way):
+;   1234h:5678h must end up as the bytes 78 56 34 12.
+NUM_HIGH DW 1234h
+NUM_LOW DW 5678h
+RESULT DB 0, 0, 0, 0
+
+MOV DX, [NUM_HIGH]
+MOV AX, [NUM_LOW]
+
+; TODO: store DX:AX into the four bytes of RESULT
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              {
+                name: 'DX:AX = 1234h:5678h → RESULT = 78 56 34 12',
+                data: [{ label: 'NUM_HIGH', bytes: [0x34, 0x12] }, { label: 'NUM_LOW', bytes: [0x78, 0x56] }],
+                expect: {
+                  memory: [
+                    { label: 'RESULT', equals: 0x78 }, { label: 'RESULT', offset: 1, equals: 0x56 },
+                    { label: 'RESULT', offset: 2, equals: 0x34 }, { label: 'RESULT', offset: 3, equals: 0x12 },
+                  ],
+                },
+              },
+              {
+                name: 'DX:AX = 89ABh:CDEFh → RESULT = EF CD AB 89',
+                data: [{ label: 'NUM_HIGH', bytes: [0xab, 0x89] }, { label: 'NUM_LOW', bytes: [0xef, 0xcd] }],
+                expect: {
+                  memory: [
+                    { label: 'RESULT', equals: 0xef }, { label: 'RESULT', offset: 1, equals: 0xcd },
+                    { label: 'RESULT', offset: 2, equals: 0xab }, { label: 'RESULT', offset: 3, equals: 0x89 },
+                  ],
+                },
+              },
+              {
+                name: 'DX:AX = 0000h:00FFh → RESULT = FF 00 00 00',
+                data: [{ label: 'NUM_HIGH', bytes: [0x00, 0x00] }, { label: 'NUM_LOW', bytes: [0xff, 0x00] }],
+                expect: {
+                  memory: [
+                    { label: 'RESULT', equals: 0xff }, { label: 'RESULT', offset: 1, equals: 0x00 },
+                    { label: 'RESULT', offset: 2, equals: 0x00 }, { label: 'RESULT', offset: 3, equals: 0x00 },
+                  ],
+                },
+              },
+            ],
+            hints: [
+              'A word store already puts its low byte first. Store AX (the low word) at RESULT and DX (the high word) two bytes later.',
+              'The Little-Endian Store example writes one word and shows its bytes in the memory panel.',
+              '`MOV WORD PTR [RESULT], AX` / `MOV WORD PTR [RESULT+___], DX`',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-20-network-order',
+        title: 'Task 20 - Read a Big-Endian Word',
+        scenario: 'A network packet carries a 16-bit number in network (big-endian) order: high byte first.',
+        assignments: [
+          {
+            id: 't20-network-order',
+            title: 'Read a Big-Endian Word',
+            concept:
+              'A word load on the x86 takes the byte at the lower address as the low byte. Network data is big-endian, ' +
+              'so a plain word load swaps the two bytes; swap them back, or load the bytes one at a time.',
+            starterSource: `; Task 20: Read a big-endian word
+; PACKET holds a 16-bit number in network order: high byte first.
+; Put the correct value in AX (PACKET DB 12h, 34h means 1234h),
+; then copy it to BX -- the exit code below overwrites AH, so BX is checked.
+PACKET DB 12h, 34h
+
+; TODO: AX = the big-endian value in PACKET, then MOV BX, AX
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              { name: 'PACKET = 12h, 34h → BX = 1234h', data: [{ label: 'PACKET', bytes: [0x12, 0x34] }], expect: { regs: { BX: 0x1234 } } },
+              { name: 'PACKET = 00h, 50h → BX = 0050h', data: [{ label: 'PACKET', bytes: [0x00, 0x50] }], expect: { regs: { BX: 0x0050 } } },
+              { name: 'PACKET = ABh, CDh → BX = ABCDh', data: [{ label: 'PACKET', bytes: [0xab, 0xcd] }], expect: { regs: { BX: 0xabcd } } },
+            ],
+            hints: [
+              'MOV AX, WORD PTR [PACKET] puts the first byte in AL, so AX comes out with its bytes swapped. Fix the order.',
+              'Learn → Memory & Bus Architecture → Little Endian vs Big Endian: the dump 78 56 34 12 read both ways.',
+              '`MOV AX, WORD PTR [PACKET]` / `XCHG ___, ___` / `MOV BX, AX`',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-21-table-lookup',
+        title: 'Task 21 - Based-Indexed Lookup',
+        scenario: 'A 4 × 4 calibration table is stored row by row. The row and column of the entry needed come from two sensors.',
+        assignments: [
+          {
+            id: 't21-table-lookup',
+            title: 'Based-Indexed Lookup',
+            concept:
+              'Based-indexed addressing adds a base register (BX) and an index register (SI): [TABLE+BX+SI]. With ' +
+              'rows of 4 bytes, BX must hold the byte offset of the row (row × 4) and SI the column.',
+            starterSource: `; Task 21: Based-indexed lookup
+; TABLE is 4 rows of 4 bytes. ROW (0-3) and COL (0-3) say which entry to read.
+; Load TABLE[row][col] into AL using based-indexed addressing: [TABLE+BX+SI].
+; Turn the row number into a byte offset first (each row is 4 bytes long).
+; Row 0 is 11h-14h, row 1 is 21h-24h, row 2 is 31h-34h, row 3 is 41h-44h.
+TABLE DB 11h, 12h, 13h, 14h, 21h, 22h, 23h, 24h, 31h, 32h, 33h, 34h, 41h, 42h, 43h, 44h
+ROW DW 2
+COL DW 1
+
+MOV BX, [ROW]
+MOV SI, [COL]
+
+; TODO: make BX the row's byte offset, then MOV AL, [TABLE+BX+SI]
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              { name: 'Row 0, column 0 → AL = 11h', data: [{ label: 'ROW', bytes: [0, 0] }, { label: 'COL', bytes: [0, 0] }], expect: { regs: { AL: 0x11 } } },
+              { name: 'Row 3, column 3 → AL = 44h', data: [{ label: 'ROW', bytes: [3, 0] }, { label: 'COL', bytes: [3, 0] }], expect: { regs: { AL: 0x44 } } },
+              { name: 'Row 2, column 1 → AL = 32h', data: [{ label: 'ROW', bytes: [2, 0] }, { label: 'COL', bytes: [1, 0] }], expect: { regs: { AL: 0x32 } } },
+            ],
+            sourceRules: {
+              mustMatch: [
+                {
+                  pattern: '\\[[^\\]\\n]*\\bBX\\b[^\\]\\n]*\\bSI\\b[^\\]\\n]*\\]|\\[[^\\]\\n]*\\bSI\\b[^\\]\\n]*\\bBX\\b[^\\]\\n]*\\]',
+                  message: 'Use based-indexed addressing: a memory operand with both BX and SI, e.g. [TABLE+BX+SI]',
+                },
+              ],
+            },
+            hints: [
+              'Each row is 4 bytes, so row r starts r × 4 bytes into TABLE. Multiply BX by 4 (two SHL BX, 1), then add the column with SI inside the brackets.',
+              'The Base+Index Addressing example reads a table element with [TABLE+BX+SI].',
+              '`SHL BX, 1` / `SHL BX, 1` / `MOV AL, [TABLE+___+___]`',
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]

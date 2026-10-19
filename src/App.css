@@ -4102,3 +4102,76 @@ aside .panel {
 .account-code label {
   flex: 1;
 }
+
+/* ---- Segment / addressing / byte-order views (components/SegmentViews.tsx) ---- */
+
+.sv-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.sv-operand {
+  display: flex;
+  margin: 0.5rem 0;
+}
+
+.sv-operand input {
+  width: 100%;
+  max-width: 24rem;
+}
+
+.sv-regs {
+  gap: 0.5rem;
+}
+
+.sv-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.sv-preset {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
+.sv-preset.done {
+  border-color: var(--num-bin);
+}
+
+.sv-working td:last-child {
+  text-align: right;
+}
+
+.sv-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.5rem 0;
+}
+
+.sv-cells {
+  min-width: 10rem;
+}
+
+.sv-cell {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0.5rem;
+  border-top: 1px solid var(--border);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+.sv-cell-addr {
+  color: var(--text-dim);
+}
+
+.sv-cell-byte {
+  color: var(--accent-text);
+  font-weight: 700;
+}

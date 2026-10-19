@@ -189,6 +189,63 @@ export const LEARNING_PATH: LearningModule[] = [
     ],
   },
   {
+    // A new id rather than renumbering: stored progress of m3-m10 keeps its module.
+    id: 'm12',
+    title: 'Segments, Addressing Modes and Byte Order',
+    summary:
+      'Turn segment:offset pairs into physical addresses, work out where each addressing mode points, and read ' +
+      'multi-byte values byte by byte.',
+    requires: ['m2'],
+    concepts: [hw('program-segments'), hw('addressing-modes'), hw('byte-order')],
+    observe: {
+      examples: ['endian-store', 'base-index'],
+      panel: 'memory',
+      watch: 'Watch the memory panel: which byte of AX lands at the lower address?',
+    },
+    assignments: ['t19-store-little-endian', 't20-network-order', 't21-table-lookup'],
+    steps: ['concept', 'observe', 'predict', 'task', 'quiz', 'reflect'],
+    quiz: 'm12',
+    interactives: [
+      {
+        id: 'seg-practice',
+        label: 'Practice: five segment questions right ({n}/5)',
+        topic: 'program-segments',
+        parts: ['seg-practice-1', 'seg-practice-2', 'seg-practice-3', 'seg-practice-4', 'seg-practice-5'],
+      },
+      {
+        id: 'ea-presets',
+        label: 'Run: the four Effective Address Calculator presets ({n}/4)',
+        topic: 'addressing-modes',
+        parts: ['ea-preset-1', 'ea-preset-2', 'ea-preset-3', 'ea-preset-4'],
+      },
+      {
+        id: 'byte-layout',
+        label: 'Try: the byte layout both ways ({n}/2)',
+        topic: 'byte-order',
+        parts: ['byte-layout-value', 'byte-layout-dump'],
+      },
+    ],
+    predict: [
+      {
+        question: 'Which byte is at address 0100h?',
+        code: 'MOV AX, 1234h\nMOV [0100h], AX',
+        answer: '34h: the low byte goes to the lower address.',
+      },
+      {
+        question: 'DS = 2000h, BX = 0020h, SI = 0010h. Which physical address does MOV AX, [BX+SI] read?',
+        answer: '20030h (EA = 0030h, plus DS × 10h).',
+      },
+      {
+        question: 'Which segment register does MOV AX, [BP+4] use?',
+        answer: 'SS, because BP is in the operand.',
+      },
+      {
+        question: 'CS = 1980h, IP = 78FEh. Where is the next instruction?',
+        answer: '210FEh (19800h + 78FEh).',
+      },
+    ],
+  },
+  {
     id: 'm3',
     title: 'The ALU and Flags',
     summary: 'Use arithmetic and logic instructions and read the flags they leave behind to make decisions.',

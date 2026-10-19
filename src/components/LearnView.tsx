@@ -15,6 +15,7 @@ import { MoveItView } from './MoveItView'
 import { ArchCompareView, BankSelectorView, ChipCheckView } from './MemoryBusViews'
 import { BsrBuilder, ControlWordBuilder, PpiBlockDiagram } from './Ppi8255Views'
 import { Dma8257Diagram } from './Dma8257View'
+import { ByteLayout, EaCalculator, EndianFigure, SegmentCalculator, SegmentMapDiagram, SegmentPractice } from './SegmentViews'
 import type { ConceptRef } from '../learningPath'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -515,6 +516,8 @@ export function LearnDetail({
         {hwTopic.staticDiagram === 'von-neumann-harvard' && <ArchCompareView />}
         {hwTopic.staticDiagram === 'ppi-8255' && <PpiBlockDiagram />}
         {hwTopic.staticDiagram === 'dma-8257' && <Dma8257Diagram />}
+        {hwTopic.staticDiagram === 'segment-map' && <SegmentMapDiagram />}
+        {hwTopic.staticDiagram === 'endian' && <EndianFigure />}
         {hwTopic.figure && (
           <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
         )}
@@ -525,6 +528,14 @@ export function LearnDetail({
         {hwTopic.interactive === 'chip-check' && <ChipCheckView />}
         {hwTopic.interactive === 'ppi-control-word' && <ControlWordBuilder done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'ppi-bsr' && <BsrBuilder done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'segment-calc' && (
+          <>
+            <SegmentCalculator />
+            <SegmentPractice done={interactivesDone} onDone={onInteractiveDone} />
+          </>
+        )}
+        {hwTopic.interactive === 'ea-calc' && <EaCalculator done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'byte-layout' && <ByteLayout done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">
