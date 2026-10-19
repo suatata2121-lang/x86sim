@@ -348,6 +348,33 @@ drop policy if exists "interactive runs: insert own" on public.interactive_runs;
 create policy "interactive runs: insert own" on public.interactive_runs
   for insert with check (user_id = auth.uid());
 
+-- Every Check on a Predict-step question (#11), right or wrong, so the
+-- instructor sees which ideas don't stick. question_id matches the ids in
+-- src/predictQuestions.ts. source = 'review' is for later review cards (#15).
+create table if not exists public.predictions (
+  id          bigint generated always as identity primary key,
+  user_id     uuid not null references public.profiles (id) on delete cascade,
+  module_id   text not null,
+  question_id text not null,
+  answer      text not null,
+  correct     boolean not null,
+  source      text not null default 'predict' check (source in ('predict', 'review')),
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists predictions_user_idx on public.predictions (user_id, module_id);
+create index if not exists predictions_question_idx on public.predictions (question_id);
+
+alter table public.predictions enable row level security;
+
+drop policy if exists "predictions: read own or admin" on public.predictions;
+create policy "predictions: read own or admin" on public.predictions
+  for select using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "predictions: insert own" on public.predictions;
+create policy "predictions: insert own" on public.predictions
+  for insert with check (user_id = auth.uid());
+
 -- Per-module quiz rules, read by quiz_draw / quiz_submit so a student can't
 -- change them from the browser. required_* is the module's checklist: the
 -- quiz opens only when every concept is read, every interactive done and

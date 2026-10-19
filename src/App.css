@@ -4250,3 +4250,36 @@ aside .panel {
 .hint-steps code {
   font-family: 'Cascadia Code', 'Consolas', monospace;
 }
+
+/* ---- Predict step (components/PredictDialog.tsx) ---- */
+
+.predict-card {
+  margin-bottom: 0.8rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.predict-card.right {
+  border-color: var(--num-bin);
+}
+
+.predict-card.wrong {
+  border-color: var(--error-text);
+}
+
+.predict-questions {
+  padding-left: 0;
+  list-style: none;
+}
+
+.predict-answer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.predict-answer input {
+  width: 9rem;
+}

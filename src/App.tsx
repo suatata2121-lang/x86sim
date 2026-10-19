@@ -24,9 +24,10 @@ import { CURRICULUM, type Assignment } from './curriculum'
 import { HARDWARE_REFERENCE } from './hardwareReference'
 import { NUMBERING_REFERENCE } from './numberingSystems'
 import {
-  LEARNING_PATH, currentModule, interactiveParts, isModuleDone, moduleForPage, quizBlockers, unreadConcepts,
-  type AsidePanel, type ConceptRef, type PathProgress,
+  LEARNING_PATH, STEPS, currentModule, interactiveParts, isModuleDone, moduleForPage, nextStep, predictQuestions,
+  quizBlockers, unreadConcepts, type AsidePanel, type ConceptRef, type PathProgress,
 } from './learningPath'
+import { PredictDialog } from './components/PredictDialog'
 import { findQuiz } from './quizzes'
 import { gradeSource, type GradeReport } from './core/grader'
 import { backendEnabled } from './backend/client'
@@ -138,6 +139,7 @@ export default function App() {
   const [observe, setObserve] = useState<{ moduleId: string; exampleId: string } | null>(null)
   const [observeCardOpen, setObserveCardOpen] = useState(false)
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
+  const [predictModuleId, setPredictModuleId] = useState<string | null>(null)
   const [pathCardHidden, setPathCardHidden] = useState(() => window.localStorage.getItem(PATH_CARD_HIDDEN_KEY) === '1')
   const animTimerRef = useRef<number | null>(null)
   const stepHistoryRef = useRef<CpuSnapshot[]>([])
@@ -505,6 +507,31 @@ export default function App() {
     else loadExample(exampleId)
   }
 
+  // A Predict question's snippet in its own tab, with HLT so Run stops at the end.
+  function openSnippet(code: string) {
+    setObserve(null)
+    stopAnimation()
+    const tab = makeTab('Predict: try it', `${code}\nHLT\n`)
+    setTabs((prev) => [...prev, tab])
+    setActiveTabId(tab.id)
+    setActiveAssignmentId(null)
+    resetExecutionState()
+  }
+
+  // Leaves the Predict step for the next one (or finishes the module).
+  function finishPredict(moduleId: string) {
+    setPredictModuleId(null)
+    const m = LEARNING_PATH.find((x) => x.id === moduleId)
+    if (!m) return
+    const next = nextStep(m, 'predict')
+    moduleProgress.setStep(m.id, next)
+    if (next === 'task') {
+      openAssignment(m.assignments.find((a) => !completedAssignments.has(a)) ?? m.assignments[0])
+    } else if (next === 'quiz') {
+      openQuiz(m.id)
+    }
+  }
+
   // Task: the assignment, with its stage/task scenario shown in Learn.
   function openAssignment(assignmentId: string) {
     setObserve(null)
@@ -672,6 +699,28 @@ export default function App() {
           />
         )
       })()}
+      {predictModuleId && (() => {
+        const module = LEARNING_PATH.find((m) => m.id === predictModuleId)
+        if (!module) return null
+        const next = nextStep(module, 'predict')
+        return (
+          <PredictDialog
+            title={module.title}
+            questions={predictQuestions(module)}
+            answered={moduleProgress.predicted.get(module.id) ?? new Set()}
+            onAnswer={(qid, answer, correct) => moduleProgress.recordPrediction(module.id, qid, answer, correct)}
+            onTryInEditor={(code) => {
+              setPredictModuleId(null)
+              openSnippet(code)
+            }}
+            onClose={() => setPredictModuleId(null)}
+            next={{
+              label: next === 'done' ? 'Finish module ✓' : `Continue: ${STEPS.find((s) => s.id === next)?.label ?? next} ▶`,
+              onClick: () => finishPredict(module.id),
+            }}
+          />
+        )
+      })()}
       {feedbackOpen && (
         <FeedbackDialog
           onClose={() => setFeedbackOpen(false)}
@@ -712,6 +761,7 @@ export default function App() {
               onOpenExample={openObserveStep}
               onOpenAssignment={openAssignment}
               onOpenQuiz={openQuiz}
+              onOpenPredict={setPredictModuleId}
               onStepOpened={(moduleId, step) => trackActivity('path_step', null, { module: moduleId, step })}
               onHide={() => setPathCardHiddenPersist(true)}
               collapsed={observeModule && observeExample && !observeCardOpen
