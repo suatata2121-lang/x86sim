@@ -123,6 +123,12 @@ export function useModuleProgress(userId: string | null) {
       .then(() => undefined)
   }, [userId])
 
+  // The optional one-sentence reflection at the end of a module (#16).
+  const saveReflection = useCallback(async (moduleId: string, body: string) => {
+    if (!supabase || !userId) return
+    await supabase.from('reflections').insert({ user_id: userId, module_id: moduleId, body: body.slice(0, 500) })
+  }, [userId])
+
   // Questions and grading are server-side (quiz_draw / quiz_submit in
   // schema.sql) so the answer key never reaches the browser.
   const drawQuiz = useCallback(async (moduleId: string): Promise<DrawnQuestion[]> => {
@@ -144,6 +150,6 @@ export function useModuleProgress(userId: string | null) {
 
   return {
     rows, reads, quizzesPassed, interactives, predicted, wrongPredicted, reviewCounts, loaded,
-    setStep, markRead, markInteractive, recordPrediction, drawQuiz, submitQuiz,
+    setStep, markRead, markInteractive, recordPrediction, saveReflection, drawQuiz, submitQuiz,
   }
 }

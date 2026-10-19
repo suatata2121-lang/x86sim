@@ -4412,3 +4412,61 @@ aside .panel {
 .review-card .predict-questions {
   margin: 0;
 }
+
+/* ---- Funnel, Misconceptions and end-of-term report (AdminInsights.tsx) ---- */
+
+.funnel-steps {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.funnel-steps li {
+  display: grid;
+  grid-template-columns: 6rem 1fr 3rem auto;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.funnel-bar {
+  height: 0.9rem;
+  border-radius: 3px;
+  background: var(--bg-panel-alt);
+}
+
+.funnel-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-border);
+}
+
+.funnel-steps li.biggest-drop .funnel-bar span {
+  background: var(--error-text);
+}
+
+.funnel-steps li.biggest-drop .funnel-label {
+  color: var(--error-text);
+  font-weight: 600;
+}
+
+.funnel-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.reflection-list {
+  margin: 0.3rem 0 0.8rem;
+}
+
+.end-of-term-cell {
+  min-width: 7rem;
+  font-size: 0.75rem;
+}
+
+@media print {
+  .end-of-term-table {
+    font-size: 0.65rem;
+  }
+}
