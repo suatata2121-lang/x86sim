@@ -216,9 +216,12 @@ export const LEARNING_PATH: LearningModule[] = [
     title: 'I/O Ports and Devices',
     summary: 'Drive real-world devices such as a traffic light and a stepper motor through I/O ports.',
     requires: ['m0'],
-    concepts: [hw('io-ports')],
+    concepts: [hw('io-ports'), hw('io-mapping')],
     observe: { examples: ['traffic-light', 'stepper-motor', 'seven-segment', 'thermometer'], panel: 'devices' },
     assignments: ['t8-stepper-command'],
+    interactives: [
+      { id: 'io-mapping-figure', label: 'Step: the isolated vs memory-mapped figure to the end', topic: 'io-mapping' },
+    ],
   },
   {
     id: 'm8',

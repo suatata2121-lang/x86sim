@@ -751,6 +751,92 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         },
       },
       {
+        id: 'io-mapping',
+        title: 'Isolated I/O vs Memory-Mapped I/O',
+        summary: 'Two ways to give a device an address: its own port space, or a slice of the memory space.',
+        content: [
+          'Isolated I/O (also called I/O-mapped I/O) gives I/O devices their own address space, separate from ' +
+            'memory. Only IN and OUT reach it. The port is an 8-bit immediate (0–FFh) or a 16-bit number in DX ' +
+            '(0–FFFFh, 65,536 ports). Memory and I/O addresses never overlap, and data moves only between AL/AX ' +
+            'and the port.',
+          {
+            kind: 'code',
+            text:
+              "MOV DX, 03F8h   ; COM1 port address\n" +
+              "MOV AL, 'A'\n" +
+              "OUT DX, AL      ; send 'A' to the serial port",
+          },
+          'Advantages: the whole 1 MB stays available for memory, decoding is simpler (16 address lines), and ' +
+            'memory and I/O are clearly separated. Disadvantages: only the special instructions IN and OUT work, ' +
+            'there are fewer addresses, and only AL or AX can hold the data.',
+          'Memory-mapped I/O gives devices addresses inside the memory space. They are reached with ordinary ' +
+            'memory instructions, exactly like a variable.',
+          {
+            kind: 'code',
+            text:
+              'MOV AX, [1234h]   ; read a memory-mapped device\n' +
+              'MOV [1234h], AX   ; write to it',
+          },
+          'Advantages: any instruction and addressing mode works (ADD, AND, TEST, string instructions …) with any ' +
+            'register, and there are many more device addresses. Disadvantages: the devices use up memory space, ' +
+            'and full 20-line decoding is more complex and more expensive.',
+          {
+            kind: 'table',
+            head: ['', 'Memory-mapped I/O', 'Isolated I/O'],
+            rows: [
+              ['Address lines', 'A19–A0 (20 bits)', 'A15–A0 (8 or 16 bits)'],
+              ['Address range', '1 MB', '64K ports'],
+              ['Control signals', 'MEMR̅, MEMW̅', 'IOR̅, IOW̅'],
+              ['Instructions', 'Any memory instruction', 'Only IN and OUT'],
+              ['Data register', 'Any register', 'Only AL / AX'],
+              ['Decoding', 'More complex, more expensive', 'Simpler, cheaper'],
+            ],
+          },
+          'Step through the figure below: the same "write 41h to a device" done both ways. The M/IO̅ pin is what ' +
+            'tells the rest of the system which address space the address on the bus belongs to.',
+        ],
+        figure: {
+          title: 'Write 41h to a device, two ways',
+          steps: [
+            {
+              name: 'Isolated: OUT 80h, AL',
+              where: 'AL holds 41h. OUT puts the port number on the address bus and drives M/IO̅ low, so memory ignores the cycle and the I/O decoder answers.',
+              state: [
+                ['Instruction', 'OUT 80h, AL'],
+                ['Address bus', '0080h (port, A15–A0)'],
+                ['Data bus', '41h from AL'],
+                ['M/IO̅', '0 (I/O cycle)'],
+                ['Strobe', 'IOW̅ active'],
+              ],
+            },
+            {
+              name: 'Memory-mapped: MOV [8000h], AL',
+              where: 'The same byte goes to a device that sits at memory address 8000h. It is an ordinary memory write: M/IO̅ is high and MEMW̅ fires.',
+              state: [
+                ['Instruction', 'MOV [8000h], AL'],
+                ['Address bus', '08000h (memory, A19–A0)'],
+                ['Data bus', '41h from AL'],
+                ['M/IO̅', '1 (memory cycle)'],
+                ['Strobe', 'MEMW̅ active'],
+              ],
+            },
+            {
+              name: 'Compare',
+              where: 'Same data, same bus wires. Only M/IO̅ and the strobe differ, and with memory-mapped I/O any instruction (ADD [8000h], AL, TEST, MOVSB …) could have done the write.',
+              state: [
+                ['Isolated', 'IN/OUT only, AL/AX, IOR̅/IOW̅'],
+                ['Memory-mapped', 'any instruction, any register, MEMR̅/MEMW̅'],
+              ],
+            },
+          ],
+        },
+        notes: [
+          'Lecture tables also list IN EAX, INSB/INSW/INSD and OUTSB/OUTSW/OUTSD: those came with the 80186 and ' +
+            '80386; the 8086 has only IN and OUT with AL or AX.',
+          'This simulator implements the full 64K port space: OUT DX, AL with DX = 8000h really writes port 8000h.',
+        ],
+      },
+      {
         id: 'software-vs-hardware-interrupts',
         title: 'Software Interrupts (INT 21h) vs Real Hardware Interrupts',
         summary: 'INT is a request the CPU makes of itself; a real interrupt is hardware demanding attention.',
