@@ -24,7 +24,7 @@ export interface OutputAssertion {
 }
 
 export interface PortAssertion {
-  /** Port number (0-255), e.g. 0x41 for the virtual stepper motor. */
+  /** Port number (0-FFFFh), e.g. 0x41 for the virtual stepper motor. */
   port: number
   equals: number
 }
@@ -129,7 +129,7 @@ export function runTestCase(cpu: Cpu, testCase: TestCase): TestResult {
   }
 
   for (const p of testCase.expect.ports ?? []) {
-    const actual = cpu.ports[p.port & 0xff]
+    const actual = cpu.ports[p.port & 0xffff]
     if (actual !== p.equals) {
       failures.push(`Port ${p.port.toString(16)}h: expected ${p.equals}, got ${actual}`)
     }

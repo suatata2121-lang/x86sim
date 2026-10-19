@@ -38,6 +38,8 @@ export type NumVisual =
   | { kind: 'movRules' }
   /** A plain text table (comparison tables, signal tables, address maps). */
   | { kind: 'table'; head: string[]; rows: string[][] }
+  /** A short code example in the Instruction Reference's monospace box (Hardware pages). */
+  | { kind: 'code'; text: string }
 
 export interface NumberingTopic {
   id: string

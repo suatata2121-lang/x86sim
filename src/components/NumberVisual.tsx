@@ -682,6 +682,7 @@ export function NumberVisual({ visual: v }: { visual: NumVisual }) {
     case 'registerRoles': return <RegisterRoles />
     case 'movRules': return <MovRules />
     case 'table': return <TextTable {...v} />
+    case 'code': return <pre className="instr-example">{v.text}</pre>
   }
 }
 

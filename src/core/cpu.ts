@@ -13,6 +13,7 @@ const REG8_PARENT: Record<Reg8, { parent: Reg16; high: boolean }> = {
 type StringMnemonic = 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB' | 'MOVSW' | 'STOSW' | 'LODSW' | 'CMPSW' | 'SCASW'
 
 const MEMORY_SIZE = 0x10000
+const PORT_SPACE = 0x10000
 const INITIAL_SP = 0xfffe
 
 export interface MnemonicProfile {
@@ -48,7 +49,9 @@ export class Cpu {
   memory = new Uint8Array(MEMORY_SIZE)
   // Virtual I/O ports for IN/OUT, driving the virtual device views (traffic
   // light, stepper motor, 7-segment display, thermometer — see Devices.tsx).
-  ports = new Uint8Array(256)
+  // The full 64K port space of the 8086: an immediate port is 8-bit, but a
+  // port in DX is 16-bit (8255 examples use ports like 8003h).
+  ports = new Uint8Array(PORT_SPACE)
   instructions: Instruction[] = []
   data: DataDeclaration[] = []
   labels = new Map<string, number>()
@@ -730,10 +733,10 @@ export class Cpu {
         const isWordIn = op1.name === 'AX'
         const port = op2.kind === 'imm' ? op2.value : this.getReg('DX')
         const value = isWordIn
-          ? this.ports[port & 0xff] | (this.ports[(port + 1) & 0xff] << 8)
-          : this.ports[port & 0xff]
+          ? this.ports[port & 0xffff] | (this.ports[(port + 1) & 0xffff] << 8)
+          : this.ports[port & 0xffff]
         this.setReg(op1.name, value)
-        this.lastPort = port & 0xff
+        this.lastPort = port & 0xffff
         this.lastPortValue = value
         break
       }
@@ -742,9 +745,9 @@ export class Cpu {
         const isWordOut = op2.name === 'AX'
         const port = op1.kind === 'imm' ? op1.value : this.getReg('DX')
         const value = this.getReg(op2.name)
-        this.ports[port & 0xff] = value & 0xff
-        if (isWordOut) this.ports[(port + 1) & 0xff] = (value >> 8) & 0xff
-        this.lastPort = port & 0xff
+        this.ports[port & 0xffff] = value & 0xff
+        if (isWordOut) this.ports[(port + 1) & 0xffff] = (value >> 8) & 0xff
+        this.lastPort = port & 0xffff
         this.lastPortValue = value
         break
       }
