@@ -19,6 +19,8 @@ export interface ObserveSpec {
    * title; others show it in a box above the editor.
    */
   watch?: string
+  /** Two or three things to look at, shown as a list with the example (#10). */
+  guide?: string[]
   /** Registers the compact viewer shows; AX, BX, CX, DX when absent. */
   registers?: Reg16[]
   /** Example id -> source line -> the "What happened" text after that line runs. */
@@ -126,6 +128,11 @@ export const LEARNING_PATH: LearningModule[] = [
       examples: ['arithmetic'],
       panel: 'registers',
       watch: 'Press Step one line at a time. Before each Step, guess what the next line will change.',
+      guide: [
+        'Before each Step, say out loud which register will change.',
+        'After ADD AX, BX, check that AX is 42 in decimal and 002Ah in hex.',
+        'MOV CX, AX copies: AX keeps its value.',
+      ],
       registers: ['AX', 'BX', 'CX'],
       // Line numbers in the arithmetic example's source (examples.ts), checked by running it.
       callouts: {
@@ -165,7 +172,14 @@ export const LEARNING_PATH: LearningModule[] = [
       hw('von-neumann-harvard'), hw('bus-types'), hw('address-demux'), hw('segmented-addressing'),
       hw('memory-banking'), hw('memory-interfacing'),
     ],
-    observe: { examples: ['array-sum', 'base-index'], panel: 'memory' },
+    observe: {
+      examples: ['array-sum', 'base-index'],
+      panel: 'memory',
+      guide: [
+        'Open Memory and jump to the NUMS label: these are the bytes the loop reads.',
+        'On MOV BL, [NUMS+SI] the Data Bus panel shows a memory read. Instructions that only use registers never touch the bus.',
+      ],
+    },
     assignments: ['t3-snapshot'],
     interactives: [
       {
@@ -221,7 +235,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Use arithmetic and logic instructions and read the flags they leave behind to make decisions.',
     requires: ['m0'],
     concepts: [hw('alu-operations'), hw('flags-register')],
-    observe: { examples: ['bitwise', 'xchg-neg-test'], panel: 'registers' },
+    observe: {
+      examples: ['bitwise', 'xchg-neg-test'],
+      panel: 'registers',
+      guide: [
+        'Watch ZF and SF after every AND, OR, XOR and TEST.',
+        'TEST changes the flags but not the register: compare it with AND.',
+      ],
+    },
     assignments: ['t4-turbidity-normal', 't4-turbidity-alarm', 't5-status-bits'],
   },
   {
@@ -230,7 +251,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Write loops and see how the prefetch queue and jumps affect how long they take.',
     requires: ['m0'],
     concepts: [hw('prefetch-queue'), hw('pipeline-stalls')],
-    observe: { examples: ['counting-loop', 'max-of-two'], panel: 'profiler' },
+    observe: {
+      examples: ['counting-loop', 'max-of-two'],
+      panel: 'profiler',
+      guide: [
+        'Run once and note the total cycles.',
+        'In the Profiler, compare the cost of the jump instruction with a MOV: a taken jump empties the instruction queue.',
+      ],
+    },
     assignments: ['t6-route-sum'],
   },
   {
@@ -239,7 +267,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Call subroutines and watch PUSH, POP, CALL and RET move the stack pointer.',
     requires: ['m0'],
     concepts: [hw('push-pop'), hw('call-ret')],
-    observe: { examples: ['call-ret', 'masm-boilerplate', 'stack-trace'], panel: 'stack' },
+    observe: {
+      examples: ['call-ret', 'masm-boilerplate', 'stack-trace'],
+      panel: 'stack',
+      guide: [
+        'Step onto CALL and watch SP drop by 2: the return address is now on the stack.',
+        'On RET, SP goes back up and execution continues on the line after CALL.',
+      ],
+    },
     assignments: ['t7-average-proc'],
     interactives: [
       { id: 'push-pop-figure', label: 'Step: PUSH and POP byte by byte to the end', topic: 'push-pop' },
@@ -251,7 +286,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Split the 8086 into its bus and execution units and follow a bus cycle clock by clock.',
     requires: ['m0'],
     concepts: [hw('biu-eu'), hw('bus-timing'), hw('control-signals')],
-    observe: { examples: ['array-sum'], panel: 'databus' },
+    observe: {
+      examples: ['array-sum'],
+      panel: 'databus',
+      guide: [
+        'Step through MOV BL, [NUMS+SI] and see the memory read it causes.',
+        'Compare it with the timing diagram on the Bus Cycles page: in T1 the address goes out on the bus, in T3 the data comes back.',
+      ],
+    },
     assignments: [],
   },
   {
@@ -260,7 +302,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Drive real-world devices such as a traffic light and a stepper motor through I/O ports.',
     requires: ['m0'],
     concepts: [hw('io-ports'), hw('io-mapping')],
-    observe: { examples: ['traffic-light', 'stepper-motor', 'seven-segment', 'thermometer'], panel: 'devices' },
+    observe: {
+      examples: ['traffic-light', 'stepper-motor', 'seven-segment', 'thermometer'],
+      panel: 'devices',
+      guide: [
+        'Use Animate, not Run, so you can see each OUT change the device.',
+        'Match the port number in each OUT with the device that reacts.',
+      ],
+    },
     assignments: ['t8-stepper-command'],
     interactives: [
       { id: 'io-mapping-figure', label: 'Step: the isolated vs memory-mapped figure to the end', topic: 'io-mapping' },
@@ -302,7 +351,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Use software interrupts for input and output and see how other devices borrow the bus.',
     requires: ['m0'],
     concepts: [hw('software-vs-hardware-interrupts'), hw('bus-request-grant'), hw('dma-8257'), hw('lock-signal')],
-    observe: { examples: ['keyboard-echo'], panel: 'registers' },
+    observe: {
+      examples: ['keyboard-echo'],
+      panel: 'memory',
+      guide: [
+        'The program stops at INT 21h AH=0Ah until you type a line and press Enter: a software interrupt asking DOS for input.',
+        'Open Memory at BUF: DOS wrote the number of characters into BUF+1 and the characters after it.',
+      ],
+    },
     assignments: ['t9-print-status'],
     interactives: [
       { id: 'dma-8257-figure', label: 'Step: the DMA transfer figure to the end', topic: 'dma-8257' },
@@ -314,7 +370,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Handle negative numbers and values wider than 16 bits with carries, borrows and signed division.',
     requires: ['m0'],
     concepts: [num('signed-numbers')],
-    observe: { examples: ['muldiv'], panel: 'registers' },
+    observe: {
+      examples: ['muldiv'],
+      panel: 'registers',
+      guide: [
+        'After MUL BL, the 8-bit × 8-bit result fills all of AX, not just AL.',
+        'After DIV BL, AL holds the quotient (8) and AH the remainder (2).',
+      ],
+    },
     assignments: ['t10-32bit-increment', 't11-negative-average', 't12-tally-correction'],
   },
   {
@@ -323,7 +386,14 @@ export const LEARNING_PATH: LearningModule[] = [
     summary: 'Rotate bits, preserve flags across calls and copy blocks of memory with string instructions.',
     requires: ['m0'],
     concepts: [{ section: 'reference', id: 'string-ops' }],
-    observe: { examples: ['string-copy'], panel: 'memory' },
+    observe: {
+      examples: ['string-copy'],
+      panel: 'memory',
+      guide: [
+        'Open Memory at the destination label and watch it fill one byte per repetition.',
+        'CX counts down and SI/DI count up while REP repeats MOVSB.',
+      ],
+    },
     assignments: ['t13-rotate-indicator', 't14-preserve-carry', 't15-copy-samples'],
   },
 ]

@@ -72,6 +72,10 @@ interface Props {
   source: string
   /** One line under the title (the module's "what to watch"). */
   summary?: string
+  /** The module's "what to watch" list (#10). */
+  guide?: string[]
+  /** "Done watching → Predict": leaves Observe for the module's next step. */
+  next?: { label: string; onClick: () => void }
   registers?: Reg16[]
   /** Source line -> text shown after that line runs, instead of the generated one. */
   callouts?: Record<number, string>
@@ -81,7 +85,9 @@ interface Props {
   onOpenInEditor: () => void
 }
 
-export function ObserveView({ title, source, summary, registers = ['AX', 'BX', 'CX', 'DX'], callouts, panel, onDone, onOpenInEditor }: Props) {
+export function ObserveView({
+  title, source, summary, guide, next, registers = ['AX', 'BX', 'CX', 'DX'], callouts, panel, onDone, onOpenInEditor,
+}: Props) {
   const program = useMemo(() => assemble(source), [source])
   // Steps to the end, from a dry run, for "Step n / total".
   const total = useMemo(() => {
@@ -206,10 +212,11 @@ export function ObserveView({ title, source, summary, registers = ['AX', 'BX', '
           <button onClick={load}>↺ Reset</button>
         </div>
       </div>
-      {summary && (
+      {(summary || guide) && (
         <details className="observe-summary" open>
           <summary>What to watch</summary>
           {summary}
+          {guide && <ul className="watch-guide">{guide.map((g) => <li key={g}>{g}</li>)}</ul>}
         </details>
       )}
       {program.errors.length > 0 && <p className="feedback-error">{program.errors[0].message}</p>}
@@ -249,6 +256,7 @@ export function ObserveView({ title, source, summary, registers = ['AX', 'BX', '
       </div>
       <div className="observe-footer">
         <button className="link-button" onClick={onOpenInEditor}>Open in editor</button>
+        {next && <button className="primary" onClick={next.onClick}>{next.label}</button>}
       </div>
     </div>
   )
