@@ -1,10 +1,11 @@
 // Content for the Learn tab's "Hardware" section: how the 8086 actually works
 // internally (CPU Internal Architecture), how it talks to memory (Memory & Bus
 // Architecture), how the stack/call mechanism works (Stack & Call Mechanism),
-// and how it talks to the outside world (I/O Ports & Interrupts). A later
-// "Support Chips" category documents the classic 8086 support-chip set
-// (8284/8282/8283/8288/8259/8253/8254/8255/8251/8237) as static reference --
-// this simulator doesn't model those chips, so they carry no demo.
+// and how it talks to the outside world (I/O Ports & Interrupts). The
+// "Support Chips" category covers the 8255 PPI, which the simulator models
+// at ports 80h-83h (core/ppi8255.ts), and the 8257 DMA controller as a
+// figure only; the rest of the classic support-chip set
+// (8284/8282/8283/8288/8259/8253/8254/8251/8237) is not simulated.
 //
 // Each demo's `source` is a small, self-contained program run in its own Cpu
 // instance by HardwarePlayground (components/HardwarePlayground.tsx) -- fully
@@ -25,13 +26,16 @@ export interface HardwareTopic {
   // A purely illustrative diagram for topics with nothing to actually step
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
-  staticDiagram?: 'segmented-addressing'
+  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255' | 'dma-8257'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
   // A purpose-built interactive view instead of a Cpu demo: 'fde' is the
   // fetch-decode-execute stepper (FetchDecodeExecuteView), 'alu' is the live
-  // ALU explorer (AluView), 'move-it' the MOV/XCHG challenges (MoveItView).
-  interactive?: 'fde' | 'alu' | 'move-it'
+  // ALU explorer (AluView), 'move-it' the MOV/XCHG challenges (MoveItView),
+  // 'bank-selector' the BHE̅/A0 bank view and 'chip-check' the "which chip
+  // answers?" questions (MemoryBusViews), 'ppi-control-word' and 'ppi-bsr'
+  // the 8255 word builders (Ppi8255Views).
+  interactive?: 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check' | 'ppi-control-word' | 'ppi-bsr'
   // A step-through figure built from data (components/FigureStepper.tsx).
   figure?: FigureSpec
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
@@ -264,6 +268,37 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
     title: 'Memory & Bus Architecture',
     topics: [
       {
+        id: 'von-neumann-harvard',
+        title: 'Von Neumann vs Harvard Architecture',
+        summary: 'Why the 8086 fetches instructions and reads data over the same bus, and what a Harvard machine does differently.',
+        content: [
+          'The 8086 is a Von Neumann machine. It follows the stored-program concept: the program is just bytes in ' +
+            'memory, kept in the same memory as the data it works on. There is one memory and one bus between it and ' +
+            'the CPU, and the CPU works through fetch → decode → execute one step after another.',
+          'A Harvard machine keeps instructions and data in separate memories, each with its own bus. It can fetch ' +
+            'the next instruction and read or write data at the same time.',
+          'Look back at the Fetch-Decode-Execute topic: the fetch and the data access of MOV AX, [BX] use the same ' +
+            'bus, one after the other. On a Harvard machine they could overlap.',
+          {
+            kind: 'table',
+            head: ['', 'Von Neumann', 'Harvard'],
+            rows: [
+              ['Memory', 'One memory for instructions and data', 'Separate instruction and data memories'],
+              ['Buses', 'One shared bus', 'One bus per memory'],
+              ['Fetch and data access', 'One after the other', 'At the same time'],
+              ['Strengths', 'Simpler, cheaper, flexible for general-purpose computing', 'Faster (parallel access), predictable timing, good for real-time and embedded work'],
+              ['Weaknesses', 'The shared bus is a bottleneck (the "Von Neumann bottleneck"); code and data in one memory make code-injection attacks possible', 'More complex and more expensive, less flexible'],
+              ['Examples', 'Intel x86 family (8086, 80286, 80386 …), the CPUs in PCs, laptops and servers', 'Microcontrollers (PIC, AVR, ARM Cortex-M), DSPs (TI TMS320), automotive and IoT controllers'],
+            ],
+          },
+        ],
+        staticDiagram: 'von-neumann-harvard',
+        notes: [
+          'The 8086 hides part of the Von Neumann bottleneck with its prefetch queue: the BIU fetches the next ' +
+            'instructions while the EU is still executing (Module 4, "The 6-Byte Instruction Queue").',
+        ],
+      },
+      {
         id: 'bus-types',
         title: 'Address Bus vs Data Bus vs Control Bus',
         summary: 'How the CPU actually talks to memory over wires.',
@@ -323,6 +358,127 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             },
           ],
         },
+      },
+      {
+        id: 'memory-banking',
+        title: 'Memory Banking: BHE̅ and A0',
+        summary: 'How the 16-bit data bus is split into an even and an odd bank, and why a word at an odd address costs two bus cycles.',
+        content: [
+          'The 8086 addresses 1 MB (A19–A0) but moves 16 bits at a time. The memory is therefore built as two 512 KB ' +
+            'banks side by side. The even (low) bank holds 00000h, 00002h … FFFFEh and is wired to D7–D0. The odd ' +
+            '(high) bank holds 00001h, 00003h … FFFFFh and is wired to D15–D8.',
+          'Two signals choose the bank. The even bank is selected when A0 = 0. The odd bank is selected when BHE̅ ' +
+            '(Bus High Enable, active low) = 0. Each bank only sees A19–A1, so one row holds one even and one odd byte.',
+          {
+            kind: 'table',
+            head: ['BHE̅', 'A0', 'Function', 'Data lines', 'Bus cycles'],
+            rows: [
+              ['0', '0', 'Word at even address (both banks)', 'D15–D0', '1'],
+              ['1', '0', 'Byte at even address (low bank)', 'D7–D0', '1'],
+              ['0', '1', 'Byte at odd address (high bank)', 'D15–D8', '1'],
+              ['1', '1', 'No bank enabled', '–', '–'],
+              ['0, then 1', '1, then 0', 'Word at odd address', 'D15–D8, then D7–D0', '2'],
+            ],
+          },
+          'A word at an odd address does not fit in one row: its low byte is in the odd bank at the address, its high ' +
+            'byte in the even bank one row up. The 8086 needs two bus cycles: first the odd byte (A0 = 1, BHE̅ = 0, ' +
+            'on D15–D8), then the even byte at address + 1 (A0 = 0, BHE̅ = 1, on D7–D0).',
+          'Type an address below and switch between Byte and Word. Try all four cases: even byte, odd byte, even ' +
+            'word and odd word.',
+        ],
+        interactive: 'bank-selector',
+        notes: [
+          'Tip: keep word variables at even addresses (EVEN or ALIGN 2 in MASM) so every word access takes one bus cycle.',
+          'This simulator\'s memory is flat and does not charge the extra cycle for an odd word; the bank selector ' +
+            'shows what the real 8086 bus does.',
+        ],
+      },
+      {
+        id: 'memory-interfacing',
+        title: 'Memory Interfacing & Address Decoding',
+        summary: 'How EPROM and RAM chips are wired to the 8086 and how address decoding picks the right chip.',
+        content: [
+          'A memory chip has four kinds of lines: address lines (which cell inside the chip), data lines (the byte ' +
+            'itself), control lines (read or write) and a chip select (is this chip being addressed at all?). ' +
+            'Interfacing means connecting each kind to the right 8086 signals.',
+          'The example design: an 8086 in minimum mode with 64 KB of EPROM built from two 32 KB chips and 128 KB of ' +
+            'RAM built from two 64 KB chips. Chips come in pairs because of the two memory banks: one chip of each ' +
+            'pair is the even (low-byte) chip, the other the odd (high-byte) chip.',
+          {
+            kind: 'table',
+            head: ['Chip', 'Fixed high bits', 'Range', 'A0'],
+            rows: [
+              ['EPROM 1 (low byte)', 'A19–A16 = 1111', 'F0000h–FFFFEh', '0'],
+              ['EPROM 2 (high byte)', 'A19–A16 = 1111', 'F0001h–FFFFFh', '1'],
+              ['RAM 1 (low byte)', 'A19–A17 = 000', '00000h–1FFFEh', '0'],
+              ['RAM 2 (high byte)', 'A19–A17 = 000', '00001h–1FFFFh', '1'],
+            ],
+          },
+          'Each chip gets A15–A1 (EPROM) or A16–A1 (RAM) on its own address pins; data D7–D0 goes to the even chips ' +
+            'and D15–D8 to the odd chips. On the system side, three 8282 latches hold A19–A0 and BHE̅, two 8286 ' +
+            'transceivers buffer D15–D0, and a 74138 decoder turns M/IO̅, RD̅ and WR̅ into MEMR̅, MEMW̅, IOR̅ and IOW̅.',
+          'Step through the design below, then check yourself with the three questions after it.',
+        ],
+        figure: {
+          title: 'Wiring 64 KB EPROM and 128 KB RAM to the 8086',
+          steps: [
+            {
+              name: 'Four kinds of lines',
+              where: 'Every memory chip is connected through address, data, control and chip-select lines.',
+              state: [
+                ['Address', 'which cell inside the chip'],
+                ['Data', 'the byte read or written'],
+                ['Control', 'OE̅ (read), WE̅ (write)'],
+                ['Chip select', 'CS̅: this chip, or not'],
+              ],
+            },
+            {
+              name: 'Chips per pair',
+              where: 'The 16-bit bus is two banks, so each memory is a pair: one even chip on D7–D0, one odd chip on D15–D8.',
+              state: [
+                ['EPROM 64 KB', '2 × 32 KB: EPROM 1 (even), EPROM 2 (odd)'],
+                ['RAM 128 KB', '2 × 64 KB: RAM 1 (even), RAM 2 (odd)'],
+              ],
+            },
+            {
+              name: 'Address lines',
+              where: 'Count the address lines each memory spans. A0 does the bank selection, so each chip gets the lines above it.',
+              state: [
+                ['64 KB EPROM', '2¹⁶ → 16 lines (A15–A0); chips get A15–A1'],
+                ['128 KB RAM', '2¹⁷ → 17 lines (A16–A0); chips get A16–A1'],
+                ['Fixed high bits', 'EPROM: A19–A16 · RAM: A19–A17'],
+              ],
+            },
+            {
+              name: 'Address map',
+              where: 'The EPROM sits at the top of memory (the 8086 starts at FFFF0h after reset), the RAM at the bottom. A0 splits each range into even and odd.',
+              state: [
+                ['EPROM 1 / 2', 'F0000h–FFFFFh (A19–A16 = 1111), A0 = 0 / 1'],
+                ['RAM 1 / 2', '00000h–1FFFFh (A19–A17 = 000), A0 = 0 / 1'],
+              ],
+            },
+            {
+              name: 'Chip select',
+              where: 'A NAND of the fixed high bits (inverted where the bit must be 0) goes low only inside the range. ORing it with A0 or BHE̅ picks the even or odd chip. Every CS̅ is active low.',
+              state: [
+                ['EPROM range', 'NAND(A19, A18, A17, A16)'],
+                ['RAM range', 'NAND(A19̅, A18̅, A17̅)'],
+                ['Even chip CS̅', 'range OR A0'],
+                ['Odd chip CS̅', 'range OR BHE̅'],
+              ],
+            },
+            {
+              name: 'Control',
+              where: 'MEMR̅ drives every chip\'s output enable. Only the RAM can be written, so only the RAM chips get MEMW̅.',
+              state: [
+                ['MEMR̅', '→ OE̅ of all four chips'],
+                ['MEMW̅', '→ WE̅ of RAM 1 and RAM 2 only'],
+                ['EPROM', 'read-only: no WE̅'],
+              ],
+            },
+          ],
+        },
+        interactive: 'chip-check',
       },
       {
         id: 'bus-timing',
@@ -597,6 +753,92 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         },
       },
       {
+        id: 'io-mapping',
+        title: 'Isolated I/O vs Memory-Mapped I/O',
+        summary: 'Two ways to give a device an address: its own port space, or a slice of the memory space.',
+        content: [
+          'Isolated I/O (also called I/O-mapped I/O) gives I/O devices their own address space, separate from ' +
+            'memory. Only IN and OUT reach it. The port is an 8-bit immediate (0–FFh) or a 16-bit number in DX ' +
+            '(0–FFFFh, 65,536 ports). Memory and I/O addresses never overlap, and data moves only between AL/AX ' +
+            'and the port.',
+          {
+            kind: 'code',
+            text:
+              "MOV DX, 03F8h   ; COM1 port address\n" +
+              "MOV AL, 'A'\n" +
+              "OUT DX, AL      ; send 'A' to the serial port",
+          },
+          'Advantages: the whole 1 MB stays available for memory, decoding is simpler (16 address lines), and ' +
+            'memory and I/O are clearly separated. Disadvantages: only the special instructions IN and OUT work, ' +
+            'there are fewer addresses, and only AL or AX can hold the data.',
+          'Memory-mapped I/O gives devices addresses inside the memory space. They are reached with ordinary ' +
+            'memory instructions, exactly like a variable.',
+          {
+            kind: 'code',
+            text:
+              'MOV AX, [1234h]   ; read a memory-mapped device\n' +
+              'MOV [1234h], AX   ; write to it',
+          },
+          'Advantages: any instruction and addressing mode works (ADD, AND, TEST, string instructions …) with any ' +
+            'register, and there are many more device addresses. Disadvantages: the devices use up memory space, ' +
+            'and full 20-line decoding is more complex and more expensive.',
+          {
+            kind: 'table',
+            head: ['', 'Memory-mapped I/O', 'Isolated I/O'],
+            rows: [
+              ['Address lines', 'A19–A0 (20 bits)', 'A15–A0 (8 or 16 bits)'],
+              ['Address range', '1 MB', '64K ports'],
+              ['Control signals', 'MEMR̅, MEMW̅', 'IOR̅, IOW̅'],
+              ['Instructions', 'Any memory instruction', 'Only IN and OUT'],
+              ['Data register', 'Any register', 'Only AL / AX'],
+              ['Decoding', 'More complex, more expensive', 'Simpler, cheaper'],
+            ],
+          },
+          'Step through the figure below: the same "write 41h to a device" done both ways. The M/IO̅ pin is what ' +
+            'tells the rest of the system which address space the address on the bus belongs to.',
+        ],
+        figure: {
+          title: 'Write 41h to a device, two ways',
+          steps: [
+            {
+              name: 'Isolated: OUT 80h, AL',
+              where: 'AL holds 41h. OUT puts the port number on the address bus and drives M/IO̅ low, so memory ignores the cycle and the I/O decoder answers.',
+              state: [
+                ['Instruction', 'OUT 80h, AL'],
+                ['Address bus', '0080h (port, A15–A0)'],
+                ['Data bus', '41h from AL'],
+                ['M/IO̅', '0 (I/O cycle)'],
+                ['Strobe', 'IOW̅ active'],
+              ],
+            },
+            {
+              name: 'Memory-mapped: MOV [8000h], AL',
+              where: 'The same byte goes to a device that sits at memory address 8000h. It is an ordinary memory write: M/IO̅ is high and MEMW̅ fires.',
+              state: [
+                ['Instruction', 'MOV [8000h], AL'],
+                ['Address bus', '08000h (memory, A19–A0)'],
+                ['Data bus', '41h from AL'],
+                ['M/IO̅', '1 (memory cycle)'],
+                ['Strobe', 'MEMW̅ active'],
+              ],
+            },
+            {
+              name: 'Compare',
+              where: 'Same data, same bus wires. Only M/IO̅ and the strobe differ, and with memory-mapped I/O any instruction (ADD [8000h], AL, TEST, MOVSB …) could have done the write.',
+              state: [
+                ['Isolated', 'IN/OUT only, AL/AX, IOR̅/IOW̅'],
+                ['Memory-mapped', 'any instruction, any register, MEMR̅/MEMW̅'],
+              ],
+            },
+          ],
+        },
+        notes: [
+          'Lecture tables also list IN EAX, INSB/INSW/INSD and OUTSB/OUTSW/OUTSD: those came with the 80186 and ' +
+            '80386; the 8086 has only IN and OUT with AL or AX.',
+          'This simulator implements the full 64K port space: OUT DX, AL with DX = 8000h really writes port 8000h.',
+        ],
+      },
+      {
         id: 'software-vs-hardware-interrupts',
         title: 'Software Interrupts (INT 21h) vs Real Hardware Interrupts',
         summary: 'INT is a request the CPU makes of itself; a real interrupt is hardware demanding attention.',
@@ -613,6 +855,225 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'the running program at all -- it arrives asynchronously from outside, is prioritized by the 8259 ' +
             'PIC, and interrupts whatever the CPU happened to be doing. This simulator has no asynchronous ' +
             'events, so every interrupt here is one your own code triggered on purpose with INT.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'support-chips',
+    title: 'Support Chips',
+    topics: [
+      {
+        id: 'ppi-8255-overview',
+        title: 'The 8255 PPI: Ports and Block Diagram',
+        summary: 'A programmable chip that gives the 8086 three 8-bit I/O ports.',
+        content: [
+          'The 8255 is a programmable peripheral interface designed for the 8085/8086 to add I/O lines. It has ' +
+            'three 8-bit bidirectional ports (A, B, C). Port C can be used as two 4-bit halves. It has three I/O ' +
+            'modes -- Mode 0 simple I/O, Mode 1 strobed (handshake) I/O, Mode 2 bidirectional handshake I/O -- and ' +
+            'a Bit Set/Reset (BSR) mode that changes a single bit of Port C.',
+          'Inside, the data bus buffer connects the chip to D7–D0, and the read/write logic decodes RD̅, WR̅, A1, ' +
+            'A0, RESET and CS̅. Group A control drives Port A and PC7–PC4; Group B control drives Port B and PC3–PC0.',
+          'A1 and A0 pick one of four registers. In this simulator the 8255 is wired at ports 80h–83h:',
+          {
+            kind: 'table',
+            head: ['CS̅', 'A1', 'A0', 'Selected', 'Port (this simulator)'],
+            rows: [
+              ['0', '0', '0', 'Port A', '80h'],
+              ['0', '0', '1', 'Port B', '81h'],
+              ['0', '1', '0', 'Port C', '82h'],
+              ['0', '1', '1', 'Control register', '83h'],
+              ['1', 'x', 'x', '8255 not selected', '–'],
+            ],
+          },
+          'RESET puts all ports into input mode (control word 9Bh). The control register is write-only: reading ' +
+            'port 83h gives FFh here.',
+          'In the lecture slides the 8255 sits at 8000h–8003h and is reached through DX (MOV DX, 8003h / OUT DX, AL); ' +
+            'the address depends only on how the chip-select is decoded on the board.',
+        ],
+        staticDiagram: 'ppi-8255',
+        notes: [
+          'Open the Devices panel to see the simulated 8255: switches on its input ports, LEDs on its output ports ' +
+            'and a BCD 7-segment digit on PB3–PB0, like the 4511 on the lecture board.',
+        ],
+      },
+      {
+        id: 'ppi-8255-control-word',
+        title: '8255 Control Word and Modes',
+        summary: 'One byte written to the control register sets the direction and mode of every port.',
+        content: [
+          'Writing a byte with D7 = 1 to the control register sets the I/O mode. Every output latch is cleared to 0 ' +
+            'when a new mode is set.',
+          {
+            kind: 'table',
+            head: ['Bit', 'Meaning'],
+            rows: [
+              ['D7', '1 = I/O mode (0 = BSR word, see the next topic)'],
+              ['D6 D5', 'Port A mode: 00 = mode 0, 01 = mode 1, 1x = mode 2'],
+              ['D4', 'Port A: 1 = input, 0 = output'],
+              ['D3', 'Port C upper (PC7–PC4): 1 = input, 0 = output'],
+              ['D2', 'Port B mode: 0 = mode 0, 1 = mode 1'],
+              ['D1', 'Port B: 1 = input, 0 = output'],
+              ['D0', 'Port C lower (PC3–PC0): 1 = input, 0 = output'],
+            ],
+          },
+          {
+            kind: 'table',
+            head: ['Port', 'Mode 0', 'Mode 1', 'Mode 2', 'BSR'],
+            rows: [
+              ['A', 'yes', 'yes', 'yes', 'no'],
+              ['B', 'yes', 'yes', 'no', 'no'],
+              ['C', 'yes', 'handshake lines', 'handshake lines', 'yes'],
+            ],
+          },
+          'Mode 0: outputs are latched, inputs are not, no interrupts. Mode 1: Port A and Port B each use three ' +
+            'Port C lines for the handshake; inputs and outputs are latched and interrupts are supported. Mode 2: ' +
+            'Port A only, bidirectional, using five Port C lines; interrupts are supported.',
+          'Example 1 -- Port A input (mode 1), Port B output (mode 0), C upper input, C lower output: ' +
+            '1 01 1 1 0 0 0 = B8h.',
+          { kind: 'code', text: 'MOV AL, 0B8h\nOUT 83h, AL' },
+          'Example 2 -- A output (mode 0), B input (mode 0), C upper output, C lower input: 83h. Then send 55h to ' +
+            'Port A, read Port B and set PC3 with a BSR word:',
+          {
+            kind: 'code',
+            text:
+              'MOV AL, 83h     ; 1000 0011\n' +
+              'OUT 83h, AL\n' +
+              'MOV AL, 55h\n' +
+              'OUT 80h, AL     ; Port A = 0101 0101\n' +
+              'IN  AL, 81h     ; read Port B\n' +
+              'MOV AL, 07h     ; BSR: 0 000 011 1 -> set PC3\n' +
+              'OUT 83h, AL',
+          },
+          'Build a few control words below, then check them against the tables: click the bits, or type a value ' +
+            'such as 83h to see what it configures.',
+        ],
+        interactive: 'ppi-control-word',
+        notes: [
+          'This simulator only runs Mode 0. A Mode 1 or Mode 2 word is accepted and decoded, but the ports keep ' +
+            'behaving as in Mode 0 and the Devices panel says so.',
+        ],
+      },
+      {
+        id: 'ppi-8255-bsr',
+        title: 'Bit Set/Reset (BSR) Mode',
+        summary: 'Turn one Port C bit on or off without touching the other seven.',
+        content: [
+          'A control word with D7 = 0 is a Bit Set/Reset word. It does not change any port\'s mode; it sets or ' +
+            'resets exactly one bit of Port C. D6–D4 are don\'t care, D3–D1 select the bit (000 = PC0 … 111 = PC7) ' +
+            'and D0 says what to do with it: 1 = set, 0 = reset.',
+          {
+            kind: 'table',
+            head: ['Word', 'Binary', 'Effect'],
+            rows: [
+              ['07h', '0 000 011 1', 'set PC3'],
+              ['06h', '0 000 011 0', 'reset PC3'],
+              ['0Bh', '0 000 101 1', 'set PC5'],
+              ['0Fh', '0 000 111 1', 'set PC7'],
+            ],
+          },
+          'Writing Port C directly (OUT 82h, AL) replaces all eight bits at once. A BSR word changes one bit, so ' +
+            'separate devices on Port C -- an alarm LED here, a relay there -- can be switched without reading ' +
+            'Port C first.',
+          'Build BSR words below and send them: watch only the selected Port C bit change.',
+        ],
+        interactive: 'ppi-bsr',
+        notes: ['BSR words only touch Port C. Ports A and B have no bit set/reset.'],
+      },
+      {
+        id: 'dma-8257',
+        title: 'Direct Memory Access and the 8257',
+        summary: 'A controller that borrows the bus and moves data between a device and memory without the CPU.',
+        content: [
+          'Moving a block from an I/O device to memory with the CPU means, for every byte, fetching and executing ' +
+            'an IN, a store and the loop instructions -- several bus cycles per byte, and the CPU can do nothing else ' +
+            'meanwhile. A DMA (Direct Memory Access) controller moves each byte in a single bus cycle, directly ' +
+            'between the device and memory, bypassing the CPU.',
+          'The 8257 is a 4-channel programmable DMA controller for high-speed transfers between I/O devices and ' +
+            'memory. To use the buses it asks the CPU through HOLD and waits for HLDA; while it is bus master the ' +
+            'CPU\'s address, data and control lines are tri-stated. When HOLD goes low again, the CPU becomes bus ' +
+            'master again.',
+          'On the 8086 side, HOLD is an active-high input: a request for the address and data buses. The CPU gives ' +
+            'up the buses at the end of the current bus cycle, tri-states them and raises HLDA, an active-high output ' +
+            'meaning "the CPU has released the buses". It takes them back after HOLD goes low. "Bus Request & Bus ' +
+            'Grant" shows this handshake from the CPU\'s side; this topic shows the controller\'s side.',
+          {
+            kind: 'table',
+            head: ['8257 pin', 'What it does'],
+            rows: [
+              ['DRQ0–DRQ3', 'Requests from the devices, one per channel'],
+              ['DACK̅0–DACK̅3', 'Acknowledge to the device whose channel is being served'],
+              ['HRQ', 'Hold request, wired to the 8086\'s HOLD'],
+              ['HLDA', 'Hold acknowledge from the 8086'],
+              ['MEMR̅, MEMW̅, IOR̅, IOW̅', 'Bus control while the 8257 is bus master'],
+              ['AEN, ADSTB', 'Address enable, and the strobe that latches the upper address byte in an external latch'],
+              ['TC', 'Terminal count: the block is finished'],
+              ['MARK', 'Pulses every 128th byte'],
+              ['A0–A7, D0–D7, CS̅, CLK, RESET, READY', 'Address, data, chip select, clock, reset, wait states'],
+            ],
+          },
+          'In short: the I/O device sends DRQ → the DMA controller sends HOLD to the CPU → the CPU answers HLDA and ' +
+            'the DMA controller is bus master → data moves between memory and I/O without the CPU → HOLD goes low ' +
+            'and the CPU is bus master again. Step through one transfer below.',
+        ],
+        staticDiagram: 'dma-8257',
+        figure: {
+          title: 'One DMA transfer, step by step',
+          blocks: ['CPU', '8257', 'Memory', 'I/O device'],
+          steps: [
+            {
+              name: 'CPU owns the bus',
+              where: 'The CPU runs instructions and owns the bus. No DMA request is pending.',
+              active: ['CPU', 'Memory'],
+              flow: 'Bus master: CPU',
+              state: [['DRQ', 'inactive'], ['HRQ / HOLD', 'inactive'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+            {
+              name: 'Device requests',
+              where: 'The I/O device has data ready and raises DRQ on its 8257 channel.',
+              active: ['CPU', 'I/O device', '8257'],
+              flow: 'I/O device → 8257: DRQ',
+              state: [['DRQ', 'active'], ['HRQ / HOLD', 'inactive'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+            {
+              name: '8257 asks for the bus',
+              where: 'The 8257 raises HRQ, which is wired to the 8086\'s HOLD input.',
+              active: ['8257', 'CPU'],
+              flow: '8257 → CPU: HRQ = HOLD',
+              state: [['DRQ', 'active'], ['HRQ / HOLD', 'active'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+            {
+              name: 'CPU hands over',
+              where: 'The 8086 finishes its current bus cycle, floats its address, data and control lines and raises HLDA. The 8257 is now bus master.',
+              active: ['CPU', '8257'],
+              flow: 'CPU → 8257: HLDA · bus master: 8257',
+              state: [['DRQ', 'active'], ['HRQ / HOLD', 'active'], ['HLDA', 'active'], ['CPU bus lines', 'tri-stated']],
+            },
+            {
+              name: 'Transfer',
+              where: 'The 8257 puts the memory address on the bus (AEN, ADSTB latch the upper byte), activates DACK̅ to the device, and drives IOR̅ + MEMW̅ together (I/O → memory) or MEMR̅ + IOW̅ (memory → I/O). The byte goes straight from device to memory and never passes through the CPU. This repeats for every byte while the count register counts down.',
+              active: ['8257', 'Memory', 'I/O device'],
+              flow: 'I/O device → Memory, one bus cycle per byte',
+              state: [
+                ['DACK̅', 'active (low)'],
+                ['Strobes', 'IOR̅ + MEMW̅ (or MEMR̅ + IOW̅)'],
+                ['AEN / ADSTB', 'address out, upper byte latched'],
+                ['HLDA', 'active'],
+              ],
+            },
+            {
+              name: 'Done',
+              where: 'At the last byte the 8257 raises TC (terminal count) and drops HRQ. The 8086 drops HLDA and resumes exactly where it stopped.',
+              active: ['CPU', '8257'],
+              flow: 'Bus master: CPU again',
+              state: [['TC', 'pulsed'], ['HRQ / HOLD', 'inactive'], ['HLDA', 'inactive'], ['DACK̅', 'inactive (high)']],
+            },
+          ],
+        },
+        notes: [
+          'The 8257 was designed around the 8085; IBM PC-class 8086/8088 systems used its successor, the 8237, which ' +
+            'works the same way.',
+          'This simulator does not model DMA; the figure is a teaching illustration.',
         ],
       },
     ],

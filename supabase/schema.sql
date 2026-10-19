@@ -386,7 +386,11 @@ values
    array['fetch-decode-execute', 'register-file', 'data-movement'],
    array['fde-program', 'register-file-demo', 'move-it-1', 'move-it-2', 'move-it-3', 'move-it-4', 'move-it-5',
          'example-arithmetic'],
-   array['t1-sensor-registers', 't2-swap-readings'])
+   array['t1-sensor-registers', 't2-swap-readings']),
+  ('m11', 10, 3, 7,
+   array['ppi-8255-overview', 'ppi-8255-control-word', 'ppi-8255-bsr'],
+   array['ppi-cw-1', 'ppi-cw-2', 'ppi-cw-3', 'ppi-bsr-set', 'ppi-bsr-reset'],
+   array['t16-ppi-config', 't17-switch-count', 't18-bsr-alarm'])
 on conflict (module_id) do nothing;
 
 -- Whether the signed-in student has done everything the quiz requires.

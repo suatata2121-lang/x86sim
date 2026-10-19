@@ -52,6 +52,18 @@ export interface Interactive {
   parts?: string[]
 }
 
+/**
+ * A question for the Predict step (#11): the student guesses, then the
+ * simulator shows what really happens. Stored with the module until that
+ * step exists.
+ */
+export interface PredictQuestion {
+  question: string
+  /** The lines to run, when the question is about a program. */
+  code?: string
+  answer: string
+}
+
 export interface LearningModule {
   id: string
   title: string
@@ -68,6 +80,7 @@ export interface LearningModule {
    */
   quiz?: string
   interactives?: Interactive[]
+  predict?: PredictQuestion[]
   /** Modules that must be done before this one can be opened. */
   requires?: string[]
   /** Tools shown next to this module's Learn pages; all of them when absent. */
@@ -159,9 +172,21 @@ export const LEARNING_PATH: LearningModule[] = [
     title: 'Memory and the Bus',
     summary: 'Follow data as it travels between the CPU and memory over the address and data buses.',
     requires: ['m1'],
-    concepts: [hw('bus-types'), hw('address-demux'), hw('segmented-addressing')],
+    concepts: [
+      hw('von-neumann-harvard'), hw('bus-types'), hw('address-demux'), hw('segmented-addressing'),
+      hw('memory-banking'), hw('memory-interfacing'),
+    ],
     observe: { examples: ['array-sum', 'base-index'], panel: 'memory' },
     assignments: ['t3-snapshot'],
+    interactives: [
+      {
+        id: 'bank-selector',
+        label: 'Try: all four cases in the Bank Selector ({n}/4)',
+        topic: 'memory-banking',
+        parts: ['bank-even-byte', 'bank-odd-byte', 'bank-even-word', 'bank-odd-word'],
+      },
+      { id: 'memory-interfacing-figure', label: 'Step: the memory interfacing figure to the end', topic: 'memory-interfacing' },
+    ],
   },
   {
     id: 'm3',
@@ -204,18 +229,74 @@ export const LEARNING_PATH: LearningModule[] = [
     title: 'I/O Ports and Devices',
     summary: 'Drive real-world devices such as a traffic light and a stepper motor through I/O ports.',
     requires: ['m0'],
-    concepts: [hw('io-ports')],
+    concepts: [hw('io-ports'), hw('io-mapping')],
     observe: { examples: ['traffic-light', 'stepper-motor', 'seven-segment', 'thermometer'], panel: 'devices' },
     assignments: ['t8-stepper-command'],
+    interactives: [
+      { id: 'io-mapping-figure', label: 'Step: the isolated vs memory-mapped figure to the end', topic: 'io-mapping' },
+    ],
+  },
+  {
+    // A new id rather than renumbering: stored progress of m8-m10 keeps its module.
+    id: 'm11',
+    title: 'The 8255 Programmable Peripheral Interface',
+    summary: "Program the 8255's three ports with a control word, read switches and drive a display through it.",
+    requires: ['m7'],
+    concepts: [hw('ppi-8255-overview'), hw('ppi-8255-control-word'), hw('ppi-8255-bsr')],
+    observe: {
+      examples: ['ppi-switches'],
+      panel: 'devices',
+      watch: "Flip the switches on Port A and watch the value appear on Port B's display.",
+    },
+    assignments: ['t16-ppi-config', 't17-switch-count', 't18-bsr-alarm'],
+    steps: ['concept', 'observe', 'predict', 'task', 'quiz', 'reflect'],
+    quiz: 'm11',
+    interactives: [
+      {
+        id: 'ppi-control-word',
+        label: 'Build: three different control words ({n}/3)',
+        topic: 'ppi-8255-control-word',
+        parts: ['ppi-cw-1', 'ppi-cw-2', 'ppi-cw-3'],
+      },
+      {
+        id: 'ppi-bsr',
+        label: 'Try: set and reset a Port C bit with BSR ({n}/2)',
+        topic: 'ppi-8255-bsr',
+        parts: ['ppi-bsr-set', 'ppi-bsr-reset'],
+      },
+    ],
+    predict: [
+      {
+        question: 'After these two lines, which ports are inputs?',
+        code: 'MOV AL, 8Bh\nOUT 83h, AL',
+        answer: 'Port B, Port C upper and Port C lower are inputs; Port A is an output.',
+      },
+      {
+        question: 'What control word makes Port A input (mode 1), Port B output (mode 0), C upper input, C lower output?',
+        answer: 'B8h (1 01 1 1 0 0 0).',
+      },
+      {
+        question: 'What happens?',
+        code: 'MOV AL, 07h\nOUT 83h, AL',
+        answer: 'It is a BSR word (D7 = 0): PC3 is set to 1.',
+      },
+      {
+        question: 'Port B is an output. What does IN AL, 81h return?',
+        answer: 'The last value written to Port B (its output latch).',
+      },
+    ],
   },
   {
     id: 'm8',
     title: 'Interrupts and Sharing the Bus',
     summary: 'Use software interrupts for input and output and see how other devices borrow the bus.',
     requires: ['m0'],
-    concepts: [hw('software-vs-hardware-interrupts'), hw('bus-request-grant'), hw('lock-signal')],
+    concepts: [hw('software-vs-hardware-interrupts'), hw('bus-request-grant'), hw('dma-8257'), hw('lock-signal')],
     observe: { examples: ['keyboard-echo'], panel: 'registers' },
     assignments: ['t9-print-status'],
+    interactives: [
+      { id: 'dma-8257-figure', label: 'Step: the DMA transfer figure to the end', topic: 'dma-8257' },
+    ],
   },
   {
     id: 'm9',

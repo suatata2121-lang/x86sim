@@ -16,6 +16,11 @@ export interface Assignment {
   testCases: TestCase[]
   /** How the program must be written, checked before the tests (see grader.ts). */
   sourceRules?: SourceRules
+  /**
+   * The #12 hint ladder: direction, a similar example, a partial solution.
+   * Shown once the hint button (#12) exists.
+   */
+  hints?: [string, string, string]
 }
 
 export interface Task {
@@ -593,6 +598,121 @@ INT 21h
                 name: 'COPY = [100, 200, 300, 400, 500] (first and last word checked)',
                 expect: { memory: [{ label: 'COPY', size: 'word', equals: 100 }, { label: 'COPY', offset: 8, size: 'word', equals: 500 }] },
               },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'stage-7',
+    title: 'Stage 7: The 8255 Programmable Peripheral Interface',
+    summary: 'Program a real support chip: set its ports with a control word, read switches and drive a display.',
+    tasks: [
+      {
+        id: 'task-16-ppi-config',
+        title: 'Task 16 - Configure the 8255',
+        scenario: 'A control panel board has an 8255 at ports 80h-83h. Before any port can be used, the chip needs its control word.',
+        assignments: [
+          {
+            id: 't16-ppi-config',
+            title: 'Configure the 8255',
+            concept:
+              'An I/O-mode control word has D7 = 1. D6 D5 and D2 pick the modes of Port A and Port B, and D4, D3, ' +
+              'D1, D0 set Port A, Port C upper, Port B and Port C lower as input (1) or output (0). It goes to the ' +
+              'control register at port 83h.',
+            starterSource: `; Task 16: Configure the 8255 (ports 80h-83h, control register = 83h)
+; Program the 8255 so that:
+;   Port A       = input,  mode 0
+;   Port B       = output, mode 0
+;   Port C upper = output
+;   Port C lower = input
+; Work out the control word bit by bit (D7 ... D0), then send it.
+
+; TODO: MOV AL, <control word> / OUT 83h, AL
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [{ name: '8255 control register = 91h', expect: { ppi: { control: 0x91 } } }],
+            hints: [
+              'Write the eight bits from D7 down to D0: D7 = 1 (I/O mode), then the Port A mode, Port A direction, C upper, Port B mode, Port B direction, C lower. 1 means input.',
+              'Learn → Support Chips → 8255 Control Word and Modes: Example 2 works out 83h the same way.',
+              '1 00 1 0 0 0 1 → `MOV AL, ___h` / `OUT 83h, AL`',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-17-switch-count',
+        title: 'Task 17 - Count the Switches',
+        scenario: 'Eight switches on Port A report which doors of a cabinet are open. The display on Port B shows how many are open.',
+        assignments: [
+          {
+            id: 't17-switch-count',
+            title: 'Count the Switches',
+            concept:
+              'After the control word, IN AL, 80h reads the eight switches on Port A and OUT 81h, AL drives Port B. ' +
+              'Shifting AL right one bit at a time moves each switch into the carry flag, where it can be counted.',
+            starterSource: `; Task 17: Count the switches
+; 1. Configure the 8255: Port A input, Port B output (mode 0).
+; 2. Read the switches on Port A (port 80h).
+; 3. Count how many of the 8 switches are ON (bits that are 1).
+; 4. Show the count (0-8) on Port B (port 81h).
+
+; TODO
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              { name: 'Port A = 00h → Port B = 0', ppi: { switchesA: 0x00 }, expect: { ppi: { portB: 0 } } },
+              { name: 'Port A = FFh → Port B = 8', ppi: { switchesA: 0xff }, expect: { ppi: { portB: 8 } } },
+              { name: 'Port A = A5h → Port B = 4', ppi: { switchesA: 0xa5 }, expect: { ppi: { portB: 4 } } },
+              { name: 'Port A = 01h → Port B = 1', ppi: { switchesA: 0x01 }, expect: { ppi: { portB: 1 } } },
+              { name: 'Port A = 80h → Port B = 1', ppi: { switchesA: 0x80 }, expect: { ppi: { portB: 1 } } },
+            ],
+            hints: [
+              'Configure first (A in, B out, e.g. 90h), then read Port A. Count with a loop of 8: shift AL right by one and add the carry to a counter.',
+              'The 8255: switches to display example reads Port A and writes Port B; Array Sum shows a counted loop with CX.',
+              '`MOV AL, 90h` / `OUT 83h, AL` / `IN AL, 80h` / `MOV BL, 0` / `MOV CX, 8` / `L: SHR AL, 1` / `ADC BL, 0` / `LOOP L` / `MOV AL, BL` / `OUT ___, AL`',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-18-bsr-alarm',
+        title: 'Task 18 - Alarm Bits with BSR',
+        scenario: 'Port C drives the status lamps of a machine. Two alarm lamps must come on without disturbing the lamps that are already lit.',
+        assignments: [
+          {
+            id: 't18-bsr-alarm',
+            title: 'Alarm Bits with BSR',
+            concept:
+              'A BSR word (D7 = 0) sets or resets one Port C bit: D3-D1 select the bit, D0 = 1 sets it. Sending an ' +
+              'I/O-mode word would clear every output, and writing port 82h would replace all eight bits.',
+            starterSource: `; Task 18: Alarm bits with BSR
+; The 8255 is already configured: all ports are outputs, and Port C = 41h
+; (two lamps are lit). Turn ON PC3 and PC5 without changing any other bit.
+; Rules: no write to port 82h, and no I/O-mode control word (D7 = 1) --
+; use BSR words on port 83h only.
+
+; TODO: one BSR word for PC3, one for PC5
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              {
+                name: 'Port C = 69h, mode unchanged, BSR words only',
+                ppi: { control: 0x80, latchC: 0x41 },
+                expect: { ppi: { control: 0x80, portC: 0x69, bsrOnly: true } },
+              },
+            ],
+            hints: [
+              'Each lamp needs its own BSR word: 0, three don\'t-care bits, the bit number in D3-D1, and 1 in D0 to set it.',
+              'Learn → Support Chips → Bit Set/Reset (BSR) Mode: 07h sets PC3.',
+              '`MOV AL, 07h` / `OUT 83h, AL` / `MOV AL, ___h` / `OUT 83h, AL`',
             ],
           },
         ],

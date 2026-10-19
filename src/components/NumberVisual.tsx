@@ -681,6 +681,8 @@ export function NumberVisual({ visual: v }: { visual: NumVisual }) {
     case 'div': return <Div {...v} />
     case 'registerRoles': return <RegisterRoles />
     case 'movRules': return <MovRules />
+    case 'table': return <TextTable {...v} />
+    case 'code': return <pre className="instr-example">{v.text}</pre>
   }
 }
 
@@ -708,6 +710,19 @@ function RegisterRoles() {
               <td>{job}</td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </Block>
+  )
+}
+
+function TextTable({ head, rows }: { head: string[]; rows: string[][] }) {
+  return (
+    <Block legend={[]}>
+      <table className="nv-table nv-roles nv-text-table">
+        <thead><tr>{head.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}
         </tbody>
       </table>
     </Block>

@@ -3646,3 +3646,442 @@ aside .panel {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+/* ---- Memory & bus views (components/MemoryBusViews.tsx) ---- */
+
+.nv-text-table td:first-child {
+  font-weight: 600;
+}
+
+.mb-arch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.mb-arch-fig {
+  flex: 1 1 240px;
+  max-width: 340px;
+  margin: 0;
+  text-align: center;
+}
+
+.mb-arch-fig figcaption {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.mb-arch svg {
+  width: 100%;
+  height: auto;
+}
+
+.mb-box {
+  fill: var(--bg-panel-alt);
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+
+.mb-cpu {
+  fill: var(--accent-bg);
+  stroke: var(--accent-border);
+}
+
+.mb-mem {
+  stroke: var(--num-bin);
+}
+
+.mb-mem-alt {
+  stroke: var(--num-hex);
+}
+
+.mb-bus {
+  stroke: var(--num-bin);
+  stroke-width: 4;
+}
+
+.mb-bus-alt {
+  stroke: var(--num-hex);
+}
+
+.mb-arch text {
+  fill: var(--text);
+  text-anchor: middle;
+  font-family: system-ui, sans-serif;
+}
+
+.mb-arch .mb-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mb-arch .mb-label {
+  font-size: 11px;
+}
+
+.mb-arch .mb-small {
+  fill: var(--text-dim);
+  font-size: 10px;
+}
+
+.mb-arch .mb-start {
+  text-anchor: start;
+}
+
+.mb-arch .mb-end {
+  text-anchor: end;
+}
+
+.mb-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.mb-address {
+  width: 6.5rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  color: var(--text);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  text-transform: uppercase;
+}
+
+.mb-banks {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.mb-bank {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  opacity: 0.55;
+}
+
+.mb-bank.on {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  opacity: 1;
+}
+
+.mb-bank-head {
+  font-weight: 600;
+}
+
+.mb-bank-sub {
+  margin-bottom: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.mb-cell {
+  padding: 0.15rem 0.4rem;
+  border-top: 1px solid var(--border);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+.mb-cell.hit {
+  background: var(--accent-border);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.mb-cases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.mb-cases li.done {
+  color: var(--success-text);
+}
+
+.mb-check ol {
+  padding-left: 1.2rem;
+}
+
+.mb-check li p {
+  margin: 0.3rem 0;
+}
+
+.mb-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.mb-options button.mb-right {
+  border-color: var(--num-bin);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.mb-options button.mb-wrong {
+  border-color: var(--error-text);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.mb-feedback-right {
+  color: var(--success-text);
+  font-size: 0.85rem;
+}
+
+/* ---- 8255 PPI device card (components/Devices.tsx) ----
+   Same fixed dark "hardware housing" as the other device cards. */
+
+.ppi-card {
+  grid-column: 1 / -1;
+  align-items: stretch;
+  color: #d0d0d0;
+  font-size: 0.8rem;
+}
+
+.ppi-control code {
+  color: #9fd0ff;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.ppi-decode {
+  color: #a0a0a0;
+  font-size: 0.75rem;
+}
+
+.ppi-notice {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #7a5a1f;
+  border-radius: 4px;
+  background: #2a2213;
+  color: #ffd699;
+  font-size: 0.75rem;
+}
+
+.ppi-port {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.ppi-port-name small {
+  color: #808080;
+}
+
+.ppi-port-b {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ppi-pins {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.ppi-led-cell,
+.ppi-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  width: 1.5rem;
+}
+
+.ppi-led {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: #3a1414;
+  border: 1px solid #555;
+}
+
+.ppi-led.on {
+  background: #ff4d4d;
+  box-shadow: 0 0 6px #ff4d4d;
+}
+
+.ppi-switch {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.ppi-knob {
+  position: relative;
+  width: 0.8rem;
+  height: 1.4rem;
+  border: 1px solid #666;
+  border-radius: 3px;
+  background: #2a2a2a;
+}
+
+.ppi-knob::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 0.6rem;
+  border-radius: 2px;
+  background: #888;
+}
+
+.ppi-switch.on .ppi-knob::after {
+  top: 1px;
+  bottom: auto;
+  background: #6fd49a;
+}
+
+.ppi-pin-label {
+  color: #808080;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.65rem;
+}
+
+/* ---- 8255 Learn views (components/Ppi8255Views.tsx) ---- */
+
+.ppi-block-fig {
+  max-width: 560px;
+}
+
+.ppi-bits {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+}
+
+.ppi-bit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.3rem 0.15rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-panel-alt);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ppi-bit.on {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.ppi-bit:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.ppi-bit-name {
+  color: var(--text-dim);
+  font-size: 0.7rem;
+}
+
+.ppi-bit-value {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.ppi-bit-label {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.ppi-word {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.ppi-c-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.ppi-c-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.7rem;
+}
+
+.ppi-c-cell.target {
+  border-color: var(--accent-border);
+}
+
+.ppi-c-led {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg-panel-alt);
+}
+
+.ppi-c-led.on {
+  border-color: var(--num-carry);
+  background: var(--num-carry);
+}
+
+/* Block row of a step-through figure (components/FigureStepper.tsx). */
+.figure-blocks {
+  margin: 0.5rem 0;
+}
+
+.figure-block-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.figure-block {
+  flex: 1 1 6rem;
+  padding: 0.5rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-alt);
+  color: var(--text-dim);
+  text-align: center;
+  font-weight: 600;
+}
+
+.figure-block.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.figure-flow {
+  margin-top: 0.35rem;
+  color: var(--accent-text);
+  font-size: 0.85rem;
+  text-align: center;
+}

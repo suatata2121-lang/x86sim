@@ -2,23 +2,35 @@
 // what happens, and a few labelled values. Used for the bus-control topics
 // (control signals, bus request/grant, LOCK, address demultiplexing) so they
 // share one interactive pattern instead of one-off components.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export interface FigureStep {
   name: string
   where: string
   state: [string, string][]
+  /** Which of the figure's `blocks` take part in this step. */
+  active?: string[]
+  /** A line under the blocks, e.g. which way the data goes. */
+  flow?: string
 }
 
 export interface FigureSpec {
   title: string
   steps: FigureStep[]
+  /** Optional row of named blocks (CPU, memory, ...) lit up per step. */
+  blocks?: string[]
 }
 
-export function FigureStepper({ spec }: { spec: FigureSpec }) {
+/** `onFinish` fires once the last step has been shown (learning-path checklists). */
+export function FigureStepper({ spec, onFinish }: { spec: FigureSpec; onFinish?: () => void }) {
   const [step, setStep] = useState(0)
   const current = spec.steps[step]
   const last = spec.steps.length - 1
+
+  useEffect(() => {
+    if (step === last) onFinish?.()
+    // Only reaching the last step should record, not a re-render while on it.
+  }, [step, last])
 
   return (
     <div className="panel fde-panel figure-stepper">
@@ -34,6 +46,17 @@ export function FigureStepper({ spec }: { spec: FigureSpec }) {
           </button>
         ))}
       </div>
+
+      {spec.blocks && (
+        <div className="figure-blocks">
+          <div className="figure-block-row">
+            {spec.blocks.map((b) => (
+              <span key={b} className={`figure-block${current.active?.includes(b) ? ' active' : ''}`}>{b}</span>
+            ))}
+          </div>
+          {current.flow && <div className="figure-flow">{current.flow}</div>}
+        </div>
+      )}
 
       <p className="example-description fde-where">{current.where}</p>
 

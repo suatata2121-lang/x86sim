@@ -1,5 +1,6 @@
 import type { DataDeclaration, Flags, Instruction, Mnemonic, Operand, PendingInput, Reg16, Reg8, RegName } from './types'
 import { instructionCycles } from './cycles'
+import { Ppi8255, type PpiState } from './ppi8255'
 
 const REG16: Reg16[] = ['AX', 'BX', 'CX', 'DX', 'SI', 'DI', 'BP', 'SP', 'DS', 'ES', 'SS', 'CS']
 
@@ -13,6 +14,7 @@ const REG8_PARENT: Record<Reg8, { parent: Reg16; high: boolean }> = {
 type StringMnemonic = 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB' | 'MOVSW' | 'STOSW' | 'LODSW' | 'CMPSW' | 'SCASW'
 
 const MEMORY_SIZE = 0x10000
+const PORT_SPACE = 0x10000
 const INITIAL_SP = 0xfffe
 
 export interface MnemonicProfile {
@@ -29,6 +31,7 @@ export interface CpuSnapshot {
   flags: Flags
   memory: Uint8Array
   ports: Uint8Array
+  ppi: PpiState
   ip: number
   halted: boolean
   hitBreakpoint: boolean
@@ -48,7 +51,11 @@ export class Cpu {
   memory = new Uint8Array(MEMORY_SIZE)
   // Virtual I/O ports for IN/OUT, driving the virtual device views (traffic
   // light, stepper motor, 7-segment display, thermometer — see Devices.tsx).
-  ports = new Uint8Array(256)
+  // The full 64K port space of the 8086: an immediate port is 8-bit, but a
+  // port in DX is 16-bit (8255 examples use ports like 8003h).
+  ports = new Uint8Array(PORT_SPACE)
+  // Ports 80h-83h belong to the simulated 8255 instead of plain port bytes.
+  ppi = new Ppi8255()
   instructions: Instruction[] = []
   data: DataDeclaration[] = []
   labels = new Map<string, number>()
@@ -98,6 +105,7 @@ export class Cpu {
     this.flags = { ZF: false, SF: false, CF: false, OF: false, DF: false, PF: false, IF: true, AF: false }
     this.memory.fill(0)
     this.ports.fill(0)
+    this.ppi.reset()
     for (const d of this.data) {
       for (let i = 0; i < d.bytes.length; i++) this.memory[(d.address + i) & 0xffff] = d.bytes[i]
     }
@@ -114,6 +122,17 @@ export class Cpu {
     this.memoryWrites.clear()
   }
 
+  private readPort(port: number): number {
+    const p = port & 0xffff
+    return Ppi8255.handles(p) ? this.ppi.read(p) : this.ports[p]
+  }
+
+  private writePort(port: number, value: number) {
+    const p = port & 0xffff
+    if (Ppi8255.handles(p)) this.ppi.write(p, value)
+    else this.ports[p] = value & 0xff
+  }
+
   // Captures everything step()/run()/provideInput() can mutate, for the
   // Step Back UI feature — restore() later rewinds to exactly this point.
   snapshot(): CpuSnapshot {
@@ -122,6 +141,7 @@ export class Cpu {
       flags: { ...this.flags },
       memory: this.memory.slice(),
       ports: this.ports.slice(),
+      ppi: this.ppi.state(),
       ip: this.ip,
       halted: this.halted,
       hitBreakpoint: this.hitBreakpoint,
@@ -141,6 +161,7 @@ export class Cpu {
     this.flags = { ...snap.flags }
     this.memory.set(snap.memory)
     this.ports.set(snap.ports)
+    this.ppi.restore(snap.ppi)
     this.ip = snap.ip
     this.halted = snap.halted
     this.hitBreakpoint = snap.hitBreakpoint
@@ -729,11 +750,9 @@ export class Cpu {
         if (op1.kind !== 'reg') break
         const isWordIn = op1.name === 'AX'
         const port = op2.kind === 'imm' ? op2.value : this.getReg('DX')
-        const value = isWordIn
-          ? this.ports[port & 0xff] | (this.ports[(port + 1) & 0xff] << 8)
-          : this.ports[port & 0xff]
+        const value = isWordIn ? this.readPort(port) | (this.readPort(port + 1) << 8) : this.readPort(port)
         this.setReg(op1.name, value)
-        this.lastPort = port & 0xff
+        this.lastPort = port & 0xffff
         this.lastPortValue = value
         break
       }
@@ -742,9 +761,9 @@ export class Cpu {
         const isWordOut = op2.name === 'AX'
         const port = op1.kind === 'imm' ? op1.value : this.getReg('DX')
         const value = this.getReg(op2.name)
-        this.ports[port & 0xff] = value & 0xff
-        if (isWordOut) this.ports[(port + 1) & 0xff] = (value >> 8) & 0xff
-        this.lastPort = port & 0xff
+        this.writePort(port, value)
+        if (isWordOut) this.writePort(port + 1, value >> 8)
+        this.lastPort = port & 0xffff
         this.lastPortValue = value
         break
       }
