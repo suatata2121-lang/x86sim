@@ -133,7 +133,9 @@ export default function App() {
     [moduleProgress.interactives],
   )
   // The "What to watch" note of an example opened from a module's Observe step.
-  const [watchNote, setWatchNote] = useState<{ title: string; text: string } | null>(null)
+  // The Observe step's "What to watch" box above the editor: the module's
+  // watch line and guide list, and the button that moves on to its next step.
+  const [watchNote, setWatchNote] = useState<{ title: string; text?: string; guide?: string[]; moduleId?: string } | null>(null)
   // The one-screen Observe viewer (#27), opened from a module whose Observe
   // panel is the registers; it replaces the editor, toolbar and side panel.
   const [observe, setObserve] = useState<{ moduleId: string; exampleId: string } | null>(null)
@@ -485,7 +487,7 @@ export default function App() {
   // registers, otherwise the example in the editor with its note.
   function openObserveStep(exampleId: string, panel: AsidePanel, watch: string | undefined, moduleId: string) {
     if (panel !== 'registers') {
-      openExample(exampleId, panel, watch)
+      openExample(exampleId, panel, watch, moduleId)
       return
     }
     setMode('examples')
@@ -495,13 +497,14 @@ export default function App() {
     setObserve({ moduleId, exampleId })
   }
 
-  function openExample(exampleId: string, panel: AsidePanel, watch?: string) {
+  function openExample(exampleId: string, panel: AsidePanel, watch?: string, moduleId?: string) {
     setObserve(null)
     setMode('examples')
     setSelectedExampleId(exampleId)
     setAsideTab(panel)
     const example = EXAMPLES.find((e) => e.id === exampleId)
-    setWatchNote(example && watch ? { title: example.title, text: watch } : null)
+    const guide = LEARNING_PATH.find((m) => m.id === moduleId)?.observe?.guide
+    setWatchNote(example && (watch || guide) ? { title: example.title, text: watch, guide, moduleId } : null)
     const existing = example && tabs.find((t) => t.title === example.title && t.source === example.source)
     if (existing) handleSwitchTab(existing.id)
     else loadExample(exampleId)
@@ -516,6 +519,25 @@ export default function App() {
     setActiveTabId(tab.id)
     setActiveAssignmentId(null)
     resetExecutionState()
+  }
+
+  // "Done watching": leaves Observe for the module's next step.
+  function finishObserve(moduleId: string) {
+    const m = LEARNING_PATH.find((x) => x.id === moduleId)
+    if (!m) return
+    setObserve(null)
+    setWatchNote(null)
+    const next = nextStep(m, 'observe')
+    moduleProgress.setStep(m.id, next)
+    if (next === 'predict') setPredictModuleId(m.id)
+    else if (next === 'task') openAssignment(m.assignments.find((a) => !completedAssignments.has(a)) ?? m.assignments[0])
+    else if (next === 'quiz') openQuiz(m.id)
+  }
+
+  function doneWatchingLabel(moduleId: string) {
+    const m = LEARNING_PATH.find((x) => x.id === moduleId)
+    const next = m ? nextStep(m, 'observe') : 'done'
+    return next === 'done' ? 'Done watching: finish module ✓' : `Done watching → ${STEPS.find((s) => s.id === next)?.label ?? next}`
   }
 
   // Leaves the Predict step for the next one (or finishes the module).
@@ -842,6 +864,8 @@ export default function App() {
                   title={observeExample.title}
                   source={observeExample.source}
                   summary={observeModule.observe?.watch}
+                  guide={observeModule.observe?.guide}
+                  next={auth.session ? { label: doneWatchingLabel(observeModule.id), onClick: () => finishObserve(observeModule.id) } : undefined}
                   registers={observeModule.observe?.registers}
                   callouts={observeModule.observe?.callouts?.[observeExample.id]}
                   onDone={() => markInteractiveDone(`example-${observeExample.id}`)}
@@ -864,7 +888,13 @@ export default function App() {
                     <h3>What to watch</h3>
                     <button className="modal-close" onClick={() => setWatchNote(null)} aria-label="Hide">×</button>
                   </div>
-                  <p className="example-description">{watchNote.text}</p>
+                  {watchNote.text && <p className="example-description">{watchNote.text}</p>}
+                  {watchNote.guide && <ul className="watch-guide">{watchNote.guide.map((g) => <li key={g}>{g}</li>)}</ul>}
+                  {watchNote.moduleId && auth.session && (
+                    <button className="primary" onClick={() => finishObserve(watchNote.moduleId as string)}>
+                      {doneWatchingLabel(watchNote.moduleId)}
+                    </button>
+                  )}
                 </div>
               )}
               {showEditor && (
