@@ -122,8 +122,9 @@ export default function App() {
       quizzesPassed: moduleProgress.quizzesPassed,
       reads: moduleProgress.reads,
       interactives: moduleProgress.interactives,
+      predicted: moduleProgress.predicted,
     }),
-    [completedAssignments, moduleProgress.quizzesPassed, moduleProgress.reads, moduleProgress.interactives],
+    [completedAssignments, moduleProgress.quizzesPassed, moduleProgress.reads, moduleProgress.interactives, moduleProgress.predicted],
   )
   // Every interactive item done, whichever module recorded it (for the ✓ on Learn pages).
   const interactivesDone = useMemo(

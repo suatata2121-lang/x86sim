@@ -5,6 +5,8 @@
 // copied here.
 
 import type { Reg16 } from './core/types'
+import type { PredictQuestion } from './core/predict'
+import { PREDICT_QUESTIONS } from './predictQuestions'
 
 export type AsidePanel = 'registers' | 'stack' | 'devices' | 'databus' | 'memory' | 'profiler'
 
@@ -52,18 +54,6 @@ export interface Interactive {
   parts?: string[]
 }
 
-/**
- * A question for the Predict step (#11): the student guesses, then the
- * simulator shows what really happens. Stored with the module until that
- * step exists.
- */
-export interface PredictQuestion {
-  question: string
-  /** The lines to run, when the question is about a program. */
-  code?: string
-  answer: string
-}
-
 export interface LearningModule {
   id: string
   title: string
@@ -80,7 +70,6 @@ export interface LearningModule {
    */
   quiz?: string
   interactives?: Interactive[]
-  predict?: PredictQuestion[]
   /** Modules that must be done before this one can be opened. */
   requires?: string[]
   /** Tools shown next to this module's Learn pages; all of them when absent. */
@@ -94,8 +83,8 @@ export type StoredStep = StepId | 'done'
 export const STEPS: { id: StepId; label: string; comingSoon?: boolean }[] = [
   { id: 'concept', label: 'Concept' },
   { id: 'observe', label: 'Observe' },
-  // Placeholders until #11 (Predict) and #16 (Reflect) land; Continue skips them.
-  { id: 'predict', label: 'Predict', comingSoon: true },
+  // Reflect is a placeholder until #16 lands; Continue skips it.
+  { id: 'predict', label: 'Predict' },
   { id: 'task', label: 'Task' },
   { id: 'quiz', label: 'Quiz' },
   { id: 'reflect', label: 'Reflect', comingSoon: true },
@@ -225,25 +214,6 @@ export const LEARNING_PATH: LearningModule[] = [
         parts: ['byte-layout-value', 'byte-layout-dump'],
       },
     ],
-    predict: [
-      {
-        question: 'Which byte is at address 0100h?',
-        code: 'MOV AX, 1234h\nMOV [0100h], AX',
-        answer: '34h: the low byte goes to the lower address.',
-      },
-      {
-        question: 'DS = 2000h, BX = 0020h, SI = 0010h. Which physical address does MOV AX, [BX+SI] read?',
-        answer: '20030h (EA = 0030h, plus DS × 10h).',
-      },
-      {
-        question: 'Which segment register does MOV AX, [BP+4] use?',
-        answer: 'SS, because BP is in the operand.',
-      },
-      {
-        question: 'CS = 1980h, IP = 78FEh. Where is the next instruction?',
-        answer: '210FEh (19800h + 78FEh).',
-      },
-    ],
   },
   {
     id: 'm3',
@@ -273,24 +243,6 @@ export const LEARNING_PATH: LearningModule[] = [
     assignments: ['t7-average-proc'],
     interactives: [
       { id: 'push-pop-figure', label: 'Step: PUSH and POP byte by byte to the end', topic: 'push-pop' },
-    ],
-    predict: [
-      {
-        question: 'SP = 1456h. After these lines, what is SP, and which byte is at SS:1454h?',
-        code: 'MOV AX, 2174h\nPUSH AX',
-        answer: 'SP = 1454h; 74h is at 1454h (21h at 1455h). AX is unchanged.',
-      },
-      {
-        question:
-          'SP = 18FAh and the stack holds 23 14 6B 2C 91 F6 from 18FAh upward. What are CX, DX, BX and SP after these lines?',
-        code: 'POP CX\nPOP DX\nPOP BX',
-        answer: 'CX = 1423h, DX = 2C6Bh, BX = F691h, SP = 1900h.',
-      },
-      {
-        question: 'SP = 1236h, AX = 24B6h, DI = 85C2h, DX = 5F93h. After these lines, what are AX and SP?',
-        code: 'PUSH AX\nPUSH DI\nPUSH DX\nPOP AX',
-        answer: 'AX = 5F93h, SP = 1232h.',
-      },
     ],
   },
   {
@@ -343,26 +295,6 @@ export const LEARNING_PATH: LearningModule[] = [
         parts: ['ppi-bsr-set', 'ppi-bsr-reset'],
       },
     ],
-    predict: [
-      {
-        question: 'After these two lines, which ports are inputs?',
-        code: 'MOV AL, 8Bh\nOUT 83h, AL',
-        answer: 'Port B, Port C upper and Port C lower are inputs; Port A is an output.',
-      },
-      {
-        question: 'What control word makes Port A input (mode 1), Port B output (mode 0), C upper input, C lower output?',
-        answer: 'B8h (1 01 1 1 0 0 0).',
-      },
-      {
-        question: 'What happens?',
-        code: 'MOV AL, 07h\nOUT 83h, AL',
-        answer: 'It is a BSR word (D7 = 0): PC3 is set to 1.',
-      },
-      {
-        question: 'Port B is an output. What does IN AL, 81h return?',
-        answer: 'The last value written to Port B (its output latch).',
-      },
-    ],
   },
   {
     id: 'm8',
@@ -408,12 +340,33 @@ export interface PathProgress {
   reads: Map<string, Set<string>>
   /** Module id -> interactive item ids done (interactive_runs). */
   interactives: Map<string, Set<string>>
+  /** Module id -> Predict question ids answered, right or wrong (predictions). */
+  predicted: Map<string, Set<string>>
 }
 
-/** The steps Continue walks through, in order: no placeholders, no Task without assignments. */
+/** Predict questions not answered yet; the Predict step moves on once this is empty. */
+export function unansweredPredictions(module: LearningModule, progress: PathProgress): PredictQuestion[] {
+  const done = progress.predicted.get(module.id)
+  return predictQuestions(module).filter((q) => !done?.has(q.id))
+}
+
+/** The module's Predict questions (predictQuestions.ts); none means no Predict step. */
+export const predictQuestions = (module: LearningModule): PredictQuestion[] => PREDICT_QUESTIONS[module.id] ?? []
+
+/**
+ * The steps Continue walks through, in order: no placeholders, no Predict
+ * without questions, no Task without assignments.
+ */
 export function activeSteps(module: LearningModule): StepId[] {
-  if (module.steps) return module.steps.filter((id) => !STEPS.find((s) => s.id === id)?.comingSoon)
-  return module.assignments.length > 0 ? ['concept', 'observe', 'task'] : ['concept', 'observe']
+  const hasPredict = predictQuestions(module).length > 0
+  if (module.steps) {
+    return module.steps.filter((id) => !STEPS.find((s) => s.id === id)?.comingSoon && (id !== 'predict' || hasPredict))
+  }
+  return [
+    'concept', 'observe',
+    ...(hasPredict ? ['predict' as const] : []),
+    ...(module.assignments.length > 0 ? ['task' as const] : []),
+  ]
 }
 
 // A module with a quiz is done once the quiz and every assignment are
