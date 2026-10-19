@@ -134,6 +134,24 @@ export const PREDICT_QUESTIONS: Record<string, PredictQuestion[]> = {
       answer: 0,
     },
   ],
+  m13: [
+    {
+      id: 'm13-p1', kind: 'choice', question: 'Which IVT address holds the vector for INT 5?',
+      options: ['00005h', '00014h', '00020h', '00050h'], answer: 1,
+    },
+    {
+      id: 'm13-p2', kind: 'choice', question: 'SP = 1000h (SS = 0) when an interrupt arrives. Where is IP saved?',
+      options: ['0FFAh', '0FFEh', '0FFCh', '1002h'], answer: 0,
+    },
+    {
+      id: 'm13-p3', kind: 'choice', code: 'MOV AL, 0FEh\nOUT 21h, AL', question: 'Which IRQ lines can still reach the CPU?',
+      options: ['Only IR0', 'IR1–IR7', 'All eight', 'None'], answer: 0,
+    },
+    {
+      id: 'm13-p4', kind: 'choice', question: 'After CLI, can NMI still interrupt the CPU?',
+      options: ['Yes: CLI only masks INTR', 'No: CLI blocks every interrupt'], answer: 0,
+    },
+  ],
   m9: [
     { id: 'm9-p1', kind: 'run', code: 'MOV AL, 6\nMOV BL, 7\nMUL BL', question: 'What is AX in decimal?', target: { reg: 'AX' } },
     { id: 'm9-p2', kind: 'run', code: 'MOV AX, 0FFFFh\nADD AX, 1', question: 'What is CF? (0/1)', target: { flag: 'CF' } },

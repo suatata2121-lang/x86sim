@@ -26,7 +26,7 @@ export interface HardwareTopic {
   // A purely illustrative diagram for topics with nothing to actually step
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
-  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255' | 'dma-8257' | 'segment-map' | 'endian'
+  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255' | 'dma-8257' | 'segment-map' | 'endian' | 'interrupt-timeline' | 'ivt' | 'pic-8259'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
   // A purpose-built interactive view instead of a Cpu demo: 'fde' is the
@@ -36,10 +36,11 @@ export interface HardwareTopic {
   // answers?" questions (MemoryBusViews), 'ppi-control-word' and 'ppi-bsr'
   // the 8255 word builders (Ppi8255Views), 'segment-calc' the segment
   // calculator and practice, 'ea-calc' the effective address calculator and
-  // 'byte-layout' the endianness view (SegmentViews).
+  // 'byte-layout' the endianness view (SegmentViews), 'ivt-calc' and
+  // 'pic-playground' the interrupt views (InterruptViews).
   interactive?:
     | 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check' | 'ppi-control-word' | 'ppi-bsr'
-    | 'segment-calc' | 'ea-calc' | 'byte-layout'
+    | 'segment-calc' | 'ea-calc' | 'byte-layout' | 'ivt-calc' | 'pic-playground'
   // A step-through figure built from data (components/FigureStepper.tsx).
   figure?: FigureSpec
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
@@ -1054,6 +1055,212 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'events, so every interrupt here is one your own code triggered on purpose with INT.',
         ],
       },
+      {
+        id: 'interrupt-types',
+        title: 'Interrupt Types and Priority',
+        summary: 'What an interrupt is, where it comes from, and which one wins when several arrive.',
+        content: [
+          'An interrupt is a signal that makes the CPU set aside the current program, run an Interrupt Service ' +
+            'Routine (ISR), and then return exactly where it stopped. Think of a meeting (the main program): your ' +
+            'phone rings (the interrupt), you answer it (the ISR), then you go back to the meeting (IRET).',
+          'Why: the CPU doesn\'t have to keep polling every device, devices get a fast real-time response, errors ' +
+            'can be handled where they happen, and programs can ask the operating system for services through ' +
+            'software interrupts.',
+          {
+            kind: 'table',
+            head: ['Type', 'Source', 'Maskable (IF)', 'Vector type number comes from', 'Example'],
+            rows: [
+              ['INTR', 'Hardware', 'Yes (CLI / STI)', 'the interrupting device or 8259, during INTA', 'keyboard, timer'],
+              ['NMI', 'Hardware', 'No', 'fixed: type 2', 'power failure, memory parity error'],
+              ['INT n', 'Software', 'No', 'the instruction', 'INT 21h (DOS), INT 10h (BIOS video)'],
+              ['Exceptions', 'CPU itself', 'No', 'fixed', 'divide error (type 0), INTO with OF = 1 (type 4)'],
+            ],
+          },
+          'INTR is level-triggered, maskable and has lower priority than NMI. The CPU answers it with two INTA̅ ' +
+            'pulses; on the second, the device (usually an 8259) puts the type number n on D7–D0.',
+          'NMI is edge-triggered (0 → 1), cannot be masked, and is always type 2 with its vector at 00008h. It is ' +
+            'used for power-fail detection: an optocoupler watches the AC line and triggers NMI, and the ISR saves ' +
+            'the registers to battery-backed memory or EEPROM.',
+          'Dedicated types: 0 divide error, 1 single step (TF = 1), 2 NMI, 3 breakpoint, 4 overflow (INTO when ' +
+            'OF = 1). The 8086 has no invalid-opcode exception; that arrived with the 80186/80286.',
+          {
+            kind: 'table',
+            head: ['Priority', 'Interrupt'],
+            rows: [
+              ['1 (highest)', 'Divide error, INT n, INTO'],
+              ['2', 'NMI'],
+              ['3', 'INTR'],
+              ['4 (lowest)', 'Single step'],
+            ],
+          },
+          'INT n and NMI can interrupt any ISR. INTR and single step cannot while IF = 0 / TF = 0, and the CPU ' +
+            'clears both when it enters an ISR.',
+          'CLI clears IF (maskable interrupts off, for critical sections), STI sets it, INT n raises software ' +
+            'interrupt n (0–255), and IRET pops IP, CS and FLAGS at the end of an ISR.',
+        ],
+        staticDiagram: 'interrupt-timeline',
+        notes: [
+          'INT 21h services this simulator runs: 01h (read a key), 02h (print a character), 09h (print a string), ' +
+            '0Ah (read a line), 4Ch (exit). File services from the slides are not simulated: 3Ch create, 3Dh open, ' +
+            '3Eh close, 3Fh read, 41h delete, 56h rename.',
+        ],
+      },
+      {
+        id: 'interrupt-vector-table',
+        title: 'The Interrupt Vector Table',
+        summary: 'Where the CPU finds the address of the routine for interrupt n.',
+        content: [
+          'The Interrupt Vector Table (IVT) holds 256 entries × 4 bytes = 1 KB at 00000h–003FFh. Entry n starts at ' +
+            '4·n: its first word is IP (the offset), its second word is CS (the segment). The ISR\'s physical ' +
+            'address is CS × 10h + IP.',
+          'Types 0–4 are dedicated, 5–31 are reserved by Intel and 32–255 are user-defined. INT 21h is used by DOS ' +
+            'even though it is in the reserved range: DOS predates the convention.',
+          'Example: INT 5 → 5 × 4 = 20 = 14h. At 00014h: IP = 1000h, at 00016h: CS = 2000h → the ISR is at ' +
+            '20000h + 1000h = 21000h.',
+          'Try a few types below: the calculator shows the entry\'s address, its four bytes and the ISR address.',
+        ],
+        staticDiagram: 'ivt',
+        interactive: 'ivt-calc',
+        notes: [
+          'In this simulator program data starts at 0400h, above the IVT, so writing a vector never overwrites a ' +
+            'variable.',
+        ],
+      },
+      {
+        id: 'interrupt-sequence',
+        title: 'What the CPU Does on an Interrupt',
+        summary: 'The exact pushes on the way into an ISR and the pops on the way out.',
+        content: [
+          'When an interrupt is accepted, the CPU finishes the current instruction, pushes FLAGS, clears IF and TF, ' +
+            'pushes CS, pushes IP (the next instruction), then loads IP and CS from the IVT entry at 4·n. The ISR ' +
+            'runs; its IRET pops IP, CS and FLAGS, and the main program continues.',
+          'An interrupt is a far (inter-segment) call: CS is saved as well as IP, and IRET also restores FLAGS -- a ' +
+            'plain RET would not.',
+          'Step through INT 5 below: before it, SP = 1000h (SS = 0), FLAGS = 0202h (IF = 1), CS = 1000h, IP = 0120h; ' +
+            'the vector is 2000h:1000h.',
+          'An ISR saves the registers it uses and, for a hardware interrupt, tells the 8259 it is done:',
+          {
+            kind: 'code',
+            text:
+              'ISR_LABEL:\n' +
+              '    PUSH AX\n' +
+              '    PUSH DX\n' +
+              '    ; --- service the device here ---\n' +
+              '    MOV AL, 20h\n' +
+              '    OUT 20h, AL     ; non-specific EOI to the 8259\n' +
+              '    POP DX\n' +
+              '    POP AX\n' +
+              '    IRET',
+          },
+        ],
+        figure: {
+          title: 'INT 5, step by step',
+          steps: [
+            {
+              name: 'Before',
+              where: 'The current instruction finishes. The next one would be at 1000h:0120h.',
+              memory: [
+                { addr: '1000h', value: '--', pointer: 'SP' },
+                { addr: '0FFFh', value: '--' },
+                { addr: '0FFEh', value: '--' },
+                { addr: '0FFDh', value: '--' },
+                { addr: '0FFCh', value: '--' },
+                { addr: '0FFBh', value: '--' },
+                { addr: '0FFAh', value: '--' },
+              ],
+              state: [['SP', '1000h'], ['FLAGS', '0202h (IF = 1)'], ['CS:IP', '1000h:0120h']],
+            },
+            {
+              name: 'PUSH FLAGS',
+              where: 'SP ← 0FFEh and FLAGS (0202h) is stored low byte first.',
+              memory: [
+                { addr: '1000h', value: '--' },
+                { addr: '0FFFh', value: '02', changed: true },
+                { addr: '0FFEh', value: '02', changed: true, pointer: 'SP' },
+                { addr: '0FFDh', value: '--' },
+                { addr: '0FFCh', value: '--' },
+                { addr: '0FFBh', value: '--' },
+                { addr: '0FFAh', value: '--' },
+              ],
+              state: [['SP', '0FFEh'], ['FLAGS', '0202h (IF = 1)'], ['CS:IP', '1000h:0120h']],
+            },
+            {
+              name: 'Clear IF and TF',
+              where: 'Maskable interrupts and single-stepping are off inside the ISR. The saved copy on the stack still has IF = 1.',
+              memory: [
+                { addr: '1000h', value: '--' },
+                { addr: '0FFFh', value: '02' },
+                { addr: '0FFEh', value: '02', pointer: 'SP' },
+                { addr: '0FFDh', value: '--' },
+                { addr: '0FFCh', value: '--' },
+                { addr: '0FFBh', value: '--' },
+                { addr: '0FFAh', value: '--' },
+              ],
+              state: [['SP', '0FFEh'], ['FLAGS', '0002h (IF = 0, TF = 0)'], ['CS:IP', '1000h:0120h']],
+            },
+            {
+              name: 'PUSH CS',
+              where: 'SP ← 0FFCh and CS (1000h) is stored: 00 at 0FFCh, 10 at 0FFDh.',
+              memory: [
+                { addr: '1000h', value: '--' },
+                { addr: '0FFFh', value: '02' },
+                { addr: '0FFEh', value: '02' },
+                { addr: '0FFDh', value: '10', changed: true },
+                { addr: '0FFCh', value: '00', changed: true, pointer: 'SP' },
+                { addr: '0FFBh', value: '--' },
+                { addr: '0FFAh', value: '--' },
+              ],
+              state: [['SP', '0FFCh'], ['FLAGS', '0002h'], ['CS:IP', '1000h:0120h']],
+            },
+            {
+              name: 'PUSH IP',
+              where: 'SP ← 0FFAh and the return IP (0120h) is stored: 20 at 0FFAh, 01 at 0FFBh.',
+              memory: [
+                { addr: '1000h', value: '--' },
+                { addr: '0FFFh', value: '02' },
+                { addr: '0FFEh', value: '02' },
+                { addr: '0FFDh', value: '10' },
+                { addr: '0FFCh', value: '00' },
+                { addr: '0FFBh', value: '01', changed: true },
+                { addr: '0FFAh', value: '20', changed: true, pointer: 'SP' },
+              ],
+              state: [['SP', '0FFAh'], ['FLAGS', '0002h'], ['CS:IP', '1000h:0120h']],
+            },
+            {
+              name: 'Load the vector',
+              where: 'IP ← word at 4·5 = 00014h (1000h), CS ← word at 00016h (2000h). The ISR runs at 21000h.',
+              memory: [
+                { addr: '1000h', value: '--' },
+                { addr: '0FFFh', value: '02' },
+                { addr: '0FFEh', value: '02' },
+                { addr: '0FFDh', value: '10' },
+                { addr: '0FFCh', value: '00' },
+                { addr: '0FFBh', value: '01' },
+                { addr: '0FFAh', value: '20', pointer: 'SP' },
+              ],
+              state: [['SP', '0FFAh'], ['FLAGS', '0002h'], ['CS:IP', '2000h:1000h → 21000h']],
+            },
+            {
+              name: 'IRET',
+              where: 'POP IP (0120h), POP CS (1000h), POP FLAGS (0202h): SP is back at 1000h, IF = 1 again, and the main program continues at 1000h:0120h.',
+              memory: [
+                { addr: '1000h', value: '--', pointer: 'SP' },
+                { addr: '0FFFh', value: '02' },
+                { addr: '0FFEh', value: '02' },
+                { addr: '0FFDh', value: '10' },
+                { addr: '0FFCh', value: '00' },
+                { addr: '0FFBh', value: '01' },
+                { addr: '0FFAh', value: '20' },
+              ],
+              state: [['SP', '1000h'], ['FLAGS', '0202h (IF = 1)'], ['CS:IP', '1000h:0120h']],
+            },
+          ],
+        },
+        notes: [
+          'This simulator does not run interrupt service routines yet: INT n other than INT 21h is not executed. The ' +
+            'figure shows what a real 8086 does.',
+        ],
+      },
     ],
   },
   {
@@ -1272,6 +1479,38 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'works the same way.',
           'This simulator does not model DMA; the figure is a teaching illustration.',
         ],
+      },
+      {
+        id: 'pic-8259',
+        title: 'The 8259 Programmable Interrupt Controller',
+        summary: 'How eight devices share the CPU\'s single INTR pin, in order of priority.',
+        content: [
+          'The 8259 works with the 8085/8086 and adds 8 prioritised interrupt inputs (IR0–IR7) per chip; one master ' +
+            'with eight slaves gives 64. Its vector numbers are programmable, lines can be masked, and the CPU can read ' +
+            'which requests are pending (IRR), in service (ISR) and masked (IMR).',
+          {
+            kind: 'table',
+            head: ['Block', 'What it does'],
+            rows: [
+              ['IRR (Interrupt Request Register)', '8 bits; a bit is set when its IR line requests'],
+              ['IMR (Interrupt Mask Register)', '8 bits; 1 = that line is masked'],
+              ['Priority resolver', 'Looks at IRR, ISR and IMR and picks the highest-priority request to send'],
+              ['ISR (In-Service Register)', 'Which request is being served now; cleared by EOI'],
+              ['Control logic', 'INT output to the CPU\'s INTR, INTA̅ input from the CPU'],
+              ['Data bus buffer, read/write logic', 'D0–D7; RD̅, WR̅, A0, CS̅'],
+              ['Cascade buffer/comparator', 'CAS0–CAS2, SP̅/EN̅ for master/slave'],
+            ],
+          },
+          'Masking through the PIC: MOV AL, 0FEh / OUT 21h, AL sets IMR = 1111 1110b, so only IR0 is unmasked (a 1 ' +
+            'bit masks that line). An ISR ends with a non-specific EOI: MOV AL, 20h / OUT 20h, AL. Ports 20h and 21h ' +
+            'are the IBM PC addresses of the master 8259, and the PC programs it so that IR0–IR7 become types ' +
+            '08h–0Fh.',
+          'Try the playground below. Priority is fixed with IR0 highest: a request goes to the CPU only if it is ' +
+            'unmasked and nothing of equal or higher priority is in service, and the CPU only answers when IF = 1.',
+        ],
+        staticDiagram: 'pic-8259',
+        interactive: 'pic-playground',
+        notes: ['Initialisation command words (ICW1–ICW4) are not covered here; the playground starts already set up like an IBM PC.'],
       },
     ],
   },

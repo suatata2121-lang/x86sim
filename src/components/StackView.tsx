@@ -70,7 +70,7 @@ export function StackView({
         {dataH > 0 && (
           <>
             <rect x={BAR_X} y={dataY} width={BAR_WIDTH} height={dataH} className="seg-band seg-data" />
-            <text x={BAR_X - 4} y={dataY + 11} className="seg-label seg-label-end">0000h</text>
+            <text x={BAR_X - 4} y={dataY + 11} className="seg-label seg-label-end">{hex(seg.dataStart)}</text>
             <text x={BAR_X + BAR_WIDTH + 4} y={dataY + dataH / 2 + 3} className="seg-label">DATA</text>
           </>
         )}

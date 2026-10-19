@@ -4470,3 +4470,81 @@ aside .panel {
     font-size: 0.65rem;
   }
 }
+
+/* ---- Interrupt views (components/InterruptViews.tsx) ---- */
+
+.ivt-badge {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
+}
+
+.ivt-badge.dedicated {
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+
+.ivt-badge.reserved {
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.ivt-badge.userdefined {
+  border-color: var(--num-bin);
+  color: var(--num-bin);
+}
+
+.pic-raise {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.pic-table th,
+.pic-table td {
+  text-align: center;
+}
+
+.pic-bit {
+  min-width: 1.8rem;
+  padding: 0.1rem 0.3rem;
+}
+
+.pic-cell {
+  display: inline-block;
+  min-width: 1.4rem;
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+
+.pic-cell.on {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.pic-if {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.pic-int {
+  margin: 0.4rem 0;
+  color: var(--text-dim);
+}
+
+.pic-int.high strong {
+  color: var(--error-text);
+}
+
+.pic-log {
+  margin: 0.4rem 0;
+  padding-left: 1.1rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}

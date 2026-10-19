@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { DATA_START } from '../core/assembler'
 
 const ROWS = 16
 const COLS = 16
@@ -29,7 +30,8 @@ export function MemoryView({
   dataLabels: Map<string, { address: number; length: number }>
   sp: number
 }) {
-  const [base, setBase] = useState(0)
+  // Open on the program's data, above the interrupt vector table.
+  const [base, setBase] = useState(DATA_START)
   const [jumpText, setJumpText] = useState('')
   const [jumpError, setJumpError] = useState(false)
 

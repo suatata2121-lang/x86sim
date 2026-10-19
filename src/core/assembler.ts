@@ -552,12 +552,19 @@ function validateOperands(
   return true
 }
 
+/**
+ * Where program data starts. 0000h-03FFh is the 8086's Interrupt Vector
+ * Table (256 entries x 4 bytes), so data goes above it and a program can
+ * write vectors without overwriting its own variables.
+ */
+export const DATA_START = 0x0400
+
 export function assemble(source: string): { instructions: Instruction[]; data: DataDeclaration[]; errors: AssembleError[] } {
   const instructions: Instruction[] = []
   const data: DataDeclaration[] = []
   const errors: AssembleError[] = []
   const declaredLabels = new Set<string>()
-  let dataCursor = 0
+  let dataCursor = DATA_START
   const lines = source.split(/\r?\n/)
 
   for (let i = 0; i < lines.length; i++) {

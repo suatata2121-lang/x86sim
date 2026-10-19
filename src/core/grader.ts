@@ -51,7 +51,9 @@ export interface PpiSetup {
 
 /** Bytes written over a data label before the run, so one program can be tested on several inputs. */
 export interface DataSetup {
-  label: string
+  /** A data label, or `address` for a raw address (e.g. an IVT entry). */
+  label?: string
+  address?: number
   offset?: number
   bytes: number[]
 }
@@ -124,7 +126,7 @@ export function runTestCase(cpu: Cpu, testCase: TestCase): TestResult {
   const failures: string[] = []
   const maxSteps = testCase.maxSteps ?? DEFAULT_MAX_STEPS
   for (const d of testCase.data ?? []) {
-    const base = cpu.dataLabels.get(d.label)?.address
+    const base = d.address ?? (d.label ? cpu.dataLabels.get(d.label)?.address : undefined)
     if (base === undefined) {
       failures.push(`Data label ${d.label} is missing -- keep the declarations from the starter code`)
       return { name: testCase.name, passed: false, failures, steps: 0, cycles: 0 }
