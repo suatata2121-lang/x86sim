@@ -25,13 +25,15 @@ export interface HardwareTopic {
   // A purely illustrative diagram for topics with nothing to actually step
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
-  staticDiagram?: 'segmented-addressing'
+  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
   // A purpose-built interactive view instead of a Cpu demo: 'fde' is the
   // fetch-decode-execute stepper (FetchDecodeExecuteView), 'alu' is the live
-  // ALU explorer (AluView), 'move-it' the MOV/XCHG challenges (MoveItView).
-  interactive?: 'fde' | 'alu' | 'move-it'
+  // ALU explorer (AluView), 'move-it' the MOV/XCHG challenges (MoveItView),
+  // 'bank-selector' the BHE̅/A0 bank view and 'chip-check' the "which chip
+  // answers?" questions (MemoryBusViews).
+  interactive?: 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check'
   // A step-through figure built from data (components/FigureStepper.tsx).
   figure?: FigureSpec
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
@@ -264,6 +266,37 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
     title: 'Memory & Bus Architecture',
     topics: [
       {
+        id: 'von-neumann-harvard',
+        title: 'Von Neumann vs Harvard Architecture',
+        summary: 'Why the 8086 fetches instructions and reads data over the same bus, and what a Harvard machine does differently.',
+        content: [
+          'The 8086 is a Von Neumann machine. It follows the stored-program concept: the program is just bytes in ' +
+            'memory, kept in the same memory as the data it works on. There is one memory and one bus between it and ' +
+            'the CPU, and the CPU works through fetch → decode → execute one step after another.',
+          'A Harvard machine keeps instructions and data in separate memories, each with its own bus. It can fetch ' +
+            'the next instruction and read or write data at the same time.',
+          'Look back at the Fetch-Decode-Execute topic: the fetch and the data access of MOV AX, [BX] use the same ' +
+            'bus, one after the other. On a Harvard machine they could overlap.',
+          {
+            kind: 'table',
+            head: ['', 'Von Neumann', 'Harvard'],
+            rows: [
+              ['Memory', 'One memory for instructions and data', 'Separate instruction and data memories'],
+              ['Buses', 'One shared bus', 'One bus per memory'],
+              ['Fetch and data access', 'One after the other', 'At the same time'],
+              ['Strengths', 'Simpler, cheaper, flexible for general-purpose computing', 'Faster (parallel access), predictable timing, good for real-time and embedded work'],
+              ['Weaknesses', 'The shared bus is a bottleneck (the "Von Neumann bottleneck"); code and data in one memory make code-injection attacks possible', 'More complex and more expensive, less flexible'],
+              ['Examples', 'Intel x86 family (8086, 80286, 80386 …), the CPUs in PCs, laptops and servers', 'Microcontrollers (PIC, AVR, ARM Cortex-M), DSPs (TI TMS320), automotive and IoT controllers'],
+            ],
+          },
+        ],
+        staticDiagram: 'von-neumann-harvard',
+        notes: [
+          'The 8086 hides part of the Von Neumann bottleneck with its prefetch queue: the BIU fetches the next ' +
+            'instructions while the EU is still executing (Module 4, "The 6-Byte Instruction Queue").',
+        ],
+      },
+      {
         id: 'bus-types',
         title: 'Address Bus vs Data Bus vs Control Bus',
         summary: 'How the CPU actually talks to memory over wires.',
@@ -323,6 +356,127 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             },
           ],
         },
+      },
+      {
+        id: 'memory-banking',
+        title: 'Memory Banking: BHE̅ and A0',
+        summary: 'How the 16-bit data bus is split into an even and an odd bank, and why a word at an odd address costs two bus cycles.',
+        content: [
+          'The 8086 addresses 1 MB (A19–A0) but moves 16 bits at a time. The memory is therefore built as two 512 KB ' +
+            'banks side by side. The even (low) bank holds 00000h, 00002h … FFFFEh and is wired to D7–D0. The odd ' +
+            '(high) bank holds 00001h, 00003h … FFFFFh and is wired to D15–D8.',
+          'Two signals choose the bank. The even bank is selected when A0 = 0. The odd bank is selected when BHE̅ ' +
+            '(Bus High Enable, active low) = 0. Each bank only sees A19–A1, so one row holds one even and one odd byte.',
+          {
+            kind: 'table',
+            head: ['BHE̅', 'A0', 'Function', 'Data lines', 'Bus cycles'],
+            rows: [
+              ['0', '0', 'Word at even address (both banks)', 'D15–D0', '1'],
+              ['1', '0', 'Byte at even address (low bank)', 'D7–D0', '1'],
+              ['0', '1', 'Byte at odd address (high bank)', 'D15–D8', '1'],
+              ['1', '1', 'No bank enabled', '–', '–'],
+              ['0, then 1', '1, then 0', 'Word at odd address', 'D15–D8, then D7–D0', '2'],
+            ],
+          },
+          'A word at an odd address does not fit in one row: its low byte is in the odd bank at the address, its high ' +
+            'byte in the even bank one row up. The 8086 needs two bus cycles: first the odd byte (A0 = 1, BHE̅ = 0, ' +
+            'on D15–D8), then the even byte at address + 1 (A0 = 0, BHE̅ = 1, on D7–D0).',
+          'Type an address below and switch between Byte and Word. Try all four cases: even byte, odd byte, even ' +
+            'word and odd word.',
+        ],
+        interactive: 'bank-selector',
+        notes: [
+          'Tip: keep word variables at even addresses (EVEN or ALIGN 2 in MASM) so every word access takes one bus cycle.',
+          'This simulator\'s memory is flat and does not charge the extra cycle for an odd word; the bank selector ' +
+            'shows what the real 8086 bus does.',
+        ],
+      },
+      {
+        id: 'memory-interfacing',
+        title: 'Memory Interfacing & Address Decoding',
+        summary: 'How EPROM and RAM chips are wired to the 8086 and how address decoding picks the right chip.',
+        content: [
+          'A memory chip has four kinds of lines: address lines (which cell inside the chip), data lines (the byte ' +
+            'itself), control lines (read or write) and a chip select (is this chip being addressed at all?). ' +
+            'Interfacing means connecting each kind to the right 8086 signals.',
+          'The example design: an 8086 in minimum mode with 64 KB of EPROM built from two 32 KB chips and 128 KB of ' +
+            'RAM built from two 64 KB chips. Chips come in pairs because of the two memory banks: one chip of each ' +
+            'pair is the even (low-byte) chip, the other the odd (high-byte) chip.',
+          {
+            kind: 'table',
+            head: ['Chip', 'Fixed high bits', 'Range', 'A0'],
+            rows: [
+              ['EPROM 1 (low byte)', 'A19–A16 = 1111', 'F0000h–FFFFEh', '0'],
+              ['EPROM 2 (high byte)', 'A19–A16 = 1111', 'F0001h–FFFFFh', '1'],
+              ['RAM 1 (low byte)', 'A19–A17 = 000', '00000h–1FFFEh', '0'],
+              ['RAM 2 (high byte)', 'A19–A17 = 000', '00001h–1FFFFh', '1'],
+            ],
+          },
+          'Each chip gets A15–A1 (EPROM) or A16–A1 (RAM) on its own address pins; data D7–D0 goes to the even chips ' +
+            'and D15–D8 to the odd chips. On the system side, three 8282 latches hold A19–A0 and BHE̅, two 8286 ' +
+            'transceivers buffer D15–D0, and a 74138 decoder turns M/IO̅, RD̅ and WR̅ into MEMR̅, MEMW̅, IOR̅ and IOW̅.',
+          'Step through the design below, then check yourself with the three questions after it.',
+        ],
+        figure: {
+          title: 'Wiring 64 KB EPROM and 128 KB RAM to the 8086',
+          steps: [
+            {
+              name: 'Four kinds of lines',
+              where: 'Every memory chip is connected through address, data, control and chip-select lines.',
+              state: [
+                ['Address', 'which cell inside the chip'],
+                ['Data', 'the byte read or written'],
+                ['Control', 'OE̅ (read), WE̅ (write)'],
+                ['Chip select', 'CS̅: this chip, or not'],
+              ],
+            },
+            {
+              name: 'Chips per pair',
+              where: 'The 16-bit bus is two banks, so each memory is a pair: one even chip on D7–D0, one odd chip on D15–D8.',
+              state: [
+                ['EPROM 64 KB', '2 × 32 KB: EPROM 1 (even), EPROM 2 (odd)'],
+                ['RAM 128 KB', '2 × 64 KB: RAM 1 (even), RAM 2 (odd)'],
+              ],
+            },
+            {
+              name: 'Address lines',
+              where: 'Count the address lines each memory spans. A0 does the bank selection, so each chip gets the lines above it.',
+              state: [
+                ['64 KB EPROM', '2¹⁶ → 16 lines (A15–A0); chips get A15–A1'],
+                ['128 KB RAM', '2¹⁷ → 17 lines (A16–A0); chips get A16–A1'],
+                ['Fixed high bits', 'EPROM: A19–A16 · RAM: A19–A17'],
+              ],
+            },
+            {
+              name: 'Address map',
+              where: 'The EPROM sits at the top of memory (the 8086 starts at FFFF0h after reset), the RAM at the bottom. A0 splits each range into even and odd.',
+              state: [
+                ['EPROM 1 / 2', 'F0000h–FFFFFh (A19–A16 = 1111), A0 = 0 / 1'],
+                ['RAM 1 / 2', '00000h–1FFFFh (A19–A17 = 000), A0 = 0 / 1'],
+              ],
+            },
+            {
+              name: 'Chip select',
+              where: 'A NAND of the fixed high bits (inverted where the bit must be 0) goes low only inside the range. ORing it with A0 or BHE̅ picks the even or odd chip. Every CS̅ is active low.',
+              state: [
+                ['EPROM range', 'NAND(A19, A18, A17, A16)'],
+                ['RAM range', 'NAND(A19̅, A18̅, A17̅)'],
+                ['Even chip CS̅', 'range OR A0'],
+                ['Odd chip CS̅', 'range OR BHE̅'],
+              ],
+            },
+            {
+              name: 'Control',
+              where: 'MEMR̅ drives every chip\'s output enable. Only the RAM can be written, so only the RAM chips get MEMW̅.',
+              state: [
+                ['MEMR̅', '→ OE̅ of all four chips'],
+                ['MEMW̅', '→ WE̅ of RAM 1 and RAM 2 only'],
+                ['EPROM', 'read-only: no WE̅'],
+              ],
+            },
+          ],
+        },
+        interactive: 'chip-check',
       },
       {
         id: 'bus-timing',

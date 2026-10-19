@@ -3638,3 +3638,198 @@ aside .panel {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+/* ---- Memory & bus views (components/MemoryBusViews.tsx) ---- */
+
+.nv-text-table td:first-child {
+  font-weight: 600;
+}
+
+.mb-arch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.mb-arch-fig {
+  flex: 1 1 240px;
+  max-width: 340px;
+  margin: 0;
+  text-align: center;
+}
+
+.mb-arch-fig figcaption {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.mb-arch svg {
+  width: 100%;
+  height: auto;
+}
+
+.mb-box {
+  fill: var(--bg-panel-alt);
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+
+.mb-cpu {
+  fill: var(--accent-bg);
+  stroke: var(--accent-border);
+}
+
+.mb-mem {
+  stroke: var(--num-bin);
+}
+
+.mb-mem-alt {
+  stroke: var(--num-hex);
+}
+
+.mb-bus {
+  stroke: var(--num-bin);
+  stroke-width: 4;
+}
+
+.mb-bus-alt {
+  stroke: var(--num-hex);
+}
+
+.mb-arch text {
+  fill: var(--text);
+  text-anchor: middle;
+  font-family: system-ui, sans-serif;
+}
+
+.mb-arch .mb-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mb-arch .mb-label {
+  font-size: 11px;
+}
+
+.mb-arch .mb-small {
+  fill: var(--text-dim);
+  font-size: 10px;
+}
+
+.mb-arch .mb-start {
+  text-anchor: start;
+}
+
+.mb-arch .mb-end {
+  text-anchor: end;
+}
+
+.mb-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.mb-address {
+  width: 6.5rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  color: var(--text);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  text-transform: uppercase;
+}
+
+.mb-banks {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.mb-bank {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  opacity: 0.55;
+}
+
+.mb-bank.on {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  opacity: 1;
+}
+
+.mb-bank-head {
+  font-weight: 600;
+}
+
+.mb-bank-sub {
+  margin-bottom: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.mb-cell {
+  padding: 0.15rem 0.4rem;
+  border-top: 1px solid var(--border);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+.mb-cell.hit {
+  background: var(--accent-border);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.mb-cases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.mb-cases li.done {
+  color: var(--success-text);
+}
+
+.mb-check ol {
+  padding-left: 1.2rem;
+}
+
+.mb-check li p {
+  margin: 0.3rem 0;
+}
+
+.mb-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.mb-options button.mb-right {
+  border-color: var(--num-bin);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.mb-options button.mb-wrong {
+  border-color: var(--error-text);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.mb-feedback-right {
+  color: var(--success-text);
+  font-size: 0.85rem;
+}
