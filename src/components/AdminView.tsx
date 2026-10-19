@@ -736,6 +736,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   // Fetched on their own: in "Recent activity" they would drown among steps and runs.
   const [hintEvents, setHintEvents] = useState<ActivityEvent[]>([])
   const [predictions, setPredictions] = useState<Prediction[]>([])
+  const [challengeEvents, setChallengeEvents] = useState<ActivityEvent[]>([])
   const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -749,7 +750,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       supabase.from('concept_reads').select('module_id, concept_id, read_at').eq('user_id', student.id).order('read_at'),
       supabase.from('quiz_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }),
       supabase.from('interactive_runs').select('module_id, item_id, done_at').eq('user_id', student.id),
-      supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).eq('kind', 'hint').order('created_at'),
+      supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).in('kind', ['hint', 'challenge']).order('created_at'),
       supabase.from('predictions').select('module_id, question_id, answer, correct, created_at').eq('user_id', student.id).order('created_at', { ascending: false }),
     ]).then(([a, e, s, m, r, q, ir, h, pr]) => {
       const err = a.error ?? e.error ?? s.error ?? m.error ?? r.error ?? q.error ?? ir.error
@@ -761,7 +762,9 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       setReads((r.data ?? []) as ConceptRead[])
       setQuizAttempts((q.data ?? []) as QuizAttempt[])
       setRuns((ir.data ?? []) as InteractiveRun[])
-      setHintEvents((h.data ?? []) as ActivityEvent[])
+      const hc = (h.data ?? []) as ActivityEvent[]
+      setHintEvents(hc.filter((e) => e.kind === 'hint'))
+      setChallengeEvents(hc.filter((e) => e.kind === 'challenge'))
       // Missing table (schema not re-run yet) just shows no predictions.
       setPredictions((pr.data ?? []) as Prediction[])
     })
@@ -969,6 +972,15 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
           </tbody>
         </table>
       </div>
+
+      <h3>Cycle challenges</h3>
+      <p className="admin-meta">
+        {challengeEvents.length === 0
+          ? 'None completed.'
+          : `${challengeEvents.length} completed: ${challengeEvents
+            .map((e) => `${ASSIGNMENT_TITLES.get(e.assignment_id ?? '') ?? e.assignment_id} (${String(e.detail.cycles)} cycles)`)
+            .join(', ')}`}
+      </p>
 
       <h3>Hints used</h3>
       <div className="admin-table-wrap">

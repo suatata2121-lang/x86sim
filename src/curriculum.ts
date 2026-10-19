@@ -22,6 +22,12 @@ export interface Assignment {
    * **bold** and `code` are rendered.
    */
   hints: [string, string, string]
+  /**
+   * Optional cycle challenge (#15), offered to students who pass in their
+   * first one or two runs: pass the same tests in this many cycles or fewer
+   * (all test cases added up, as the results list shows them).
+   */
+  challengeCycles?: number
 }
 
 export interface Task {
@@ -198,7 +204,7 @@ INT 21h
             hints: [
               'CMP only sets flags. A conditional jump right after it decides which branch runs. Readings are unsigned, so use JA/JBE.',
               '**Finding the Maximum** compares two values and jumps.',
-              '`MOV AX, [TURBIDITY]` / `CMP AX, [LIMIT]` / `JA ALARM` / `MOV DX, 0` / `JMP DONE` / `ALARM: MOV DX, ___` / `DONE:`',
+              '`MOV AL, [TURBIDITY]` / `CMP AL, [LIMIT]` / `JA ALARM` / `MOV DX, 0` / `JMP DONE` / `ALARM: MOV DX, ___` / `DONE:`',
             ],
           },
           {
@@ -292,6 +298,8 @@ MOV AH, 4Ch
 INT 21h
 `,
             testCases: [{ name: 'Sum(5..50, 10 elements) = 275', explain: 'BX is not 275. Common causes: CX was not 10, SI did not start at 0, or AH was not cleared before adding AX to BX.', expect: { regs: { BX: 275 } } }],
+            // 80% of a typical loop (495); LODSB + ADD BX, AX does it in 377.
+            challengeCycles: 396,
             hints: [
               'A loop needs a counter in CX, an index in SI that grows by 1, and an accumulator in BX.',
               '**Array Sum** is almost the same loop.',
@@ -342,6 +350,8 @@ AVERAGE ENDP
                 expect: { regs: { BX: 27, DI: 999, DX: 888 } },
               },
             ],
+            // 80% of a typical solution (537) is out of reach; the best known (LODSB, DEC/JNZ, one PUSH) takes 553.
+            challengeCycles: 560,
             hints: [
               'Inside the procedure, PUSH every register you change (AX, CX) first and POP them in reverse order right before RET.',
               '**Subroutine (CALL/RET)** and **MASM-Style PUSH/POP**.',
@@ -675,6 +685,8 @@ INT 21h
                 expect: { memory: [{ label: 'COPY', size: 'word', equals: 100 }, { label: 'COPY', offset: 8, size: 'word', equals: 500 }] },
               },
             ],
+            // 80% of a MOV/ADD loop (336); REP MOVSW does it in 159.
+            challengeCycles: 268,
             hints: [
               'REP MOVSW copies CX words from [SI] to [DI]. Set all three registers and the direction flag first.',
               '**String Copy (REP MOVSB)** does the same with bytes.',
