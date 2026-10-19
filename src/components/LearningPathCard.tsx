@@ -58,6 +58,8 @@ interface Props {
   onHide: () => void
   /** When a module opens and is due for this student (#13); null when it has no schedule. */
   dates?: (moduleId: string) => ModuleDates | null
+  /** Cycle challenges completed (#15), shown as a badge. */
+  challengeCount?: number
   /** Instructor comments on the student's test runs not dismissed yet. */
   feedback?: { comments: InstructorComment[]; onDismiss: () => void }
   /** Shown as a single line instead of the card (while the Observe viewer is open). */
@@ -73,7 +75,7 @@ interface Props {
 // also shows its checklist (#25): what to read, try, pass, then the quiz.
 export function LearningPathCard({
   rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onStepOpened, onHide,
-  dates, feedback, collapsed, onExpand, onCollapse,
+  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse,
 }: Props) {
   const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
@@ -322,7 +324,10 @@ export function LearningPathCard({
             )}
           </>
         )}
-        <span className="path-count">{doneCount} / {LEARNING_PATH.length} modules done</span>
+        <span className="path-count">
+          {doneCount} / {LEARNING_PATH.length} modules done
+          {challengeCount > 0 && <span className="path-badge" title="Cycle challenges completed"> · 🏅 {challengeCount}</span>}
+        </span>
       </div>
 
       {bar}

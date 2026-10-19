@@ -14,6 +14,10 @@ import { FeedbackDialog } from './components/FeedbackDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { HintLadder } from './components/HintLadder'
 import { useHintLadder } from './backend/hints'
+import { useChallenges } from './backend/challenges'
+import { ChallengePanel } from './components/ChallengePanel'
+import { ReviewCard } from './components/ReviewCard'
+import { reviewDue, useModuleDoneDates } from './backend/reviews'
 import { effectiveDates, useInstructorFeedback, useSchedule } from './backend/schedule'
 import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
@@ -118,6 +122,7 @@ export default function App() {
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
   const hintLadder = useHintLadder(userId, activeAssignmentId)
+  const challenges = useChallenges(userId)
   const scheduleRows = useSchedule(userId)
   const instructorFeedback = useInstructorFeedback(userId)
   useStudySession(userId)
@@ -151,6 +156,31 @@ export default function App() {
   const [observeCardOpen, setObserveCardOpen] = useState(false)
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   const [predictModuleId, setPredictModuleId] = useState<string | null>(null)
+  // Review cards (#15): a finished module's question comes back after 14 and
+  // 28 days. The card is frozen once answered so its result stays on screen.
+  const doneModuleIds = useMemo(
+    () => LEARNING_PATH.filter((m) => isModuleDone(m, pathProgress, moduleProgress.rows.get(m.id)?.step)).map((m) => m.id),
+    [pathProgress, moduleProgress.rows],
+  )
+  const doneDates = useModuleDoneDates(userId, doneModuleIds, moduleProgress.rows)
+  const [answeredReview, setAnsweredReview] = useState<{ moduleId: string; questionId: string } | null>(null)
+  const reviewModule = LEARNING_PATH.find(
+    (m) => doneModuleIds.includes(m.id) && predictQuestions(m).length > 0 &&
+      reviewDue(doneDates[m.id], moduleProgress.reviewCounts.get(m.id) ?? 0),
+  )
+  const reviewCard = (() => {
+    if (answeredReview) {
+      const m = LEARNING_PATH.find((x) => x.id === answeredReview.moduleId)
+      const q = m && predictQuestions(m).find((x) => x.id === answeredReview.questionId)
+      return m && q ? { module: m, question: q, answered: true } : null
+    }
+    if (!reviewModule) return null
+    const qs = predictQuestions(reviewModule)
+    const wrong = moduleProgress.wrongPredicted.get(reviewModule.id)
+    const count = moduleProgress.reviewCounts.get(reviewModule.id) ?? 0
+    return { module: reviewModule, question: qs.find((q) => wrong?.has(q.id)) ?? qs[count % qs.length], answered: false }
+  })()
+
   // First sign-in (#14): the tour, then the placement quiz. Only for a
   // student whose profile says it hasn't been done (null, not undefined:
   // undefined means the column doesn't exist yet).
@@ -613,6 +643,7 @@ export default function App() {
     const report = gradeSource(source, assignment.testCases, assignment.sourceRules)
     setGradeReport(report)
     if (!report.assembled || report.passedCount < report.totalCount) hintLadder.recordFailedRun()
+    else if (assignment.challengeCycles && hintLadder.fails <= 1) challenges.markEligible(assignment.id)
     recordAttempt({
       assignmentId: assignment.id,
       passedCount: report.passedCount,
@@ -821,6 +852,7 @@ export default function App() {
               onOpenPredict={setPredictModuleId}
               dates={(moduleId) => effectiveDates(scheduleRows, moduleId, userId, auth.profile?.class_group || null)}
               feedback={{ comments: instructorFeedback.unread, onDismiss: instructorFeedback.dismiss }}
+              challengeCount={challenges.done.size}
               onStepOpened={(moduleId, step) => trackActivity('path_step', null, { module: moduleId, step })}
               onHide={() => setPathCardHiddenPersist(true)}
               collapsed={observeModule && observeExample && !observeCardOpen
@@ -828,6 +860,19 @@ export default function App() {
                 : undefined}
               onExpand={() => setObserveCardOpen(true)}
               onCollapse={observe ? () => setObserveCardOpen(false) : undefined}
+            />
+          )}
+          {backendEnabled && auth.session && moduleProgress.loaded && !observe && reviewCard && (
+            <ReviewCard
+              key={`${reviewCard.module.id}-${reviewCard.question.id}`}
+              title={reviewCard.module.title}
+              question={reviewCard.question}
+              answered={reviewCard.answered}
+              onAnswer={(answer, correct) => {
+                setAnsweredReview({ moduleId: reviewCard.module.id, questionId: reviewCard.question.id })
+                moduleProgress.recordPrediction(reviewCard.module.id, reviewCard.question.id, answer, correct, 'review')
+              }}
+              onDone={() => setAnsweredReview(null)}
             />
           )}
           {showEditor && (
@@ -1038,6 +1083,23 @@ export default function App() {
                 )}
               </div>
               {gradeReport && <GraderView report={gradeReport} />}
+              {(() => {
+                // The challenge appears once the assignment is passed within two runs (or was completed before).
+                const a = ALL_ASSIGNMENTS.find((x) => x.id === activeAssignmentId)
+                if (!a?.challengeCycles || !gradeReport) return null
+                const passed = gradeReport.assembled && gradeReport.totalCount > 0 && gradeReport.passedCount === gradeReport.totalCount
+                const before = challenges.done.has(a.id)
+                if (!before && !challenges.eligible.has(a.id) && !(passed && hintLadder.fails <= 1)) return null
+                return (
+                  <ChallengePanel
+                    limit={a.challengeCycles}
+                    cycles={gradeReport.results.reduce((n, r) => n + r.cycles, 0)}
+                    passed={passed}
+                    completedBefore={before}
+                    onComplete={() => challenges.complete(a.id, gradeReport.results.reduce((n, r) => n + r.cycles, 0), a.challengeCycles as number)}
+                  />
+                )
+              })()}
               {activeAssignmentId && hintLadder.available && (
                 <HintLadder
                   hints={ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.hints ?? ['', '', '']}

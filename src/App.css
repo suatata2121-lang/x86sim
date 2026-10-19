@@ -4394,3 +4394,21 @@ aside .panel {
   color: var(--text-dim);
   font-size: 0.75rem;
 }
+
+/* ---- Cycle challenge and review card (#15) ---- */
+
+.challenge-panel {
+  border-color: var(--warning-border);
+}
+
+.challenge-panel.done {
+  border-color: var(--num-bin);
+}
+
+.review-card {
+  border-color: var(--accent-border);
+}
+
+.review-card .predict-questions {
+  margin: 0;
+}
