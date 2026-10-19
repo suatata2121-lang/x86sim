@@ -50,6 +50,16 @@ export const QUIZZES: Quiz[] = [
     passNote: 'You have finished the segments and addressing module.',
   },
   {
+    id: 'm13',
+    title: 'Quiz: Interrupts and the 8259 PIC',
+    intro:
+      '10 questions on interrupt types and priority, the vector table, the interrupt sequence and the 8259. You ' +
+      'need 7 correct answers to pass and finish the module. You can retake the quiz as many times as you need.',
+    lockedNote: 'Finish every item on the checklist above to unlock the quiz.',
+    passCount: 7,
+    passNote: 'You have finished the interrupts module.',
+  },
+  {
     id: 'm11',
     title: 'Quiz: The 8255 Programmable Peripheral Interface',
     intro:

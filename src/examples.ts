@@ -227,6 +227,39 @@ HLT
 `,
   },
   {
+    id: 'int21-demo',
+    title: 'INT 21h Services',
+    description: 'The lecture-slide INT 21h program: print a prompt, wait for a key, print it back, exit. Each INT 21h does a different job depending on AH.',
+    source: `; INT 21h does a different job for each value in AH
+MSG DB 'Press any key...$'
+CRLF DB 13, 10, '$'
+YOU DB 'You pressed: $'
+
+MOV AH, 09h
+MOV DX, OFFSET MSG
+INT 21h          ; AH = 09h: print a $-terminated string
+
+MOV AH, 01h
+INT 21h          ; AH = 01h: wait for a key, AL = its ASCII code
+MOV BL, AL       ; keep the key
+
+MOV AH, 09h
+MOV DX, OFFSET CRLF
+INT 21h          ; new line
+
+MOV AH, 09h
+MOV DX, OFFSET YOU
+INT 21h
+
+MOV AH, 02h
+MOV DL, BL
+INT 21h          ; AH = 02h: print the character in DL
+
+MOV AX, 4C00h
+INT 21h          ; AH = 4Ch: exit
+`,
+  },
+  {
     id: 'traffic-light',
     title: 'Virtual Device: Traffic Light',
     description: 'Cycles a virtual traffic light (port 40h) through red, red+yellow, green, yellow forever. Use "Animate" to watch it change, "Stop" to end it.',

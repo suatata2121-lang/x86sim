@@ -15,6 +15,7 @@ type StringMnemonic = 'MOVSB' | 'STOSB' | 'LODSB' | 'CMPSB' | 'SCASB' | 'MOVSW' 
 
 const MEMORY_SIZE = 0x10000
 const PORT_SPACE = 0x10000
+const SHIFTS = new Set<string>(['SHL', 'SAL', 'SHR', 'SAR', 'ROL', 'ROR', 'RCL', 'RCR'])
 const INITIAL_SP = 0xfffe
 
 export interface MnemonicProfile {
@@ -420,9 +421,11 @@ export class Cpu {
     const instr = this.instructions[this.ip]
     this.lastInstruction = instr
     const [op1, op2] = instr.ops
-    const isWord = (op1 && this.operandSize(op1)) === 'byte' || (op2 && this.operandSize(op2)) === 'byte'
-      ? false
-      : true
+    // A shift or rotate count in CL is a byte register, but the operation's
+    // size is the destination's alone: SHL AX, CL is a word shift.
+    const isWord = SHIFTS.has(instr.mnemonic)
+      ? (op1 && this.operandSize(op1)) !== 'byte'
+      : !((op1 && this.operandSize(op1)) === 'byte' || (op2 && this.operandSize(op2)) === 'byte')
     let nextIp = this.ip + 1
     let repIterations: number | undefined
     let shiftCount: number | undefined

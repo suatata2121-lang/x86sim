@@ -1,4 +1,5 @@
 import type { DataDeclaration } from './types'
+import { DATA_START } from './assembler'
 
 export const MEMORY_TOP = 0x10000
 
@@ -19,10 +20,10 @@ export interface MemorySegments {
 // (a real stack-overflow bug in the user's program) never renders as a
 // negative-width free region.
 export function computeSegments(data: DataDeclaration[], sp: number): MemorySegments {
-  const dataEnd = data.reduce((max, d) => Math.max(max, d.address + d.bytes.length), 0)
+  const dataEnd = data.reduce((max, d) => Math.max(max, d.address + d.bytes.length), DATA_START)
   const stackStart = Math.min(Math.max(sp, dataEnd), MEMORY_TOP)
   return {
-    dataStart: 0,
+    dataStart: DATA_START,
     dataEnd,
     freeStart: dataEnd,
     freeEnd: stackStart,

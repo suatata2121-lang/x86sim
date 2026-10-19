@@ -18,7 +18,7 @@ export function ProfilerView({
   data: DataDeclaration[]
   instructionCount: number
 }) {
-  const dataBytes = data.reduce((max, d) => Math.max(max, d.address + d.bytes.length), 0)
+  const dataBytes = data.reduce((n, d) => n + d.bytes.length, 0)
   const extraWrites = [...memoryWrites].filter((addr) => addr >= dataBytes).length
 
   const rows = [...profile.entries()].sort((a, b) => b[1].cycles - a[1].cycles)

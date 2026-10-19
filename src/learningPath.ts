@@ -364,6 +364,39 @@ export const LEARNING_PATH: LearningModule[] = [
     ],
   },
   {
+    // A new id rather than renumbering: stored progress of m9 and later keeps its module.
+    id: 'm13',
+    title: 'Interrupts and the 8259 PIC',
+    summary:
+      "Find an interrupt's vector, follow what the CPU saves and restores, and see how the 8259 decides which " +
+      'device gets served.',
+    requires: ['m8'],
+    concepts: [hw('interrupt-types'), hw('interrupt-vector-table'), hw('interrupt-sequence'), hw('pic-8259')],
+    observe: {
+      examples: ['keyboard-echo', 'int21-demo'],
+      panel: 'registers',
+      watch: 'Each INT 21h does a different job depending on AH. Watch AH before every INT.',
+    },
+    assignments: ['t22-pic-mask', 't23-ivt-entry', 't24-isr-address'],
+    steps: ['concept', 'observe', 'predict', 'task', 'quiz', 'reflect'],
+    quiz: 'm13',
+    interactives: [
+      {
+        id: 'ivt-calc',
+        label: 'Try: the IVT calculator with three different types ({n}/3)',
+        topic: 'interrupt-vector-table',
+        parts: ['ivt-calc-1', 'ivt-calc-2', 'ivt-calc-3'],
+      },
+      { id: 'interrupt-sequence-figure', label: 'Step: the interrupt sequence figure to the end', topic: 'interrupt-sequence' },
+      {
+        id: 'pic-playground',
+        label: 'Try: serve, mask and end a request in the PIC playground ({n}/3)',
+        topic: 'pic-8259',
+        parts: ['pic-served', 'pic-masked', 'pic-eoi'],
+      },
+    ],
+  },
+  {
     id: 'm9',
     title: 'Signed and Multi-Word Arithmetic',
     summary: 'Handle negative numbers and values wider than 16 bits with carries, borrows and signed division.',

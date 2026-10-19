@@ -509,7 +509,11 @@ values
    array['program-segments', 'addressing-modes', 'byte-order'],
    array['seg-practice-1', 'seg-practice-2', 'seg-practice-3', 'seg-practice-4', 'seg-practice-5',
          'ea-preset-1', 'ea-preset-2', 'ea-preset-3', 'ea-preset-4', 'byte-layout-value', 'byte-layout-dump'],
-   array['t19-store-little-endian', 't20-network-order', 't21-table-lookup'])
+   array['t19-store-little-endian', 't20-network-order', 't21-table-lookup']),
+  ('m13', 10, 2, 7,
+   array['interrupt-types', 'interrupt-vector-table', 'interrupt-sequence', 'pic-8259'],
+   array['ivt-calc-1', 'ivt-calc-2', 'ivt-calc-3', 'interrupt-sequence-figure', 'pic-served', 'pic-masked', 'pic-eoi'],
+   array['t22-pic-mask', 't23-ivt-entry', 't24-isr-address'])
 on conflict (module_id) do nothing;
 
 -- Whether the signed-in student has done everything the quiz requires.

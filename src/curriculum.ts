@@ -970,4 +970,148 @@ INT 21h
       },
     ],
   },
+  {
+    id: 'stage-9',
+    title: 'Stage 9: Interrupts and the 8259 PIC',
+    summary: 'Program the interrupt controller\'s mask, write an interrupt vector, and find where an ISR lives.',
+    tasks: [
+      {
+        id: 'task-22-pic-mask',
+        title: 'Task 22 - Mask the PIC',
+        scenario: 'A data logger only needs the timer (IR0) and the keyboard (IR1); every other device must be kept from interrupting.',
+        assignments: [
+          {
+            id: 't22-pic-mask',
+            title: 'Mask the PIC',
+            concept:
+              'The 8259\'s Interrupt Mask Register is written through port 21h. Each bit stands for one IR line, and ' +
+              'a 1 bit masks (blocks) that line; a 0 bit lets it through.',
+            starterSource: `; Task 22: Mask the PIC
+; Write the 8259's mask register (port 21h) so that ONLY IR0 (timer) and
+; IR1 (keyboard) can interrupt. Remember: a 1 bit MASKS a line.
+
+; TODO: MOV AL, <mask> / OUT 21h, AL
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              {
+                name: 'Port 21h (IMR) = FCh: IR0 and IR1 enabled',
+                explain: 'A 1 bit masks its line: IR0 and IR1 need 0 bits, IR2-IR7 need 1 bits.',
+                expect: { ports: [{ port: 0x21, equals: 0xfc }] },
+              },
+            ],
+            sourceRules: {
+              mustMatch: [{ pattern: '\\bOUT\\s+21H\\s*,\\s*AL\\b', message: 'Write the mask with OUT 21h, AL' }],
+            },
+            hints: [
+              'Write the eight mask bits from IR7 down to IR0. IR0 and IR1 must be 0 (enabled), all the others 1 (masked).',
+              'Learn → Support Chips → The 8259 Programmable Interrupt Controller: MOV AL, 0FEh / OUT 21h, AL leaves only IR0.',
+              '1111 1100b → `MOV AL, ___h` / `OUT 21h, AL`',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-23-ivt-entry',
+        title: 'Task 23 - Install a Vector',
+        scenario: 'A new driver\'s interrupt routine sits at 2000h:1000h. INT 60h has to lead there.',
+        assignments: [
+          {
+            id: 't23-ivt-entry',
+            title: 'Install a Vector',
+            concept:
+              'The vector for INT n is the 4 bytes at 4·n: first the IP word, then the CS word, each low byte first. ' +
+              'In this simulator program data starts at 0400h, so the table at 0000h-03FFh is free to write.',
+            starterSource: `; Task 23: Install a vector
+; Write the interrupt vector for INT 60h so that it points to 2000h:1000h
+; (CS = 2000h, IP = 1000h). Work out where entry 60h starts (4 x n).
+
+; TODO: write the IP word, then the CS word, of entry 60h
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              {
+                name: '0180h-0183h = 00 10 00 20 (IP = 1000h, CS = 2000h)',
+                explain: 'Entry 60h starts at 60h x 4 = 180h. The IP word comes first, then CS.',
+                expect: {
+                  memory: [
+                    { address: 0x180, equals: 0x00 }, { address: 0x181, equals: 0x10 },
+                    { address: 0x182, equals: 0x00 }, { address: 0x183, equals: 0x20 },
+                  ],
+                },
+              },
+            ],
+            hints: [
+              'Entry n starts at 4·n. Store the IP word there and the CS word two bytes later.',
+              'Learn → The Interrupt Vector Table: INT 5 has IP at 00014h and CS at 00016h.',
+              '`MOV WORD PTR [___h], 1000h` / `MOV WORD PTR [___h], 2000h`',
+            ],
+          },
+        ],
+      },
+      {
+        id: 'task-24-isr-address',
+        title: 'Task 24 - Where Is the ISR?',
+        scenario: 'A debugger shows an interrupt type; the engineer needs the 20-bit address of the routine that will run.',
+        assignments: [
+          {
+            id: 't24-isr-address',
+            title: 'Where Is the ISR?',
+            concept:
+              'Read IP and CS from the vector at 4·n. The physical address CS × 10h + IP has 20 bits, so it needs two ' +
+              'registers: shift CS left by 4 across DX:AX (the top 4 bits of CS end up in DX), then add IP with a carry ' +
+              'into DX -- the same idea as the 32-bit arithmetic of Module 9.',
+            starterSource: `; Task 24: Where is the ISR?
+; INT_TYPE holds an interrupt type n. Read the vector at 4 x n (IP word,
+; then CS word) and put the 20-bit address CS x 10h + IP in DX:AX
+; (DX = the upper bits, AX = the lower 16 bits).
+INT_TYPE DB 05h
+
+MOV AL, [INT_TYPE]
+
+; TODO: BX = 4 x n, read IP and CS, compute CS x 10h + IP into DX:AX
+
+MOV DI, AX   ; capture AX for grading (the exit code overwrites AH) -- provided
+
+MOV AH, 4Ch
+INT 21h
+`,
+            testCases: [
+              {
+                name: 'n = 05h, vector 2000h:1000h → DX:AX = 0002h:1000h',
+                data: [{ label: 'INT_TYPE', bytes: [0x05] }, { address: 0x14, bytes: [0x00, 0x10, 0x00, 0x20] }],
+                expect: { regs: { DX: 0x0002, DI: 0x1000 } },
+              },
+              {
+                name: 'n = 08h, vector F000h:FEA5h → DX:AX = 000Fh:FEA5h',
+                data: [{ label: 'INT_TYPE', bytes: [0x08] }, { address: 0x20, bytes: [0xa5, 0xfe, 0x00, 0xf0] }],
+                expect: { regs: { DX: 0x000f, DI: 0xfea5 } },
+              },
+              {
+                name: 'n = 21h, vector 0B00h:0010h → DX:AX = 0000h:B010h',
+                explain: 'CS must be shifted left by 4 (× 10h) before IP is added.',
+                data: [{ label: 'INT_TYPE', bytes: [0x21] }, { address: 0x84, bytes: [0x10, 0x00, 0x00, 0x0b] }],
+                expect: { regs: { DX: 0x0000, DI: 0xb010 } },
+              },
+              {
+                name: 'n = 60h, vector 1F00h:F000h → DX:AX = 0002h:E000h (carry into DX)',
+                explain: 'F000h + F000h carries out of AX: add IP with ADD, then ADC DX, 0.',
+                data: [{ label: 'INT_TYPE', bytes: [0x60] }, { address: 0x180, bytes: [0x00, 0xf0, 0x00, 0x1f] }],
+                expect: { regs: { DX: 0x0002, DI: 0xe000 } },
+              },
+            ],
+            hints: [
+              'BX = n × 4 (two SHL BX, 1). Then AX = [BX] is IP and DX = [BX+2] is CS. Split CS × 10h into a high part (CS >> 12) and a low part (CS << 4).',
+              'Task 10 (ADD then ADC) carries from the low word into the high word the same way.',
+              '`MOV BL, AL` / `MOV BH, 0` / `SHL BX, 1` / `SHL BX, 1` / `MOV SI, [BX+2]` / `MOV DX, SI` / `MOV CL, 12` / `SHR DX, CL` / `MOV CL, 4` / `SHL SI, CL` / `MOV AX, [BX]` / `ADD AX, SI` / `___ DX, 0`',
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]

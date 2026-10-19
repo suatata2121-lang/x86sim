@@ -15,6 +15,7 @@ import { MoveItView } from './MoveItView'
 import { ArchCompareView, BankSelectorView, ChipCheckView } from './MemoryBusViews'
 import { BsrBuilder, ControlWordBuilder, PpiBlockDiagram } from './Ppi8255Views'
 import { Dma8257Diagram } from './Dma8257View'
+import { InterruptTimeline, IvtCalculator, IvtDiagram, Pic8259Diagram, PicPlayground } from './InterruptViews'
 import { ByteLayout, EaCalculator, EndianFigure, SegmentCalculator, SegmentMapDiagram, SegmentPractice } from './SegmentViews'
 import type { ConceptRef } from '../learningPath'
 
@@ -518,6 +519,9 @@ export function LearnDetail({
         {hwTopic.staticDiagram === 'dma-8257' && <Dma8257Diagram />}
         {hwTopic.staticDiagram === 'segment-map' && <SegmentMapDiagram />}
         {hwTopic.staticDiagram === 'endian' && <EndianFigure />}
+        {hwTopic.staticDiagram === 'interrupt-timeline' && <InterruptTimeline />}
+        {hwTopic.staticDiagram === 'ivt' && <IvtDiagram />}
+        {hwTopic.staticDiagram === 'pic-8259' && <Pic8259Diagram />}
         {hwTopic.figure && (
           <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
         )}
@@ -536,6 +540,8 @@ export function LearnDetail({
         )}
         {hwTopic.interactive === 'ea-calc' && <EaCalculator done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'byte-layout' && <ByteLayout done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'ivt-calc' && <IvtCalculator done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'pic-playground' && <PicPlayground done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">
