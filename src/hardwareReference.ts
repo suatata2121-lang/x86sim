@@ -26,7 +26,7 @@ export interface HardwareTopic {
   // A purely illustrative diagram for topics with nothing to actually step
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
-  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255' | 'dma-8257'
+  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255' | 'dma-8257' | 'segment-map' | 'endian'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
   // A purpose-built interactive view instead of a Cpu demo: 'fde' is the
@@ -34,8 +34,12 @@ export interface HardwareTopic {
   // ALU explorer (AluView), 'move-it' the MOV/XCHG challenges (MoveItView),
   // 'bank-selector' the BHE̅/A0 bank view and 'chip-check' the "which chip
   // answers?" questions (MemoryBusViews), 'ppi-control-word' and 'ppi-bsr'
-  // the 8255 word builders (Ppi8255Views).
-  interactive?: 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check' | 'ppi-control-word' | 'ppi-bsr'
+  // the 8255 word builders (Ppi8255Views), 'segment-calc' the segment
+  // calculator and practice, 'ea-calc' the effective address calculator and
+  // 'byte-layout' the endianness view (SegmentViews).
+  interactive?:
+    | 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check' | 'ppi-control-word' | 'ppi-bsr'
+    | 'segment-calc' | 'ea-calc' | 'byte-layout'
   // A step-through figure built from data (components/FigureStepper.tsx).
   figure?: FigureSpec
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
@@ -661,6 +665,123 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
           'See the Directives & Program Structure category in Instruction Reference for exactly which MASM/TASM ' +
             'segment boilerplate is accepted.',
         ],
+      },
+      {
+        id: 'program-segments',
+        title: 'Program Segments: Logical and Physical Addresses',
+        summary: 'How a 16-bit segment register and a 16-bit offset name one byte of a 1 MB memory.',
+        content: [
+          'A segment is a block of memory of up to 64 KB used for code, data or the stack. The 8086 has four ' +
+            'segment registers in the BIU: CS (code), DS (data), SS (stack) and ES (extra). A segment register holds ' +
+            'the upper 16 bits of the segment\'s 20-bit start address, so a segment always starts at a multiple of ' +
+            '16. Segments let 16-bit registers reach a 1 MB (20-bit) memory.',
+          {
+            kind: 'table',
+            head: ['Term', 'Meaning'],
+            rows: [
+              ['Physical address', 'The 20-bit address put on the address bus, 00000h–FFFFFh'],
+              ['Segment address', 'The 16-bit value in a segment register'],
+              ['Offset address', 'A location inside the 64 KB segment, 0000h–FFFFh'],
+              ['Logical address', 'segment:offset, e.g. CS:IP'],
+            ],
+          },
+          'Physical address = segment × 10h + offset: shift the segment left by 4 bits (one hex digit) and add the ' +
+            'offset. A segment spans segment × 10h (its lower range) to segment × 10h + FFFFh (its upper range).',
+          {
+            kind: 'table',
+            head: ['Given', 'Logical', 'Physical', 'Segment range'],
+            rows: [
+              ['DS = 5000h, offset 1234h', '5000:1234', '51234h', '50000h–5FFFFh'],
+              ['CS = 1980h, IP = 78FEh', '1980:78FE', '19800h + 78FEh = 210FEh', '19800h–297FFh'],
+              ['CS = 24F6h, IP = 634Ah', '24F6:634A', '2B2AAh', '24F60h–34F5Fh'],
+              ['DS = 7FA2h, offset 438Eh', '7FA2:438E', '83DAEh', '7FA20h–8FA1Fh'],
+              ['SS = 2000h, SP = FFFEh', '2000:FFFE', '2FFFEh', '20000h–2FFFFh'],
+            ],
+          },
+          'Segments can overlap. DS = 1000h with offset 0010h and ES = 1001h with offset 0000h both give 10010h. ' +
+            'Many segment:offset pairs name the same byte, so careless code can overwrite data through another ' +
+            'segment. Example: S1 = 2000h, O1 = 0500h → 20500h; with S2 = 1FF0h the same byte is at ' +
+            'O2 = 20500h − 1FF00h = 0600h.',
+          'Wrap-around: the 8086 has only 20 address lines, so a sum above FFFFFh loses its bit 20. FFFF:0010 → ' +
+            '100000h → wraps to 00000h. F800:9000 → 101000h → exceeds 1 MB → wraps to 01000h.',
+          'The map below shows four segments, each a 64 KB block. Try the calculator with the examples above, then ' +
+            'answer five practice questions.',
+        ],
+        staticDiagram: 'segment-map',
+        interactive: 'segment-calc',
+        notes: [
+          'This simulator\'s own memory is flat (see "Segmented Addressing vs This Simulator\'s Flat Model"), so ' +
+            'these addresses are worked out here, not in the editor.',
+        ],
+      },
+      {
+        id: 'addressing-modes',
+        title: 'Addressing Modes and Default Segments',
+        summary: 'The ways an instruction can name its operand, and which segment register a memory operand uses.',
+        content: [
+          'An addressing mode is the format used to specify an operand. The offset a memory operand produces is ' +
+            'its effective address (EA).',
+          {
+            kind: 'table',
+            head: ['Mode', 'Example', 'Where the operand is'],
+            rows: [
+              ['Immediate', 'MOV CL, 15h / MOV BX, 1000h', 'In the instruction itself'],
+              ['Register', 'MOV CL, DL / MOV AX, BX', 'In a register'],
+              ['Direct', 'MOV CL, [1000h] / MOV CX, [1000h] (CL ← 1000h, CH ← 1001h)', 'Memory, address in the instruction'],
+              ['Implied', 'STC, CLD', 'Fixed by the instruction'],
+              ['Register indirect', 'MOV CL, [BX] / MOV [BP], CL (stack segment)', 'Memory, address in BX, BP, SI or DI'],
+              ['Register relative', 'MOV CL, [BX+4]', 'Base or index register + 8/16-bit displacement'],
+              ['Based indexed', 'MOV CL, [BX+SI]', 'Base (BX/BP) + index (SI/DI)'],
+              ['Based relative plus indexed', 'MOV CL, [BX+SI+4]', 'Base + index + displacement'],
+            ],
+          },
+          'Only BX or BP can be the base and only SI or DI the index: never two bases ([BX+BP]) or two indexes ' +
+            '([SI+DI]), and never AX, CX or DX inside the brackets.',
+          {
+            kind: 'table',
+            head: ['Segment', 'Default for offset register(s)'],
+            rows: [
+              ['CS', 'IP'],
+              ['DS', 'BX, SI, DI, direct addresses'],
+              ['SS', 'SP, BP (any operand containing BP)'],
+              ['ES', 'DI in string instructions (destination)'],
+            ],
+          },
+          'A segment override prefix forces another segment. MOV AL, [BX] uses DS:BX; MOV AL, ES:[BX] uses ES:BX. ' +
+            'MOV AX, [BP] uses SS:BP; MOV AX, DS:[BP] uses DS:BP.',
+          'Example: DS = 2000h, BX = 0020h, SI = 0010h. MOV AX, [BX+SI] has EA = 0030h and reads physical address ' +
+            '20030h. With 78h at 2000:0030 and 56h at 2000:0031, AX = 5678h.',
+          'Run the four presets in the calculator below, then try your own operands -- including the invalid ones.',
+        ],
+        interactive: 'ea-calc',
+        notes: [
+          'The editor\'s assembler rejects segment overrides such as ES:[BX] with an explanation: memory is flat in ' +
+            'this simulator, so there is no segment to select.',
+        ],
+      },
+      {
+        id: 'byte-order',
+        title: 'Little Endian vs Big Endian',
+        summary: 'Which byte of a multi-byte value goes to the lower address.',
+        content: [
+          'Little endian (Intel x86): the low byte goes to the lower address. 1234h is stored as [0] = 34h, ' +
+            '[1] = 12h. It is easy to read a value starting from its least significant byte, which is common in ' +
+            'low-level and embedded code; but it is less natural for humans and needs conversion when exchanging ' +
+            'data with big-endian systems.',
+          'Big endian (Motorola 68000, network byte order): the high byte goes to the lower address. 1234h is ' +
+            'stored as [0] = 12h, [1] = 34h. It matches how we write numbers and is the standard in network ' +
+            'protocols, but it is awkward for some low-level operations.',
+          'Why it matters: data exchanged between systems must be converted. Some file formats fix the byte order ' +
+            '(WAV and BMP are little-endian). IP and TCP use big-endian, so little-endian machines convert before ' +
+            'sending.',
+          'Examples: DX = ABCDh is stored CD AB. 89ABCDEFh is stored EF CD AB 89. The dump 78 56 34 12 is 12345678h ' +
+            'read as little-endian, 78563412h read as big-endian.',
+          'Network example: 12345678h on an x86 is stored 78 56 34 12; sent in network order it travels ' +
+            '12 34 56 78; a little-endian receiver that does not convert reads 78563412h. A standard network byte ' +
+            'order lets machines of either kind agree on multi-byte values such as IP addresses and port numbers.',
+        ],
+        staticDiagram: 'endian',
+        interactive: 'byte-layout',
       },
     ],
   },

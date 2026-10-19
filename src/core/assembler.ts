@@ -67,6 +67,8 @@ const MNEMONIC_ALIASES: Partial<Record<string, Mnemonic>> = {
 }
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+// ES:[BX], WORD PTR DS:[BP+2], [SS:BP]: a segment register and a colon before the address.
+const SEGMENT_OVERRIDE_RE = /^(?:(?:BYTE|WORD)\s+PTR\s+)?\[?\s*(?:CS|DS|ES|SS)\s*:/i
 
 function isRegister(token: string): token is RegName {
   return (REGISTERS as string[]).includes(token.toUpperCase())
@@ -455,6 +457,19 @@ function validateOperands(
   for (let i = 0; i < ops.length; i++) {
     const op = ops[i]
     const entry = opEntries[i]
+    // Memory is flat here, so a segment prefix has nothing to select; say so
+    // instead of "invalid syntax" (the Learn page shows where it would point).
+    if (op.kind === 'label' && SEGMENT_OVERRIDE_RE.test(op.name)) {
+      errors.push({
+        line: lineNo,
+        message:
+          'Segment overrides like ES:[BX] are not simulated here: memory is flat. Use the Effective Address ' +
+          'Calculator (Segments, Addressing Modes and Byte Order) to see where they point.',
+        column: entry.offset + 1,
+        length: entry.text.length,
+      })
+      return false
+    }
     if (!spec[i].includes(op.kind)) {
       const expected = spec[i].map((k) => OPERAND_KIND_LABEL[k]).join(' or ')
       errors.push({

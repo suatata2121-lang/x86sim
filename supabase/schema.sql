@@ -390,7 +390,12 @@ values
   ('m11', 10, 3, 7,
    array['ppi-8255-overview', 'ppi-8255-control-word', 'ppi-8255-bsr'],
    array['ppi-cw-1', 'ppi-cw-2', 'ppi-cw-3', 'ppi-bsr-set', 'ppi-bsr-reset'],
-   array['t16-ppi-config', 't17-switch-count', 't18-bsr-alarm'])
+   array['t16-ppi-config', 't17-switch-count', 't18-bsr-alarm']),
+  ('m12', 10, 3, 7,
+   array['program-segments', 'addressing-modes', 'byte-order'],
+   array['seg-practice-1', 'seg-practice-2', 'seg-practice-3', 'seg-practice-4', 'seg-practice-5',
+         'ea-preset-1', 'ea-preset-2', 'ea-preset-3', 'ea-preset-4', 'byte-layout-value', 'byte-layout-dump'],
+   array['t19-store-little-endian', 't20-network-order', 't21-table-lookup'])
 on conflict (module_id) do nothing;
 
 -- Whether the signed-in student has done everything the quiz requires.
