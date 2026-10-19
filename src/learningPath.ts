@@ -159,9 +159,21 @@ export const LEARNING_PATH: LearningModule[] = [
     title: 'Memory and the Bus',
     summary: 'Follow data as it travels between the CPU and memory over the address and data buses.',
     requires: ['m1'],
-    concepts: [hw('bus-types'), hw('address-demux'), hw('segmented-addressing')],
+    concepts: [
+      hw('von-neumann-harvard'), hw('bus-types'), hw('address-demux'), hw('segmented-addressing'),
+      hw('memory-banking'), hw('memory-interfacing'),
+    ],
     observe: { examples: ['array-sum', 'base-index'], panel: 'memory' },
     assignments: ['t3-snapshot'],
+    interactives: [
+      {
+        id: 'bank-selector',
+        label: 'Try: all four cases in the Bank Selector ({n}/4)',
+        topic: 'memory-banking',
+        parts: ['bank-even-byte', 'bank-odd-byte', 'bank-even-word', 'bank-odd-word'],
+      },
+      { id: 'memory-interfacing-figure', label: 'Step: the memory interfacing figure to the end', topic: 'memory-interfacing' },
+    ],
   },
   {
     id: 'm3',

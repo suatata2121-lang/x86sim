@@ -12,6 +12,7 @@ import { FigureStepper } from './FigureStepper'
 import { BiuEuView } from './BiuEuView'
 import { NumberVisual } from './NumberVisual'
 import { MoveItView } from './MoveItView'
+import { ArchCompareView, BankSelectorView, ChipCheckView } from './MemoryBusViews'
 import type { ConceptRef } from '../learningPath'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -509,10 +510,15 @@ export function LearnDetail({
         )}
         {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
         {hwTopic.timing && <TimingDiagramView />}
-        {hwTopic.figure && <FigureStepper spec={hwTopic.figure} />}
+        {hwTopic.staticDiagram === 'von-neumann-harvard' && <ArchCompareView />}
+        {hwTopic.figure && (
+          <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
+        )}
         {hwTopic.interactive === 'fde' && <FetchDecodeExecuteView onFinish={() => onInteractiveDone?.('fde-program')} />}
         {hwTopic.interactive === 'move-it' && <MoveItView solved={interactivesDone} onSolved={onInteractiveDone} />}
         {hwTopic.interactive === 'alu' && <AluView />}
+        {hwTopic.interactive === 'bank-selector' && <BankSelectorView tried={interactivesDone} onTried={onInteractiveDone} />}
+        {hwTopic.interactive === 'chip-check' && <ChipCheckView />}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">
