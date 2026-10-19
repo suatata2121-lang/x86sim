@@ -16,19 +16,25 @@ interface Props {
 
 type Result = { correct: boolean; shown: string }
 
-function QuestionCard({ n, q, answeredBefore, onAnswer, onTryInEditor }: {
+/** One question with its answer box; also used by the placement quiz (#14). */
+export function QuestionCard({ n, q, answeredBefore = false, once = false, onAnswer, onTryInEditor }: {
   n: number
   q: PredictQuestion
-  answeredBefore: boolean
+  answeredBefore?: boolean
+  /** Only the first answer counts (placement): the card locks after Check. */
+  once?: boolean
   onAnswer: (answer: string, correct: boolean) => void
-  onTryInEditor: (code: string) => void
+  onTryInEditor?: (code: string) => void
 }) {
   const [typed, setTyped] = useState('')
   const [result, setResult] = useState<Result | null>(null)
   // A 'run' question's key comes from the simulator, never from the data.
   const expected: PredictValue | null = useMemo(() => (q.kind === 'run' ? predictAnswer(q) : null), [q])
 
+  const locked = once && result !== null
+
   function check(answer: string) {
+    if (locked) return
     if (q.kind === 'run') {
       const correct = checkAnswer(expected as PredictValue, answer)
       setResult({ correct, shown: formatAnswer(expected as PredictValue) })
@@ -62,21 +68,22 @@ function QuestionCard({ n, q, answeredBefore, onAnswer, onTryInEditor }: {
             onChange={(e) => setTyped(e.target.value)}
             placeholder="Your prediction"
             spellCheck={false}
+            disabled={locked}
           />
-          <button type="submit" disabled={!typed.trim()}>Check</button>
-          <button type="button" onClick={() => onTryInEditor(q.code)}>Try it in the editor</button>
+          <button type="submit" disabled={!typed.trim() || locked}>Check</button>
+          {onTryInEditor && <button type="button" onClick={() => onTryInEditor(q.code)}>Try it in the editor</button>}
         </form>
       ) : (
         <div className="mb-options">
           {q.options.map((o) => (
-            <button key={o} onClick={() => check(o)}>{o}</button>
+            <button key={o} onClick={() => check(o)} disabled={locked}>{o}</button>
           ))}
         </div>
       )}
       {result && (
         <p className={result.correct ? 'mb-feedback-right' : 'moveit-error'}>
           {result.correct ? 'Correct.' : 'Not quite.'} The answer is <strong>{result.shown}</strong>.
-          {q.kind === 'run' && !result.correct && ' Try it in the editor and Step through it to see why.'}
+          {q.kind === 'run' && !result.correct && onTryInEditor && ' Try it in the editor and Step through it to see why.'}
         </p>
       )}
     </li>

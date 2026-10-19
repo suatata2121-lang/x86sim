@@ -9,6 +9,13 @@ export interface Profile {
   student_no: string
   class_group: string
   role: 'student' | 'admin'
+  /**
+   * First sign-in (#14). Undefined until schema.sql adds the columns; null
+   * means the tour and placement test haven't been done.
+   */
+  onboarded_at?: string | null
+  placement_score?: number | null
+  placement_credit?: boolean
 }
 
 export interface SignUpFields {
@@ -40,6 +47,8 @@ interface AuthState {
   verifyRecoveryCode(email: string, code: string): Promise<void>
   updatePassword(password: string): Promise<void>
   dismissPasswordRecovery(): void
+  /** Ends the first-sign-in tour; a placement score of 6+ with credit counts Module 0 as done. */
+  completeOnboarding(score: number | null, credit: boolean): Promise<void>
   signOut(): Promise<void>
 }
 
@@ -86,7 +95,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     supabase
       .from('profiles')
-      .select('id, email, full_name, student_no, class_group, role')
+      // '*' so the onboarding columns come along once schema.sql adds them,
+      // without failing (and losing the admin role) before that.
+      .select('*')
       .eq('id', userId)
       .single()
       .then(({ data }) => {
@@ -160,6 +171,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dismissPasswordRecovery() {
       setPasswordRecovery(false)
       setLinkExpired(false)
+    },
+    async completeOnboarding(score, credit) {
+      if (!supabase || !userId) return
+      const values = { onboarded_at: new Date().toISOString(), placement_score: score, placement_credit: credit && (score ?? 0) >= 6 }
+      setProfile((p) => (p ? { ...p, ...values } : p))
+      await supabase.from('profiles').update(values).eq('id', userId)
     },
     async signOut() {
       await requireClient().auth.signOut()
