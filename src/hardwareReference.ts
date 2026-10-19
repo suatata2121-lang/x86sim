@@ -1,10 +1,10 @@
 // Content for the Learn tab's "Hardware" section: how the 8086 actually works
 // internally (CPU Internal Architecture), how it talks to memory (Memory & Bus
 // Architecture), how the stack/call mechanism works (Stack & Call Mechanism),
-// and how it talks to the outside world (I/O Ports & Interrupts). A later
-// "Support Chips" category documents the classic 8086 support-chip set
-// (8284/8282/8283/8288/8259/8253/8254/8255/8251/8237) as static reference --
-// this simulator doesn't model those chips, so they carry no demo.
+// and how it talks to the outside world (I/O Ports & Interrupts). The
+// "Support Chips" category covers the 8255 PPI, which the simulator models
+// at ports 80h-83h (core/ppi8255.ts); the rest of the classic support-chip
+// set (8284/8282/8283/8288/8259/8253/8254/8251/8237) is not simulated.
 //
 // Each demo's `source` is a small, self-contained program run in its own Cpu
 // instance by HardwarePlayground (components/HardwarePlayground.tsx) -- fully
@@ -25,15 +25,16 @@ export interface HardwareTopic {
   // A purely illustrative diagram for topics with nothing to actually step
   // through in this simulator (e.g. segment:offset math this simulator never
   // performs) -- rendered instead of a demo, never alongside one.
-  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard'
+  staticDiagram?: 'segmented-addressing' | 'von-neumann-harvard' | 'ppi-8255'
   // An interactive bus-cycle timing diagram (components/TimingDiagramView.tsx).
   timing?: boolean
   // A purpose-built interactive view instead of a Cpu demo: 'fde' is the
   // fetch-decode-execute stepper (FetchDecodeExecuteView), 'alu' is the live
   // ALU explorer (AluView), 'move-it' the MOV/XCHG challenges (MoveItView),
   // 'bank-selector' the BHE̅/A0 bank view and 'chip-check' the "which chip
-  // answers?" questions (MemoryBusViews).
-  interactive?: 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check'
+  // answers?" questions (MemoryBusViews), 'ppi-control-word' and 'ppi-bsr'
+  // the 8255 word builders (Ppi8255Views).
+  interactive?: 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check' | 'ppi-control-word' | 'ppi-bsr'
   // A step-through figure built from data (components/FigureStepper.tsx).
   figure?: FigureSpec
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
@@ -854,6 +855,129 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'PIC, and interrupts whatever the CPU happened to be doing. This simulator has no asynchronous ' +
             'events, so every interrupt here is one your own code triggered on purpose with INT.',
         ],
+      },
+    ],
+  },
+  {
+    id: 'support-chips',
+    title: 'Support Chips',
+    topics: [
+      {
+        id: 'ppi-8255-overview',
+        title: 'The 8255 PPI: Ports and Block Diagram',
+        summary: 'A programmable chip that gives the 8086 three 8-bit I/O ports.',
+        content: [
+          'The 8255 is a programmable peripheral interface designed for the 8085/8086 to add I/O lines. It has ' +
+            'three 8-bit bidirectional ports (A, B, C). Port C can be used as two 4-bit halves. It has three I/O ' +
+            'modes -- Mode 0 simple I/O, Mode 1 strobed (handshake) I/O, Mode 2 bidirectional handshake I/O -- and ' +
+            'a Bit Set/Reset (BSR) mode that changes a single bit of Port C.',
+          'Inside, the data bus buffer connects the chip to D7–D0, and the read/write logic decodes RD̅, WR̅, A1, ' +
+            'A0, RESET and CS̅. Group A control drives Port A and PC7–PC4; Group B control drives Port B and PC3–PC0.',
+          'A1 and A0 pick one of four registers. In this simulator the 8255 is wired at ports 80h–83h:',
+          {
+            kind: 'table',
+            head: ['CS̅', 'A1', 'A0', 'Selected', 'Port (this simulator)'],
+            rows: [
+              ['0', '0', '0', 'Port A', '80h'],
+              ['0', '0', '1', 'Port B', '81h'],
+              ['0', '1', '0', 'Port C', '82h'],
+              ['0', '1', '1', 'Control register', '83h'],
+              ['1', 'x', 'x', '8255 not selected', '–'],
+            ],
+          },
+          'RESET puts all ports into input mode (control word 9Bh). The control register is write-only: reading ' +
+            'port 83h gives FFh here.',
+          'In the lecture slides the 8255 sits at 8000h–8003h and is reached through DX (MOV DX, 8003h / OUT DX, AL); ' +
+            'the address depends only on how the chip-select is decoded on the board.',
+        ],
+        staticDiagram: 'ppi-8255',
+        notes: [
+          'Open the Devices panel to see the simulated 8255: switches on its input ports, LEDs on its output ports ' +
+            'and a BCD 7-segment digit on PB3–PB0, like the 4511 on the lecture board.',
+        ],
+      },
+      {
+        id: 'ppi-8255-control-word',
+        title: '8255 Control Word and Modes',
+        summary: 'One byte written to the control register sets the direction and mode of every port.',
+        content: [
+          'Writing a byte with D7 = 1 to the control register sets the I/O mode. Every output latch is cleared to 0 ' +
+            'when a new mode is set.',
+          {
+            kind: 'table',
+            head: ['Bit', 'Meaning'],
+            rows: [
+              ['D7', '1 = I/O mode (0 = BSR word, see the next topic)'],
+              ['D6 D5', 'Port A mode: 00 = mode 0, 01 = mode 1, 1x = mode 2'],
+              ['D4', 'Port A: 1 = input, 0 = output'],
+              ['D3', 'Port C upper (PC7–PC4): 1 = input, 0 = output'],
+              ['D2', 'Port B mode: 0 = mode 0, 1 = mode 1'],
+              ['D1', 'Port B: 1 = input, 0 = output'],
+              ['D0', 'Port C lower (PC3–PC0): 1 = input, 0 = output'],
+            ],
+          },
+          {
+            kind: 'table',
+            head: ['Port', 'Mode 0', 'Mode 1', 'Mode 2', 'BSR'],
+            rows: [
+              ['A', 'yes', 'yes', 'yes', 'no'],
+              ['B', 'yes', 'yes', 'no', 'no'],
+              ['C', 'yes', 'handshake lines', 'handshake lines', 'yes'],
+            ],
+          },
+          'Mode 0: outputs are latched, inputs are not, no interrupts. Mode 1: Port A and Port B each use three ' +
+            'Port C lines for the handshake; inputs and outputs are latched and interrupts are supported. Mode 2: ' +
+            'Port A only, bidirectional, using five Port C lines; interrupts are supported.',
+          'Example 1 -- Port A input (mode 1), Port B output (mode 0), C upper input, C lower output: ' +
+            '1 01 1 1 0 0 0 = B8h.',
+          { kind: 'code', text: 'MOV AL, 0B8h\nOUT 83h, AL' },
+          'Example 2 -- A output (mode 0), B input (mode 0), C upper output, C lower input: 83h. Then send 55h to ' +
+            'Port A, read Port B and set PC3 with a BSR word:',
+          {
+            kind: 'code',
+            text:
+              'MOV AL, 83h     ; 1000 0011\n' +
+              'OUT 83h, AL\n' +
+              'MOV AL, 55h\n' +
+              'OUT 80h, AL     ; Port A = 0101 0101\n' +
+              'IN  AL, 81h     ; read Port B\n' +
+              'MOV AL, 07h     ; BSR: 0 000 011 1 -> set PC3\n' +
+              'OUT 83h, AL',
+          },
+          'Build a few control words below, then check them against the tables: click the bits, or type a value ' +
+            'such as 83h to see what it configures.',
+        ],
+        interactive: 'ppi-control-word',
+        notes: [
+          'This simulator only runs Mode 0. A Mode 1 or Mode 2 word is accepted and decoded, but the ports keep ' +
+            'behaving as in Mode 0 and the Devices panel says so.',
+        ],
+      },
+      {
+        id: 'ppi-8255-bsr',
+        title: 'Bit Set/Reset (BSR) Mode',
+        summary: 'Turn one Port C bit on or off without touching the other seven.',
+        content: [
+          'A control word with D7 = 0 is a Bit Set/Reset word. It does not change any port\'s mode; it sets or ' +
+            'resets exactly one bit of Port C. D6–D4 are don\'t care, D3–D1 select the bit (000 = PC0 … 111 = PC7) ' +
+            'and D0 says what to do with it: 1 = set, 0 = reset.',
+          {
+            kind: 'table',
+            head: ['Word', 'Binary', 'Effect'],
+            rows: [
+              ['07h', '0 000 011 1', 'set PC3'],
+              ['06h', '0 000 011 0', 'reset PC3'],
+              ['0Bh', '0 000 101 1', 'set PC5'],
+              ['0Fh', '0 000 111 1', 'set PC7'],
+            ],
+          },
+          'Writing Port C directly (OUT 82h, AL) replaces all eight bits at once. A BSR word changes one bit, so ' +
+            'separate devices on Port C -- an alarm LED here, a relay there -- can be switched without reading ' +
+            'Port C first.',
+          'Build BSR words below and send them: watch only the selected Port C bit change.',
+        ],
+        interactive: 'ppi-bsr',
+        notes: ['BSR words only touch Port C. Ports A and B have no bit set/reset.'],
       },
     ],
   },

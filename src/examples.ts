@@ -311,6 +311,20 @@ RET
 `,
   },
   {
+    id: 'ppi-switches',
+    title: '8255: switches to display',
+    description: 'Programs the 8255 (ports 80h-83h) with Port A as input and Port B as output, then keeps copying the low four switches to the BCD display. Use "Animate" and flip the switches; "Stop" ends it.',
+    source: `; 8255 at 80h-83h: Port A = switches (input), Port B = display (output)
+MOV AL, 90h      ; 1 00 1 0 0 0 0: I/O mode, A in (mode 0), B out, C out
+OUT 83h, AL
+again:
+IN  AL, 80h      ; read the switches
+AND AL, 0Fh      ; keep the low four
+OUT 81h, AL      ; show them on the 7-segment (BCD)
+JMP again
+`,
+  },
+  {
     id: 'string-copy',
     title: 'String Copy (REP MOVSB)',
     description: 'Copies a string into a separate buffer with REP MOVSB, then prints the copy to prove the bytes were actually moved.',

@@ -13,6 +13,7 @@ import { BiuEuView } from './BiuEuView'
 import { NumberVisual } from './NumberVisual'
 import { MoveItView } from './MoveItView'
 import { ArchCompareView, BankSelectorView, ChipCheckView } from './MemoryBusViews'
+import { BsrBuilder, ControlWordBuilder, PpiBlockDiagram } from './Ppi8255Views'
 import type { ConceptRef } from '../learningPath'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
@@ -511,6 +512,7 @@ export function LearnDetail({
         {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
         {hwTopic.timing && <TimingDiagramView />}
         {hwTopic.staticDiagram === 'von-neumann-harvard' && <ArchCompareView />}
+        {hwTopic.staticDiagram === 'ppi-8255' && <PpiBlockDiagram />}
         {hwTopic.figure && (
           <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
         )}
@@ -519,6 +521,8 @@ export function LearnDetail({
         {hwTopic.interactive === 'alu' && <AluView />}
         {hwTopic.interactive === 'bank-selector' && <BankSelectorView tried={interactivesDone} onTried={onInteractiveDone} />}
         {hwTopic.interactive === 'chip-check' && <ChipCheckView />}
+        {hwTopic.interactive === 'ppi-control-word' && <ControlWordBuilder done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'ppi-bsr' && <BsrBuilder done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">
