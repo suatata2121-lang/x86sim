@@ -375,6 +375,58 @@ drop policy if exists "predictions: insert own" on public.predictions;
 create policy "predictions: insert own" on public.predictions
   for insert with check (user_id = auth.uid());
 
+-- When each learning-path module opens and is due (#13). A row is for every
+-- group (class_group null), one group, or one student (user_id: an
+-- extension that overrides the group's dates). Students read the rows that
+-- can apply to anyone plus their own; only the admin writes.
+create table if not exists public.module_schedule (
+  id          bigint generated always as identity primary key,
+  module_id   text not null,
+  class_group text,
+  user_id     uuid references public.profiles (id) on delete cascade,
+  opens_at    timestamptz,
+  due_at      timestamptz,
+  updated_at  timestamptz not null default now()
+);
+
+create unique index if not exists module_schedule_target_idx
+  on public.module_schedule (module_id, coalesce(class_group, ''), coalesce(user_id::text, ''));
+
+alter table public.module_schedule enable row level security;
+
+drop policy if exists "schedule: read shared, own or admin" on public.module_schedule;
+create policy "schedule: read shared, own or admin" on public.module_schedule
+  for select using (user_id is null or user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "schedule: admin writes" on public.module_schedule;
+create policy "schedule: admin writes" on public.module_schedule
+  for all using (public.is_admin()) with check (public.is_admin());
+
+-- The instructor's notes under a student's test run (#13). The student reads
+-- the ones on their own attempts; nobody else's.
+create table if not exists public.attempt_comments (
+  id          bigint generated always as identity primary key,
+  attempt_id  bigint not null references public.assignment_attempts (id) on delete cascade,
+  author_id   uuid not null references public.profiles (id) on delete cascade,
+  body        text not null check (char_length(body) between 1 and 2000),
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists attempt_comments_attempt_idx on public.attempt_comments (attempt_id);
+
+alter table public.attempt_comments enable row level security;
+
+drop policy if exists "attempt comments: read own attempts or admin" on public.attempt_comments;
+create policy "attempt comments: read own attempts or admin" on public.attempt_comments
+  for select using (
+    public.is_admin()
+    or exists (select 1 from public.assignment_attempts a where a.id = attempt_id and a.user_id = auth.uid())
+  );
+
+drop policy if exists "attempt comments: admin writes" on public.attempt_comments;
+create policy "attempt comments: admin writes" on public.attempt_comments
+  for all using (public.is_admin()) with check (public.is_admin() and author_id = auth.uid());
+
 -- Per-module quiz rules, read by quiz_draw / quiz_submit so a student can't
 -- change them from the browser. required_* is the module's checklist: the
 -- quiz opens only when every concept is read, every interactive done and
