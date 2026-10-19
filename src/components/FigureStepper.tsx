@@ -8,11 +8,17 @@ export interface FigureStep {
   name: string
   where: string
   state: [string, string][]
+  /** Which of the figure's `blocks` take part in this step. */
+  active?: string[]
+  /** A line under the blocks, e.g. which way the data goes. */
+  flow?: string
 }
 
 export interface FigureSpec {
   title: string
   steps: FigureStep[]
+  /** Optional row of named blocks (CPU, memory, ...) lit up per step. */
+  blocks?: string[]
 }
 
 /** `onFinish` fires once the last step has been shown (learning-path checklists). */
@@ -40,6 +46,17 @@ export function FigureStepper({ spec, onFinish }: { spec: FigureSpec; onFinish?:
           </button>
         ))}
       </div>
+
+      {spec.blocks && (
+        <div className="figure-blocks">
+          <div className="figure-block-row">
+            {spec.blocks.map((b) => (
+              <span key={b} className={`figure-block${current.active?.includes(b) ? ' active' : ''}`}>{b}</span>
+            ))}
+          </div>
+          {current.flow && <div className="figure-flow">{current.flow}</div>}
+        </div>
+      )}
 
       <p className="example-description fde-where">{current.where}</p>
 

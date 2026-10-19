@@ -4042,3 +4042,38 @@ aside .panel {
   border-color: var(--num-carry);
   background: var(--num-carry);
 }
+
+/* Block row of a step-through figure (components/FigureStepper.tsx). */
+.figure-blocks {
+  margin: 0.5rem 0;
+}
+
+.figure-block-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.figure-block {
+  flex: 1 1 6rem;
+  padding: 0.5rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel-alt);
+  color: var(--text-dim);
+  text-align: center;
+  font-weight: 600;
+}
+
+.figure-block.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.figure-flow {
+  margin-top: 0.35rem;
+  color: var(--accent-text);
+  font-size: 0.85rem;
+  text-align: center;
+}
