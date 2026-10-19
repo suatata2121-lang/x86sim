@@ -532,7 +532,12 @@ export interface ModuleProgressRow {
  * unless it is finished, in which case the first unfinished, unlocked module after it.
  * Null once every module is done.
  */
-export function currentModule(rows: Map<string, ModuleProgressRow>, progress: PathProgress): LearningModule | null {
+export function currentModule(
+  rows: Map<string, ModuleProgressRow>,
+  progress: PathProgress,
+  /** Modules the instructor has opened (#13); one not open yet is offered only if nothing else is left. */
+  isOpen: (m: LearningModule) => boolean = () => true,
+): LearningModule | null {
   const done = (m: LearningModule) => isModuleDone(m, progress, rows.get(m.id)?.step)
   let latest: ModuleProgressRow | null = null
   for (const row of rows.values()) {
@@ -540,7 +545,8 @@ export function currentModule(rows: Map<string, ModuleProgressRow>, progress: Pa
   }
   const start = Math.max(0, LEARNING_PATH.findIndex((m) => m.id === latest?.module_id))
   const ordered = [...LEARNING_PATH.slice(start), ...LEARNING_PATH.slice(0, start)]
-  return ordered.find((m) => !done(m) && isUnlocked(m, progress, rows)) ?? null
+  const candidates = ordered.filter((m) => !done(m) && isUnlocked(m, progress, rows))
+  return candidates.find(isOpen) ?? candidates[0] ?? null
 }
 
 /**

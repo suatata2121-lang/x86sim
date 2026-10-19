@@ -4293,3 +4293,66 @@ aside .panel {
 .watch-guide li {
   margin-bottom: 0.25rem;
 }
+
+/* ---- Module dates and instructor feedback on the path card (#13) ---- */
+
+.path-date {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--accent-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.path-date.overdue {
+  border-color: var(--error-text);
+  color: var(--error-text);
+}
+
+.path-feedback {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--warning-border);
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.path-feedback ul {
+  margin: 0.3rem 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.path-feedback-on {
+  font-weight: 600;
+}
+
+/* ---- Schedule, Needs help and comments in the admin panel (AdminSchedule.tsx) ---- */
+
+.schedule-form {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.schedule-form label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.attempt-comments {
+  margin-top: 0.8rem;
+}
+
+.attempt-comments textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.4rem;
+}
+
+.attempt-comment {
+  margin: 0.25rem 0;
+}

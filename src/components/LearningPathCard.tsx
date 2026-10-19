@@ -11,6 +11,7 @@ import {
   type StoredStep,
 } from '../learningPath'
 import { findQuiz } from '../quizzes'
+import { formatDay, isOpenNow, type InstructorComment, type ModuleDates } from '../backend/schedule'
 
 const ASSIGNMENT_TITLES = new Map(
   CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments)).map((a) => [a.id, a.title]),
@@ -55,6 +56,10 @@ interface Props {
   onOpenPredict: (moduleId: string) => void
   onStepOpened: (moduleId: string, step: StepId) => void
   onHide: () => void
+  /** When a module opens and is due for this student (#13); null when it has no schedule. */
+  dates?: (moduleId: string) => ModuleDates | null
+  /** Instructor comments on the student's test runs not dismissed yet. */
+  feedback?: { comments: InstructorComment[]; onDismiss: () => void }
   /** Shown as a single line instead of the card (while the Observe viewer is open). */
   collapsed?: string
   onExpand?: () => void
@@ -68,13 +73,13 @@ interface Props {
 // also shows its checklist (#25): what to read, try, pass, then the quiz.
 export function LearningPathCard({
   rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onStepOpened, onHide,
-  collapsed, onExpand, onCollapse,
+  dates, feedback, collapsed, onExpand, onCollapse,
 }: Props) {
   const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
   // the student moves on; otherwise the card follows currentModule().
   const [viewedId, setViewedId] = useState<string | null>(null)
-  const current = currentModule(rows, progress)
+  const current = currentModule(rows, progress, (m) => isOpenNow(dates?.(m.id) ?? null))
   const module = LEARNING_PATH.find((m) => m.id === viewedId) ?? current
   const doneCount = LEARNING_PATH.filter((m) => isModuleDone(m, progress, rows.get(m.id)?.step)).length
 
@@ -128,6 +133,31 @@ export function LearningPathCard({
     }
   }
 
+  // "Opens on …" before the opening date; then "Due …", or "Overdue" once it
+  // has passed. The lock is soft: an unopened module can still be picked.
+  function dateNote(m: LearningModule, done: boolean): string | null {
+    const d = dates?.(m.id)
+    if (!d) return null
+    if (!isOpenNow(d)) return `Opens on ${formatDay(d.opensAt as string)}`
+    if (d.dueAt && !done) return Date.parse(d.dueAt) < Date.now() ? 'Overdue' : `Due ${formatDay(d.dueAt)}`
+    return null
+  }
+
+  const feedbackBox = feedback && feedback.comments.length > 0 && (
+    <div className="path-feedback">
+      <strong>New feedback from your instructor</strong>
+      <ul>
+        {feedback.comments.map((c) => (
+          <li key={c.id}>
+            {c.assignment_id && <span className="path-feedback-on">{ASSIGNMENT_TITLES.get(c.assignment_id) ?? c.assignment_id}: </span>}
+            {c.body}
+          </li>
+        ))}
+      </ul>
+      <button onClick={feedback.onDismiss}>Got it</button>
+    </div>
+  )
+
   const bar = (
     <div className="path-bar" role="list" aria-label="Learning path modules">
       {LEARNING_PATH.map((m, i) => {
@@ -138,7 +168,9 @@ export function LearningPathCard({
             key={m.id}
             role="listitem"
             className={`path-segment ${locked ? 'locked' : status}${m.id === module?.id ? ' current' : ''}`}
-            title={locked ? `${i}. ${m.title} -- ${lockedTitle(m)}` : `${i}. ${m.title} (${STATUS_LABELS[status]})`}
+            title={locked
+              ? `${i}. ${m.title} -- ${lockedTitle(m)}`
+              : `${i}. ${m.title} (${STATUS_LABELS[status]})${dateNote(m, status === 'done') ? ` · ${dateNote(m, status === 'done')}` : ''}`}
             aria-label={`Module ${i}: ${m.title}, ${locked ? 'locked' : STATUS_LABELS[status]}`}
             aria-disabled={locked}
             onClick={() => pickModule(m)}
@@ -193,10 +225,14 @@ export function LearningPathCard({
         <h3>
           <span className="path-module-no">Module {index}</span> {module.title}
           {moduleDone && <span className="admin-badge passed">Done</span>}
+          {dateNote(module, moduleDone) && (
+            <span className={`path-date${dateNote(module, moduleDone) === 'Overdue' ? ' overdue' : ''}`}>{dateNote(module, moduleDone)}</span>
+          )}
         </h3>
         {onCollapse && <button onClick={onCollapse}>Collapse</button>}
         <button className="modal-close" onClick={onHide} aria-label="Hide learning path" title="Hide (reopen from the header)">×</button>
       </div>
+      {feedbackBox}
       <p className="example-description">{module.summary}</p>
 
       <ol className="path-steps">

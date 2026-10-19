@@ -14,6 +14,7 @@ import { FeedbackDialog } from './components/FeedbackDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { HintLadder } from './components/HintLadder'
 import { useHintLadder } from './backend/hints'
+import { effectiveDates, useInstructorFeedback, useSchedule } from './backend/schedule'
 import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
@@ -115,6 +116,8 @@ export default function App() {
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
   const hintLadder = useHintLadder(userId, activeAssignmentId)
+  const scheduleRows = useSchedule(userId)
+  const instructorFeedback = useInstructorFeedback(userId)
   useStudySession(userId)
   const moduleProgress = useModuleProgress(userId)
   const pathProgress: PathProgress = useMemo(
@@ -784,6 +787,8 @@ export default function App() {
               onOpenAssignment={openAssignment}
               onOpenQuiz={openQuiz}
               onOpenPredict={setPredictModuleId}
+              dates={(moduleId) => effectiveDates(scheduleRows, moduleId, userId, auth.profile?.class_group || null)}
+              feedback={{ comments: instructorFeedback.unread, onDismiss: instructorFeedback.dismiss }}
               onStepOpened={(moduleId, step) => trackActivity('path_step', null, { module: moduleId, step })}
               onHide={() => setPathCardHiddenPersist(true)}
               collapsed={observeModule && observeExample && !observeCardOpen

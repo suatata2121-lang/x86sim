@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../backend/client'
 import { CURRICULUM, type Assignment } from '../curriculum'
 import {
-  LEARNING_PATH, STEPS, checklist, moduleStatus, type ChecklistRow, type LearningModule, type ModuleProgressRow,
+  LEARNING_PATH, STEPS, checklist, isModuleDone, moduleStatus, type ChecklistRow, type LearningModule, type ModuleProgressRow,
   type PathProgress,
 } from '../learningPath'
 import { QUIZZES, type QuizAnswer } from '../quizzes'
 import { PREDICT_QUESTIONS } from '../predictQuestions'
+import { AttemptComments, ExtendForStudent, NeedsHelp, ScheduleTab } from './AdminSchedule'
 import { checklistRowLabel, conceptTitle } from './LearningPathCard'
 import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
 
@@ -244,6 +245,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [group, setGroup] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'report' | 'schedule'>('report')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -371,6 +373,20 @@ export function AdminView({ onClose }: { onClose: () => void }) {
     )
   }
 
+  // For "Needs help": whether a student finished a module, from the same rows the report uses.
+  function moduleDone(studentId: string, moduleId: string, step: string | undefined) {
+    const m = LEARNING_PATH.find((x) => x.id === moduleId)
+    if (!m) return false
+    const passed = new Set(progress.filter((p) => p.user_id === studentId && p.passed).map((p) => p.assignment_id))
+    const pp = progressOf(
+      passed,
+      quizAttempts.filter((q) => q.user_id === studentId),
+      allReads.filter((r) => r.user_id === studentId),
+      allRuns.filter((r) => r.user_id === studentId),
+    )
+    return isModuleDone(m, pp, step as ModuleProgressRow['step'] | undefined)
+  }
+
   if (selected) {
     return (
       <StudentDetail
@@ -389,6 +405,8 @@ export function AdminView({ onClose }: { onClose: () => void }) {
       <div className="admin-header">
         <h2>Lab report</h2>
         <div className="admin-actions no-print">
+          <button className={tab === 'report' ? 'primary' : undefined} onClick={() => setTab('report')}>Report</button>
+          <button className={tab === 'schedule' ? 'primary' : undefined} onClick={() => setTab('schedule')}>Schedule</button>
           <button onClick={() => setReloadKey((k) => k + 1)} disabled={loading}>↻ Refresh</button>
           <button onClick={exportStudents} disabled={loading}>⬇ Students CSV</button>
           <button onClick={exportGradebook} disabled={loading}>⬇ Gradebook CSV</button>
@@ -396,6 +414,17 @@ export function AdminView({ onClose }: { onClose: () => void }) {
           <button onClick={onClose}>Close</button>
         </div>
       </div>
+
+      {tab === 'schedule' ? <ScheduleTab groups={groups} /> : (
+      <>
+      {!loading && (
+        <NeedsHelp
+          students={visible}
+          progress={progress}
+          moduleDone={moduleDone}
+          onOpenStudent={setSelectedId}
+        />
+      )}
 
       <FeedbackInbox />
 
@@ -545,6 +574,8 @@ export function AdminView({ onClose }: { onClose: () => void }) {
             </table>
           </div>
         </>
+      )}
+      </>
       )}
     </div>
   )
@@ -791,6 +822,8 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
         <div><strong>{student.attempt_count}</strong><span>test runs</span></div>
       </div>
 
+      <ExtendForStudent studentId={student.id} group={student.class_group} />
+
       <h3>Learning path</h3>
       <div className="admin-table-wrap">
         <table className="admin-table">
@@ -994,6 +1027,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
               {openAttempt.assembled ? `${openAttempt.passed_count}/${openAttempt.total_count} tests passed` : 'Did not assemble'}
             </p>
             <pre className="admin-code">{openAttempt.source}</pre>
+            <AttemptComments attemptId={openAttempt.id} />
           </div>
         </div>
       )}
