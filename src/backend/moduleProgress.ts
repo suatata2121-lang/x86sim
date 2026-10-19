@@ -7,8 +7,9 @@ import type { DrawnQuestion, QuizResult } from '../quizzes'
 // The signed-in student's position in each learning-path module, kept in
 // module_progress so it follows them across devices, plus the topics they
 // marked as read (concept_reads), the interactive items they finished
-// (interactive_runs) and which module quizzes they passed (quiz_attempts,
-// written only by the quiz_submit function). Updates are applied locally
+// (interactive_runs), the Predict questions they answered (predictions) and
+// which module quizzes they passed (quiz_attempts, written only by the
+// quiz_submit function). Updates are applied locally
 // first; a failed write only costs the server copy, never the UI.
 
 function groupByModule(rows: { module_id: string; id: string }[]) {
@@ -22,6 +23,7 @@ export function useModuleProgress(userId: string | null) {
   const [reads, setReads] = useState<Map<string, Set<string>>>(new Map())
   const [quizzesPassed, setQuizzesPassed] = useState<Set<string>>(new Set())
   const [interactives, setInteractives] = useState<Map<string, Set<string>>>(new Map())
+  const [predicted, setPredicted] = useState<Map<string, Set<string>>>(new Map())
   // The same set, readable synchronously, so a repeat completion writes nothing.
   const interactivesRef = useRef(interactives)
   interactivesRef.current = interactives
@@ -32,6 +34,7 @@ export function useModuleProgress(userId: string | null) {
     setReads(new Map())
     setQuizzesPassed(new Set())
     setInteractives(new Map())
+    setPredicted(new Map())
     setLoaded(false)
     if (!supabase || !userId) return
     let cancelled = false
@@ -40,7 +43,8 @@ export function useModuleProgress(userId: string | null) {
       supabase.from('concept_reads').select('module_id, concept_id').eq('user_id', userId),
       supabase.from('quiz_attempts').select('module_id').eq('user_id', userId).eq('passed', true),
       supabase.from('interactive_runs').select('module_id, item_id').eq('user_id', userId),
-    ]).then(([progress, conceptReads, passes, runs]) => {
+      supabase.from('predictions').select('module_id, question_id').eq('user_id', userId).eq('source', 'predict'),
+    ]).then(([progress, conceptReads, passes, runs, predictions]) => {
       if (cancelled) return
       setRows(new Map(((progress.data ?? []) as ModuleProgressRow[]).map((r) => [r.module_id, r])))
       setReads(groupByModule(((conceptReads.data ?? []) as { module_id: string; concept_id: string }[])
@@ -48,6 +52,10 @@ export function useModuleProgress(userId: string | null) {
       setInteractives(groupByModule(((runs.data ?? []) as { module_id: string; item_id: string }[])
         .map((r) => ({ module_id: r.module_id, id: r.item_id }))))
       setQuizzesPassed(new Set(((passes.data ?? []) as { module_id: string }[]).map((r) => r.module_id)))
+      // An error here (e.g. the predictions table not created yet) just means
+      // nothing answered so far; the step still works and records locally.
+      setPredicted(groupByModule(((predictions.data ?? []) as { module_id: string; question_id: string }[])
+        .map((r) => ({ module_id: r.module_id, id: r.question_id }))))
       setLoaded(true)
     })
     return () => {
@@ -90,6 +98,17 @@ export function useModuleProgress(userId: string | null) {
       .then(() => undefined)
   }, [userId])
 
+  // Every Check on a Predict question is stored, right or wrong, so the
+  // instructor sees which ideas don't stick yet.
+  const recordPrediction = useCallback((moduleId: string, questionId: string, answer: string, correct: boolean) => {
+    setPredicted((prev) => new Map(prev).set(moduleId, new Set(prev.get(moduleId)).add(questionId)))
+    if (!supabase || !userId) return
+    void supabase
+      .from('predictions')
+      .insert({ user_id: userId, module_id: moduleId, question_id: questionId, answer: answer.slice(0, 200), correct })
+      .then(() => undefined)
+  }, [userId])
+
   // Questions and grading are server-side (quiz_draw / quiz_submit in
   // schema.sql) so the answer key never reaches the browser.
   const drawQuiz = useCallback(async (moduleId: string): Promise<DrawnQuestion[]> => {
@@ -109,5 +128,8 @@ export function useModuleProgress(userId: string | null) {
     return result
   }, [])
 
-  return { rows, reads, quizzesPassed, interactives, loaded, setStep, markRead, markInteractive, drawQuiz, submitQuiz }
+  return {
+    rows, reads, quizzesPassed, interactives, predicted, loaded,
+    setStep, markRead, markInteractive, recordPrediction, drawQuiz, submitQuiz,
+  }
 }

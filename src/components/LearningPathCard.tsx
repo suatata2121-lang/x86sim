@@ -6,7 +6,7 @@ import { NUMBERING_REFERENCE } from '../numberingSystems'
 import { INSTRUCTION_REFERENCE } from '../instructionReference'
 import {
   LEARNING_PATH, STEPS, activeSteps, checklist, currentModule, isModuleDone, isUnlocked, moduleStatus, nextStep,
-  quizBlockers, resumeStep, shownSteps, unreadConcepts, type ChecklistRow,
+  quizBlockers, resumeStep, shownSteps, unansweredPredictions, unreadConcepts, type ChecklistRow,
   type AsidePanel, type ConceptRef, type LearningModule, type ModuleProgressRow, type PathProgress, type StepId,
   type StoredStep,
 } from '../learningPath'
@@ -52,6 +52,7 @@ interface Props {
   onOpenExample: (exampleId: string, panel: AsidePanel, watch: string | undefined, moduleId: string) => void
   onOpenAssignment: (assignmentId: string) => void
   onOpenQuiz: (moduleId: string) => void
+  onOpenPredict: (moduleId: string) => void
   onStepOpened: (moduleId: string, step: StepId) => void
   onHide: () => void
   /** Shown as a single line instead of the card (while the Observe viewer is open). */
@@ -66,7 +67,7 @@ interface Props {
 // yet (Module 0's quiz gates the rest, #20). A module that closes with a quiz
 // also shows its checklist (#25): what to read, try, pass, then the quiz.
 export function LearningPathCard({
-  rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onStepOpened, onHide,
+  rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onStepOpened, onHide,
   collapsed, onExpand, onCollapse,
 }: Props) {
   const { completed } = progress
@@ -84,6 +85,7 @@ export function LearningPathCard({
     if (step === 'concept') onOpenConcept(m.concepts[index ?? Math.max(0, m.concepts.indexOf(unreadConcepts(m, progress)[0]))])
     else if (step === 'observe' && m.observe) onOpenExample(m.observe.examples[index ?? 0], m.observe.panel, m.observe.watch, m.id)
     else if (step === 'quiz') onOpenQuiz(m.id)
+    else if (step === 'predict') onOpenPredict(m.id)
     else if (step === 'task') {
       const id = index !== undefined ? m.assignments[index] : m.assignments.find((a) => !completed.has(a)) ?? m.assignments[0]
       onOpenAssignment(id)
@@ -181,8 +183,9 @@ export function LearningPathCard({
   const blockers = module.quiz ? quizBlockers(module, progress) : 0
   const readsLeft = module.quiz ? unreadConcepts(module, progress).length : 0
   const lockedNote = `${(module.quiz && findQuiz(module.quiz)?.lockedNote) ?? ''} ${blockers} left.`
-  // The step after this one is a quiz that isn't open yet.
-  const nextLocked = nextStep(module, step) === 'quiz' && blockers > 0
+  // The step after this one is a quiz that isn't open yet, or Predict still has open questions.
+  const predictLeft = step === 'predict' ? unansweredPredictions(module, progress).length : 0
+  const nextLocked = (nextStep(module, step) === 'quiz' && blockers > 0) || predictLeft > 0
 
   return (
     <div className="panel path-card">
@@ -272,10 +275,11 @@ export function LearningPathCard({
               <button
                 onClick={() => advance(module, step)}
                 disabled={nextLocked}
-                title={nextLocked ? 'Finish the checklist first' : undefined}
+                title={predictLeft > 0 ? 'Answer every Predict question first' : nextLocked ? 'Finish the checklist first' : undefined}
               >
                 {isLastStep ? 'Finish module ✓' : 'Next step →'}
-                {nextLocked && (blockers === readsLeft
+                {predictLeft > 0 && ` (${predictLeft} ${predictLeft === 1 ? 'question' : 'questions'} left)`}
+                {nextLocked && predictLeft === 0 && (blockers === readsLeft
                   ? ` (${readsLeft} ${readsLeft === 1 ? 'topic' : 'topics'} left)`
                   : ` (${blockers} ${blockers === 1 ? 'item' : 'items'} left)`)}
               </button>

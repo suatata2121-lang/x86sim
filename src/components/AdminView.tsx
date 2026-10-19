@@ -6,6 +6,7 @@ import {
   type PathProgress,
 } from '../learningPath'
 import { QUIZZES, type QuizAnswer } from '../quizzes'
+import { PREDICT_QUESTIONS } from '../predictQuestions'
 import { checklistRowLabel, conceptTitle } from './LearningPathCard'
 import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
 
@@ -106,6 +107,40 @@ interface InteractiveRun {
 
 const QUIZ_MODULES = LEARNING_PATH.filter((m) => m.quiz)
 
+interface Prediction {
+  user_id?: string
+  module_id: string
+  question_id: string
+  answer: string
+  correct: boolean
+  created_at: string
+}
+
+const PREDICT_BY_ID = new Map(
+  Object.entries(PREDICT_QUESTIONS).flatMap(([moduleId, qs]) => qs.map((q) => [q.id, { moduleId, q }] as const)),
+)
+const predictText = (id: string) => {
+  const p = PREDICT_BY_ID.get(id)
+  return p ? `${p.q.question}${p.q.code ? ` (${p.q.code.split('\n').join(' / ')})` : ''}` : id
+}
+
+/** Predict questions by how often they were answered wrong: the ideas that don't stick yet. */
+function mostMissed(rows: Prediction[]) {
+  const byQ = new Map<string, Prediction[]>()
+  for (const r of rows) byQ.set(r.question_id, [...(byQ.get(r.question_id) ?? []), r])
+  return [...byQ.entries()]
+    .map(([id, rs]) => {
+      const wrong = rs.filter((r) => !r.correct)
+      const counts = new Map<string, number>()
+      for (const w of wrong) counts.set(w.answer.trim(), (counts.get(w.answer.trim()) ?? 0) + 1)
+      const common = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+      return { id, answers: rs.length, correctRate: (rs.length - wrong.length) / rs.length, common }
+    })
+    .filter((x) => x.correctRate < 1)
+    .sort((a, b) => a.correctRate - b.correctRate || b.answers - a.answers)
+    .slice(0, 10)
+}
+
 function groupIds<T>(rows: T[], module: (r: T) => string, id: (r: T) => string) {
   const byModule = new Map<string, Set<string>>()
   for (const r of rows) byModule.set(module(r), (byModule.get(module(r)) ?? new Set()).add(id(r)))
@@ -119,6 +154,8 @@ function progressOf(passedIds: Set<string>, attempts: QuizAttempt[], reads: Conc
     quizzesPassed: new Set(attempts.filter((q) => q.passed).map((q) => q.module_id)),
     reads: groupIds(reads, (r) => r.module_id, (r) => r.concept_id),
     interactives: groupIds(runs, (r) => r.module_id, (r) => r.item_id),
+    // The admin checklist doesn't count Predict answers.
+    predicted: new Map(),
   }
 }
 
@@ -201,6 +238,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([])
   const [allReads, setAllReads] = useState<ConceptRead[]>([])
   const [allRuns, setAllRuns] = useState<InteractiveRun[]>([])
+  const [allPredictions, setAllPredictions] = useState<Prediction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -220,8 +258,9 @@ export function AdminView({ onClose }: { onClose: () => void }) {
       fetchAll<QuizQuestion>('quiz_questions', 'id, module_id, topic_id, question, active').catch(() => []),
       fetchAll<ConceptRead>('concept_reads', 'user_id, module_id, concept_id, read_at').catch(() => []),
       fetchAll<InteractiveRun>('interactive_runs', 'user_id, module_id, item_id, done_at').catch(() => []),
+      fetchAll<Prediction>('predictions', 'user_id, module_id, question_id, answer, correct, created_at').catch(() => []),
     ])
-      .then(([s, p, q, qq, cr, ir]) => {
+      .then(([s, p, q, qq, cr, ir, pr]) => {
         if (cancelled) return
         setStudents(s.filter((row) => row.role === 'student'))
         setProgress(p)
@@ -229,6 +268,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
         setQuizQuestions(qq)
         setAllReads(cr)
         setAllRuns(ir)
+        setAllPredictions(pr)
       })
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : String(err)))
       .finally(() => !cancelled && setLoading(false))
@@ -464,6 +504,27 @@ export function AdminView({ onClose }: { onClose: () => void }) {
             </div>
           ))}
 
+          <h3>Most missed Predict questions</h3>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr><th>Module</th><th>Question</th><th>Answers</th><th>Correct rate</th><th>Most common wrong answer</th></tr>
+              </thead>
+              <tbody>
+                {mostMissed(allPredictions.filter((r) => visibleIds.has(r.user_id ?? ''))).map((x) => (
+                  <tr key={x.id}>
+                    <td>{moduleLabel(PREDICT_BY_ID.get(x.id)?.moduleId ?? '')}</td>
+                    <td>{predictText(x.id)}</td>
+                    <td>{x.answers}</td>
+                    <td>{Math.round(x.correctRate * 100)}%</td>
+                    <td><code>{x.common}</code></td>
+                  </tr>
+                ))}
+                {allPredictions.length === 0 && <tr><td colSpan={5} className="admin-empty">No Predict answers yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
           <h3>Assignments</h3>
           <div className="admin-table-wrap">
             <table className="admin-table">
@@ -633,6 +694,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([])
   // Fetched on their own: in "Recent activity" they would drown among steps and runs.
   const [hintEvents, setHintEvents] = useState<ActivityEvent[]>([])
+  const [predictions, setPredictions] = useState<Prediction[]>([])
   const [openAttempt, setOpenAttempt] = useState<Attempt | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -647,7 +709,8 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       supabase.from('quiz_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }),
       supabase.from('interactive_runs').select('module_id, item_id, done_at').eq('user_id', student.id),
       supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).eq('kind', 'hint').order('created_at'),
-    ]).then(([a, e, s, m, r, q, ir, h]) => {
+      supabase.from('predictions').select('module_id, question_id, answer, correct, created_at').eq('user_id', student.id).order('created_at', { ascending: false }),
+    ]).then(([a, e, s, m, r, q, ir, h, pr]) => {
       const err = a.error ?? e.error ?? s.error ?? m.error ?? r.error ?? q.error ?? ir.error
       if (err) setError(err.message)
       setAttempts((a.data ?? []) as Attempt[])
@@ -658,6 +721,8 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       setQuizAttempts((q.data ?? []) as QuizAttempt[])
       setRuns((ir.data ?? []) as InteractiveRun[])
       setHintEvents((h.data ?? []) as ActivityEvent[])
+      // Missing table (schema not re-run yet) just shows no predictions.
+      setPredictions((pr.data ?? []) as Prediction[])
     })
   }, [student.id])
 
@@ -839,6 +904,25 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
               </tr>
             ))}
             {attempts.length === 0 && <tr><td colSpan={4} className="admin-empty">No test runs yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Predictions</h3>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>Time</th><th>Module</th><th>Question</th><th>Answer</th><th>Result</th></tr></thead>
+          <tbody>
+            {predictions.map((p, i) => (
+              <tr key={i}>
+                <td>{formatDate(p.created_at)}</td>
+                <td>{moduleLabel(p.module_id)}</td>
+                <td>{predictText(p.question_id)}</td>
+                <td><code>{p.answer}</code></td>
+                <td>{p.correct ? '✓' : '✗'}</td>
+              </tr>
+            ))}
+            {predictions.length === 0 && <tr><td colSpan={5} className="admin-empty">No Predict answers yet.</td></tr>}
           </tbody>
         </table>
       </div>
