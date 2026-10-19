@@ -12,6 +12,8 @@ export interface FigureStep {
   active?: string[]
   /** A line under the blocks, e.g. which way the data goes. */
   flow?: string
+  /** A column of memory bytes, highest address first, with a pointer (e.g. SP) beside one row. */
+  memory?: { addr: string; value: string; changed?: boolean; pointer?: string }[]
 }
 
 export interface FigureSpec {
@@ -59,6 +61,20 @@ export function FigureStepper({ spec, onFinish }: { spec: FigureSpec; onFinish?:
       )}
 
       <p className="example-description fde-where">{current.where}</p>
+
+      {current.memory && (
+        <table className="stack-bytes figure-memory">
+          <tbody>
+            {current.memory.map((m) => (
+              <tr key={m.addr} className={m.changed ? 'changed' : undefined}>
+                <td>{m.addr}</td>
+                <td>{m.value}</td>
+                <td>{m.pointer ? `← ${m.pointer}` : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <table className="fde-state">
         <tbody>

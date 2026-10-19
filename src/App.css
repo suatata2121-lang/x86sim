@@ -4175,3 +4175,44 @@ aside .panel {
   color: var(--accent-text);
   font-weight: 700;
 }
+
+/* Bytes around SP (StackView) and the memory column of a figure (FigureStepper). */
+.stack-bytes {
+  margin: 0.4rem auto 0;
+  border-collapse: collapse;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
+.stack-bytes td {
+  padding: 0.1rem 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.stack-bytes td:first-child {
+  color: var(--text-dim);
+}
+
+.stack-bytes td:last-child {
+  min-width: 3.5rem;
+  color: var(--accent-text);
+}
+
+.stack-bytes tr.sp td {
+  background: var(--accent-bg);
+  font-weight: 700;
+}
+
+.stack-bytes tr.below td {
+  opacity: 0.55;
+}
+
+.stack-bytes tr.changed td:nth-child(2) {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.figure-memory {
+  margin: 0.5rem 0;
+}
