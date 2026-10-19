@@ -897,7 +897,18 @@ export default function App() {
               )}
               <div className="panel">
                 <h3>Output</h3>
-                <pre className="output">{output || '(no output yet)'}</pre>
+                {output ? (
+                  <pre className="output">{output}</pre>
+                ) : assembled && halted ? (
+                  // Most tasks print nothing: say the run finished and where the result is,
+                  // so an empty panel doesn't read as "my program didn't run" (#41).
+                  <p className="output output-empty">
+                    The program finished without printing anything. Its results are in the registers and memory.
+                    Check the Registers panel, or press Run Tests to grade your work.
+                  </p>
+                ) : (
+                  <pre className="output">(no output yet)</pre>
+                )}
               </div>
               {gradeReport && <GraderView report={gradeReport} />}
             </>
