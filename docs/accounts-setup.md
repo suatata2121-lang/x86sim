@@ -59,17 +59,24 @@ değerleri yaz (`.env.local` git'e girmez).
 Rol yalnızca SQL Editor'den değiştirilebilir; öğrenciler kendi rollerini
 tarayıcıdan değiştiremez.
 
-## 4. Şifre sıfırlama e-postası
+## 4. Kayıt onayı ve şifre sıfırlama e-postaları
 
-Öğrenci "Forgot password?" ile e-posta ister. E-postadaki bağlantı onu siteye
-"Choose a new password" ekranına getirir. Okul e-postası (Outlook / Microsoft 365
-Safe Links) bağlantıyı önceden açıp tek kullanımlık tokeni harcayabilir. Bu
-durumda site "This reset link has expired or was already used…" der ve yeni
-bağlantı ister. Yedek yol olarak e-postadaki 6 haneli kod sitede girilebilir.
+Kayıttan sonra öğrenciye onay e-postası gider. "Forgot password?" ile de
+sıfırlama e-postası gider. İki e-postadaki bağlantı da tek kullanımlıktır ve
+okul e-postası (Outlook / Microsoft 365 Safe Links) bağlantıyı önceden açıp
+harcayabilir. Bu yüzden site iki durumda da e-postadaki 6 haneli kodu kabul eder:
+
+- Kayıttan sonra (ya da onaylanmamış hesapla giriş denenince) "Confirm your email"
+  ekranı açılır. Kod girilince hesap onaylanır ve öğrenci giriş yapmış olur.
+  "Send the email again" yeni bir onay e-postası gönderir.
+- Süresi dolmuş ya da kullanılmış bir sıfırlama bağlantısında site
+  "This reset link has expired or was already used…" der. Öğrenci yeni bağlantı
+  isteyebilir ya da e-postadaki kodu girebilir.
+
 Bunun için iki ayar gerekir:
 
-1. **Authentication → Email Templates → Reset Password**: Şablondaki bağlantı
-   kalsın, altına kod satırını ekle:
+1. **Authentication → Email Templates**: **Confirm signup** ve **Reset Password**
+   şablonlarının ikisinde de bağlantı kalsın, altına kod satırını ekle:
 
    ```html
    <p>Or enter this code on simx86.com: {{ .Token }}</p>
@@ -85,6 +92,15 @@ Bunun için iki ayar gerekir:
 3. **Authentication → URL Configuration**'ı tekrar kontrol et: Site URL
    `https://simx86.com`, Redirect URLs içinde `https://simx86.com` olmalı.
    Site, sıfırlama bağlantısını bu adrese yönlendirir.
+
+### Acil durum: öğrenciyi elle onaylamak
+
+E-posta hiç ulaşmıyorsa, öğrencinin adresini kontrol ettikten sonra
+**SQL Editor**'de hesabı elle onayla. Öğrenci ardından şifresiyle giriş yapabilir:
+
+```sql
+update auth.users set email_confirmed_at = now() where email = 'ogrenci@ogr.halic.edu.tr';
+```
 
 ## Neler kaydediliyor
 

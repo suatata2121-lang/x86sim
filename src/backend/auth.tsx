@@ -29,8 +29,12 @@ interface AuthState {
   passwordRecovery: boolean
   /** The page was opened from an email link that had expired or was already used. */
   linkExpired: boolean
+  /** Throws EmailNotConfirmedError for an account whose email is not confirmed yet. */
   signIn(email: string, password: string): Promise<void>
-  signUp(fields: SignUpFields): Promise<{ needsEmailConfirmation: boolean }>
+  signUp(fields: SignUpFields): Promise<{ needsEmailConfirmation: boolean; alreadyExists: boolean }>
+  /** The 6-digit code from the sign-up email; signs the student in. */
+  confirmSignupCode(email: string, code: string): Promise<void>
+  resendConfirmation(email: string): Promise<void>
   sendPasswordReset(email: string): Promise<void>
   /** The 6-digit code from the reset email: a fallback when the link is broken. */
   verifyRecoveryCode(email: string, code: string): Promise<void>
@@ -40,6 +44,11 @@ interface AuthState {
 }
 
 const AuthContext = createContext<AuthState | null>(null)
+
+/** Sign-in refused because the email has not been confirmed yet. */
+export class EmailNotConfirmedError extends Error {}
+
+const INVALID_CODE = 'That code is not valid or has expired.'
 
 function requireClient() {
   if (!supabase) throw new Error('Accounts are not configured on this site.')
@@ -97,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     linkExpired,
     async signIn(email, password) {
       const { error } = await requireClient().auth.signInWithPassword({ email, password })
+      if (error?.code === 'email_not_confirmed') throw new EmailNotConfirmedError(error.message)
       if (error) throw error
     },
     async signUp({ email, password, fullName, studentNo, classGroup }) {
@@ -108,8 +118,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           emailRedirectTo: window.location.origin,
         },
       })
+      // With email confirmation on, Supabase answers a sign-up for an address
+      // that already has a confirmed account with a user that has no
+      // identities instead of an error, so the address can't be probed.
+      if (error?.code === 'user_already_exists') return { needsEmailConfirmation: false, alreadyExists: true }
       if (error) throw error
-      return { needsEmailConfirmation: !data.session }
+      if (data.user && data.user.identities?.length === 0) return { needsEmailConfirmation: false, alreadyExists: true }
+      return { needsEmailConfirmation: !data.session, alreadyExists: false }
+    },
+    async confirmSignupCode(email, code) {
+      const { error } = await requireClient().auth.verifyOtp({ email, token: code, type: 'signup' })
+      if (error) throw new Error(INVALID_CODE)
+    },
+    async resendConfirmation(email) {
+      const { error } = await requireClient().auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      })
+      if (error?.code === 'over_email_send_rate_limit' || error?.status === 429) {
+        throw new Error('Please wait a minute before asking for another email.')
+      }
+      if (error) throw error
     },
     async sendPasswordReset(email) {
       const { error } = await requireClient().auth.resetPasswordForEmail(email, {
@@ -119,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async verifyRecoveryCode(email, code) {
       const { error } = await requireClient().auth.verifyOtp({ email, token: code, type: 'recovery' })
-      if (error) throw new Error('That code is not valid or has expired.')
+      if (error) throw new Error(INVALID_CODE)
       setPasswordRecovery(true)
     },
     async updatePassword(password) {

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useAuth } from '../backend/auth'
+import { EmailNotConfirmedError, useAuth } from '../backend/auth'
 
-type View = 'signin' | 'signup' | 'reset' | 'newpassword'
+type View = 'signin' | 'signup' | 'confirm' | 'reset' | 'newpassword'
 
 const MIN_PASSWORD_LENGTH = 8
 // Mirrors require_school_email() in supabase/schema.sql, which is the real gate.
@@ -32,6 +32,8 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
   // following the link (mail scanners can use the one-time link up first).
   const [codeSent, setCodeSent] = useState(false)
   const [code, setCode] = useState('')
+  // Sign-up for an address that already has an account: offer the ways back in.
+  const [alreadyExists, setAlreadyExists] = useState(false)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -47,6 +49,21 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
     setNotice(null)
     setCodeSent(false)
     setCode('')
+    setAlreadyExists(false)
+  }
+
+  async function handleResendConfirmation() {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await auth.resendConfirmation(email.trim())
+      setNotice('We sent the email again. Check your spam folder too.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleVerifyCode() {
@@ -70,22 +87,36 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
     setNotice(null)
     try {
       if (view === 'signin') {
-        await auth.signIn(email.trim(), password)
+        try {
+          await auth.signIn(email.trim(), password)
+        } catch (err) {
+          // Not an error to read and give up on: the code screen is the way forward.
+          if (err instanceof EmailNotConfirmedError) {
+            switchView('confirm')
+            return
+          }
+          throw err
+        }
+        onClose()
+      } else if (view === 'confirm') {
+        await auth.confirmSignupCode(email.trim(), code.trim())
         onClose()
       } else if (view === 'signup') {
         if (!SCHOOL_EMAIL.test(email.trim().toLowerCase())) {
           throw new Error(`Please sign up with your university email (…${STUDENT_EMAIL_DOMAIN}).`)
         }
-        const { needsEmailConfirmation } = await auth.signUp({
+        const { needsEmailConfirmation, alreadyExists } = await auth.signUp({
           email: email.trim(),
           password,
           fullName: fullName.trim(),
           studentNo: studentNo.trim(),
           classGroup: classGroup.trim(),
         })
-        if (needsEmailConfirmation) {
-          setNotice('Account created. Check your inbox and click the confirmation link, then sign in.')
-          setView('signin')
+        if (alreadyExists) {
+          setAlreadyExists(true)
+          setError('An account with this email already exists. Sign in, reset your password, or confirm your email with the code we sent.')
+        } else if (needsEmailConfirmation) {
+          switchView('confirm')
         } else {
           onClose()
         }
@@ -107,11 +138,12 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
   const titles: Record<View, string> = {
     signin: 'Sign in',
     signup: 'Create an account',
+    confirm: 'Confirm your email',
     reset: 'Reset your password',
     newpassword: 'Choose a new password',
   }
-  const needsEmail = view !== 'newpassword'
-  const needsPassword = view !== 'reset'
+  const needsEmail = view !== 'newpassword' && view !== 'confirm'
+  const needsPassword = view !== 'reset' && view !== 'confirm'
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -122,6 +154,26 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
         </div>
 
         <form className="feedback-form" onSubmit={handleSubmit}>
+          {view === 'confirm' && (
+            <>
+              <p className="account-notice">
+                We sent a 6-digit code to {email.trim()}. Enter it below, or click the link in the email.
+              </p>
+              <label>
+                Code from the email
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={10}
+                />
+              </label>
+            </>
+          )}
+
           {view === 'signup' && (
             <>
               <label>
@@ -193,7 +245,7 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
           <div className="feedback-actions">
             <button type="button" onClick={onClose}>Cancel</button>
             <button type="submit" className="primary" disabled={busy}>
-              {busy ? 'Please wait…' : view === 'reset' ? 'Send reset link' : titles[view]}
+              {busy ? 'Please wait…' : view === 'reset' ? 'Send reset link' : view === 'confirm' ? 'Confirm email' : titles[view]}
             </button>
           </div>
 
@@ -204,7 +256,25 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
               <button type="button" className="link-button" onClick={() => switchView('reset')}>Forgot password?</button>
             </p>
           )}
-          {(view === 'signup' || view === 'reset') && (
+          {view === 'signup' && alreadyExists && (
+            <p className="account-switch">
+              <button type="button" className="link-button" onClick={() => switchView('signin')}>Sign in</button>
+              {' · '}
+              <button type="button" className="link-button" onClick={() => switchView('reset')}>Reset password</button>
+              {' · '}
+              <button type="button" className="link-button" onClick={() => switchView('confirm')}>Enter the code</button>
+            </p>
+          )}
+          {view === 'confirm' && (
+            <p className="account-switch">
+              <button type="button" className="link-button" onClick={handleResendConfirmation} disabled={busy}>
+                Send the email again
+              </button>
+              {' · '}
+              <button type="button" className="link-button" onClick={() => switchView('signin')}>Back to sign in</button>
+            </p>
+          )}
+          {((view === 'signup' && !alreadyExists) || view === 'reset') && (
             <p className="account-switch">
               <button type="button" className="link-button" onClick={() => switchView('signin')}>Back to sign in</button>
             </p>
