@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from './client'
+import { arrivedFromRecoveryLink, emailLinkError, supabase } from './client'
 
 export interface Profile {
   id: string
@@ -27,9 +27,13 @@ interface AuthState {
   isAdmin: boolean
   /** True after arriving from a password-reset email, until a new password is set. */
   passwordRecovery: boolean
+  /** The page was opened from an email link that had expired or was already used. */
+  linkExpired: boolean
   signIn(email: string, password: string): Promise<void>
   signUp(fields: SignUpFields): Promise<{ needsEmailConfirmation: boolean }>
   sendPasswordReset(email: string): Promise<void>
+  /** The 6-digit code from the reset email: a fallback when the link is broken. */
+  verifyRecoveryCode(email: string, code: string): Promise<void>
   updatePassword(password: string): Promise<void>
   dismissPasswordRecovery(): void
   signOut(): Promise<void>
@@ -46,7 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(!supabase)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [passwordRecovery, setPasswordRecovery] = useState(false)
+  // Taken from the URL too, so a PASSWORD_RECOVERY event that fired before
+  // the subscription below still opens "choose a new password".
+  const [passwordRecovery, setPasswordRecovery] = useState(arrivedFromRecoveryLink)
+  const [linkExpired, setLinkExpired] = useState(emailLinkError !== null)
 
   useEffect(() => {
     if (!supabase) return
@@ -87,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     isAdmin: profile?.role === 'admin',
     passwordRecovery,
+    linkExpired,
     async signIn(email, password) {
       const { error } = await requireClient().auth.signInWithPassword({ email, password })
       if (error) throw error
@@ -109,6 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       if (error) throw error
     },
+    async verifyRecoveryCode(email, code) {
+      const { error } = await requireClient().auth.verifyOtp({ email, token: code, type: 'recovery' })
+      if (error) throw new Error('That code is not valid or has expired.')
+      setPasswordRecovery(true)
+    },
     async updatePassword(password) {
       const { error } = await requireClient().auth.updateUser({ password })
       if (error) throw error
@@ -116,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     dismissPasswordRecovery() {
       setPasswordRecovery(false)
+      setLinkExpired(false)
     },
     async signOut() {
       await requireClient().auth.signOut()

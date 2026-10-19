@@ -59,6 +59,33 @@ değerleri yaz (`.env.local` git'e girmez).
 Rol yalnızca SQL Editor'den değiştirilebilir; öğrenciler kendi rollerini
 tarayıcıdan değiştiremez.
 
+## 4. Şifre sıfırlama e-postası
+
+Öğrenci "Forgot password?" ile e-posta ister. E-postadaki bağlantı onu siteye
+"Choose a new password" ekranına getirir. Okul e-postası (Outlook / Microsoft 365
+Safe Links) bağlantıyı önceden açıp tek kullanımlık tokeni harcayabilir. Bu
+durumda site "This reset link has expired or was already used…" der ve yeni
+bağlantı ister. Yedek yol olarak e-postadaki 6 haneli kod sitede girilebilir.
+Bunun için iki ayar gerekir:
+
+1. **Authentication → Email Templates → Reset Password**: Şablondaki bağlantı
+   kalsın, altına kod satırını ekle:
+
+   ```html
+   <p>Or enter this code on simx86.com: {{ .Token }}</p>
+   ```
+
+   Bu satır olmadan e-postada kod görünmez ve öğrenci yalnızca bağlantıyı kullanabilir.
+2. **Authentication → SMTP Settings**: Supabase'in yerleşik e-posta servisi yalnızca
+   proje ekibindeki adreslere ve saatte birkaç e-posta gönderir; öğrencilere
+   kayıt onayı ve şifre sıfırlama e-postası gitmesi için özel SMTP tanımla
+   (ör. Resend, Brevo veya okulun SMTP sunucusu). Gönderen adresi bu servisin
+   doğruladığı bir adres olmalı. Ardından **Authentication → Rate Limits**
+   bölümünden saatlik e-posta sınırını sınıf büyüklüğüne göre yükselt.
+3. **Authentication → URL Configuration**'ı tekrar kontrol et: Site URL
+   `https://simx86.com`, Redirect URLs içinde `https://simx86.com` olmalı.
+   Site, sıfırlama bağlantısını bu adrese yönlendirir.
+
 ## Neler kaydediliyor
 
 | Kayıt                  | Ne zaman                                                    |

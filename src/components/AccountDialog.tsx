@@ -13,9 +13,11 @@ interface Props {
   onClose: () => void
   /** Opens straight to "choose a new password" after a reset-email link. */
   initialView?: View
+  /** Shown on open, e.g. when a reset link had expired. */
+  initialError?: string
 }
 
-export function AccountDialog({ onClose, initialView = 'signin' }: Props) {
+export function AccountDialog({ onClose, initialView = 'signin', initialError }: Props) {
   const auth = useAuth()
   const [view, setView] = useState<View>(initialView)
   const [email, setEmail] = useState('')
@@ -24,8 +26,12 @@ export function AccountDialog({ onClose, initialView = 'signin' }: Props) {
   const [studentNo, setStudentNo] = useState('')
   const [classGroup, setClassGroup] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError ?? null)
   const [notice, setNotice] = useState<string | null>(null)
+  // After a reset email is sent, the code from it can be typed in instead of
+  // following the link (mail scanners can use the one-time link up first).
+  const [codeSent, setCodeSent] = useState(false)
+  const [code, setCode] = useState('')
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -39,6 +45,22 @@ export function AccountDialog({ onClose, initialView = 'signin' }: Props) {
     setView(next)
     setError(null)
     setNotice(null)
+    setCodeSent(false)
+    setCode('')
+  }
+
+  async function handleVerifyCode() {
+    setBusy(true)
+    setError(null)
+    try {
+      await auth.verifyRecoveryCode(email.trim(), code.trim())
+      setPassword('')
+      switchView('newpassword')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -69,7 +91,8 @@ export function AccountDialog({ onClose, initialView = 'signin' }: Props) {
         }
       } else if (view === 'reset') {
         await auth.sendPasswordReset(email.trim())
-        setNotice('If that email has an account, a reset link is on its way.')
+        setNotice('If that email has an account, a reset link and a 6-digit code are on their way. Check your spam folder too.')
+        setCodeSent(true)
       } else {
         await auth.updatePassword(password)
         onClose()
@@ -144,6 +167,24 @@ export function AccountDialog({ onClose, initialView = 'signin' }: Props) {
                 autoComplete={view === 'signin' ? 'current-password' : 'new-password'}
               />
             </label>
+          )}
+
+          {view === 'reset' && codeSent && (
+            <div className="account-code">
+              <label>
+                Code from the email
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={10}
+                />
+              </label>
+              <button type="button" onClick={handleVerifyCode} disabled={busy || !code.trim() || !email.trim()}>
+                Verify code
+              </button>
+            </div>
           )}
 
           {error && <p className="feedback-error">{error}</p>}

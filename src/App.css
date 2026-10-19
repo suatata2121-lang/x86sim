@@ -4091,3 +4091,14 @@ aside .panel {
   font-size: 0.85rem;
   text-align: center;
 }
+
+/* The reset-code row in the account dialog: input and its button side by side. */
+.account-code {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.account-code label {
+  flex: 1;
+}
