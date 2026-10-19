@@ -29,6 +29,7 @@ export function GraderView({ report }: { report: GradeReport }) {
               <span className="grader-result-name">{r.name}</span>
               <span className="grader-result-meta">{r.steps} steps / {r.cycles.toLocaleString()} cycles</span>
             </div>
+            {r.explain && <p className="grader-explain">{r.explain}</p>}
             {r.failures.length > 0 && (
               <ul className="grader-failures">
                 {r.failures.map((f, i) => <li key={i}>{f}</li>)}

@@ -69,6 +69,8 @@ export interface Expectation {
 
 export interface TestCase {
   name: string
+  /** Shown above the expected/actual details when this test fails: where to look. */
+  explain?: string
   /** Answers fed in order each time the program requests keyboard input (INT 21h AH=01/0A). */
   input?: string[]
   ppi?: PpiSetup
@@ -80,6 +82,7 @@ export interface TestCase {
 export interface TestResult {
   name: string
   passed: boolean
+  explain?: string
   failures: string[]
   steps: number
   cycles: number
@@ -206,7 +209,8 @@ export function runTestCase(cpu: Cpu, testCase: TestCase): TestResult {
     }
   }
 
-  return { name: testCase.name, passed: failures.length === 0, failures, steps: cpu.steps, cycles: cpu.cycles }
+  const passed = failures.length === 0
+  return { name: testCase.name, passed, explain: passed ? undefined : testCase.explain, failures, steps: cpu.steps, cycles: cpu.cycles }
 }
 
 /**

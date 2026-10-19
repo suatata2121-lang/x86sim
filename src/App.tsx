@@ -12,6 +12,8 @@ import { ProfilerView } from './components/ProfilerView'
 import { GraderView } from './components/GraderView'
 import { FeedbackDialog } from './components/FeedbackDialog'
 import { AccountDialog } from './components/AccountDialog'
+import { HintLadder } from './components/HintLadder'
+import { useHintLadder } from './backend/hints'
 import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
@@ -111,6 +113,7 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false)
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
+  const hintLadder = useHintLadder(userId, activeAssignmentId)
   useStudySession(userId)
   const moduleProgress = useModuleProgress(userId)
   const pathProgress: PathProgress = useMemo(
@@ -526,6 +529,7 @@ export default function App() {
     if (!assignment) return
     const report = gradeSource(source, assignment.testCases, assignment.sourceRules)
     setGradeReport(report)
+    if (!report.assembled || report.passedCount < report.totalCount) hintLadder.recordFailedRun()
     recordAttempt({
       assignmentId: assignment.id,
       passedCount: report.passedCount,
@@ -916,6 +920,13 @@ export default function App() {
                 )}
               </div>
               {gradeReport && <GraderView report={gradeReport} />}
+              {activeAssignmentId && hintLadder.available && (
+                <HintLadder
+                  hints={ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.hints ?? ['', '', '']}
+                  level={hintLadder.level}
+                  onReveal={hintLadder.revealNext}
+                />
+              )}
             </>
           )}
         </section>

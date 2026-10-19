@@ -24,6 +24,7 @@ export type ActivityKind =
   | 'read_topic'
   | 'quiz_attempt'
   | 'interactive_done'
+  | 'hint'
 
 interface QueuedEvent {
   user_id: string
