@@ -1122,6 +1122,12 @@ aside .panel {
   font-family: 'Cascadia Code', 'Consolas', monospace;
 }
 
+.output.output-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-family: inherit;
+}
+
 .devices-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
