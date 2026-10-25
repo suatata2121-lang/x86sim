@@ -2237,6 +2237,16 @@ aside .panel {
   font-size: 0.9rem;
 }
 
+.account-banner-pending {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.account-banner-pending .link-button {
+  color: var(--warning-text);
+  text-align: left;
+}
+
 /* ---- Learning path card (components/LearningPathCard.tsx) ---- */
 
 .path-card {

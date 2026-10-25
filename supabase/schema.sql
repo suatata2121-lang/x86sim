@@ -29,14 +29,19 @@ alter table public.profiles add column if not exists onboarded_at timestamptz;
 alter table public.profiles add column if not exists placement_score integer check (placement_score between 0 and 8);
 alter table public.profiles add column if not exists placement_credit boolean not null default false;
 
--- Creates the profile row when someone signs up. The name / student number
--- come from the sign-up form via `options.data` (auth.users.raw_user_meta_data).
+-- Creates the profile row once someone's email is confirmed (#62), so an
+-- unconfirmed sign-up never shows up as a registered student. The name /
+-- student number come from the sign-up form via `options.data`
+-- (auth.users.raw_user_meta_data), which is kept until confirmation.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 begin
+  if new.email_confirmed_at is null then
+    return new;
+  end if;
   insert into public.profiles (id, email, full_name, student_no, class_group)
   values (
     new.id,
@@ -54,6 +59,22 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+drop trigger if exists on_auth_user_confirmed on auth.users;
+create trigger on_auth_user_confirmed
+  after update of email_confirmed_at on auth.users
+  for each row
+  when (old.email_confirmed_at is null and new.email_confirmed_at is not null)
+  execute function public.handle_new_user();
+
+-- Accounts opened before #62 got a profile without confirming; they stay
+-- valid, so mark them confirmed once. The fixed cut-off keeps a later re-run
+-- from confirming new sign-ups (which have no profile anyway).
+update auth.users u
+set email_confirmed_at = now()
+where u.email_confirmed_at is null
+  and u.created_at < '2026-10-26 00:00:00+03'
+  and exists (select 1 from public.profiles p where p.id = u.id);
 
 -- Only university addresses may sign up: students use @ogr.halic.edu.tr,
 -- staff @halic.edu.tr. The site checks this too, but the anon key can call

@@ -119,6 +119,8 @@ export default function App() {
   ))
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  // Reopened from the "account isn't active yet" note (#62).
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
@@ -844,9 +846,15 @@ export default function App() {
           context={{ tab: activeTab.title, assignment: activeAssignmentId, section: mode === 'learn' ? `learn/${learnNav.section}` : mode }}
         />
       )}
-      {(accountOpen || auth.passwordRecovery || auth.linkExpired) && (
+      {(accountOpen || confirmOpen || auth.confirmationRequested || auth.passwordRecovery || auth.linkExpired) && (
         <AccountDialog
-          initialView={auth.passwordRecovery ? 'newpassword' : auth.linkExpired ? 'reset' : 'signin'}
+          initialView={
+            auth.passwordRecovery ? 'newpassword'
+            : auth.linkExpired ? 'reset'
+            : (confirmOpen || auth.confirmationRequested) && auth.pendingConfirmation ? 'confirm'
+            : 'signin'
+          }
+          initialEmail={auth.pendingConfirmation ?? undefined}
           initialError={
             auth.linkExpired && !auth.passwordRecovery
               ? 'This reset link has expired or was already used. Enter your email to get a new one, or use the 6-digit code from the email.'
@@ -854,11 +862,20 @@ export default function App() {
           }
           onClose={() => {
             setAccountOpen(false)
+            setConfirmOpen(false)
+            auth.dismissConfirmationRequest()
             auth.dismissPasswordRecovery()
           }}
         />
       )}
-      {backendEnabled && auth.ready && !auth.session && (
+      {backendEnabled && auth.ready && !auth.session && auth.pendingConfirmation && (
+        <p className="account-banner account-banner-pending no-print">
+          <button className="link-button" onClick={() => setConfirmOpen(true)}>
+            Your account isn't active yet. Enter the 6-digit code from your email to finish signing up.
+          </button>
+        </p>
+      )}
+      {backendEnabled && auth.ready && !auth.session && !auth.pendingConfirmation && (
         <p className="account-banner no-print">
           Taking the lab course?{' '}
           <button className="link-button" onClick={() => setAccountOpen(true)}>Sign in or create an account</button>{' '}
