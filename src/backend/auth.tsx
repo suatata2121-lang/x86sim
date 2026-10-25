@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { arrivedFromRecoveryLink, emailLinkError, supabase } from './client'
+import { onRemoteSignOut } from './browserSessionStorage'
 
 export interface Profile {
   id: string
@@ -45,6 +46,12 @@ interface AuthState {
   /** A session for an unconfirmed email was refused; open "Confirm your email". */
   confirmationRequested: boolean
   dismissConfirmationRequest(): void
+  /**
+   * The session ended without the student pressing Sign out (expired or
+   * unrefreshable token, sign-out in another tab), so nothing is being saved.
+   */
+  signedOutUnexpectedly: boolean
+  dismissSignedOutWarning(): void
   /** Throws EmailNotConfirmedError for an account whose email is not confirmed yet. */
   signIn(email: string, password: string): Promise<void>
   signUp(fields: SignUpFields): Promise<{ needsEmailConfirmation: boolean; alreadyExists: boolean }>
@@ -103,6 +110,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [linkExpired, setLinkExpired] = useState(emailLinkError !== null)
   const [pendingConfirmation, setPending] = useState(readPending)
   const [confirmationRequested, setConfirmationRequested] = useState(false)
+  const [signedOutUnexpectedly, setSignedOutUnexpectedly] = useState(false)
+  // Whether this tab had a session, and whether the student is signing out
+  // on purpose: only losing a session nobody asked to end warns (#65).
+  const hadSession = useRef(false)
+  const signingOut = useRef(false)
 
   function setPendingConfirmation(email: string | null) {
     writePending(email)
@@ -121,10 +133,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setConfirmationRequested(true)
         // Deferred: calling auth methods inside onAuthStateChange can deadlock.
         setTimeout(() => void client.auth.signOut({ scope: 'local' }), 0)
+        hadSession.current = false
         setSession(null)
         return
       }
-      if (next) setPendingConfirmation(null)
+      if (next) {
+        setPendingConfirmation(null)
+        setSignedOutUnexpectedly(false)
+      } else if (hadSession.current && !signingOut.current) {
+        setSignedOutUnexpectedly(true)
+      }
+      hadSession.current = next !== null
       setSession(next)
     }
     client.auth.getSession().then(({ data }) => {
@@ -135,7 +154,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accept(next)
       if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
     })
-    return () => sub.subscription.unsubscribe()
+    // Another tab signed out: drop this tab's in-memory copy too, which
+    // fires SIGNED_OUT above and shows the warning.
+    const stopRemote = onRemoteSignOut(() => {
+      if (hadSession.current) void client.auth.signOut({ scope: 'local' })
+    })
+    return () => {
+      sub.subscription.unsubscribe()
+      stopRemote()
+    }
   }, [])
 
   const userId = session?.user.id ?? null
@@ -172,6 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     confirmationRequested,
     dismissConfirmationRequest() {
       setConfirmationRequested(false)
+    },
+    signedOutUnexpectedly,
+    dismissSignedOutWarning() {
+      setSignedOutUnexpectedly(false)
     },
     async signIn(email, password) {
       const { error } = await requireClient().auth.signInWithPassword({ email, password })
@@ -237,7 +268,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.from('profiles').update(values).eq('id', userId)
     },
     async signOut() {
-      await requireClient().auth.signOut()
+      signingOut.current = true
+      try {
+        await requireClient().auth.signOut()
+      } finally {
+        signingOut.current = false
+      }
     },
   }
 

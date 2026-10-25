@@ -20,6 +20,16 @@ type Message =
 
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null
 
+// The client keeps its session in memory and doesn't notice the copy here
+// being removed, so auth.tsx is told when another tab signed out (#65).
+const remoteSignOutListeners = new Set<() => void>()
+
+/** Calls `listener` when another tab removes the session; returns an unsubscribe function. */
+export function onRemoteSignOut(listener: () => void): () => void {
+  remoteSignOutListeners.add(listener)
+  return () => remoteSignOutListeners.delete(listener)
+}
+
 channel?.addEventListener('message', (e: MessageEvent<Message>) => {
   const m = e.data
   if (m.type === 'ask') {
@@ -29,6 +39,8 @@ channel?.addEventListener('message', (e: MessageEvent<Message>) => {
     sessionStorage.setItem(m.key, m.value)
   } else if (m.type === 'remove') {
     sessionStorage.removeItem(m.key)
+    // Only the session itself, not e.g. the "-auth-token-code-verifier" entry.
+    if (m.key.endsWith('-auth-token')) remoteSignOutListeners.forEach((l) => l())
   }
 })
 
