@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../backend/client'
 import { useAuth } from '../backend/auth'
+import { MAX_REPLY_CHARS, STATUS_LABELS, type MyFeedback, type MyFeedbackState } from '../backend/feedback'
+import { formatDate } from './adminUtils'
 
 // With the Supabase backend configured, feedback is stored in the feedback
 // table and read in the admin panel's inbox. Builds without it (forks, local
@@ -36,11 +38,15 @@ interface Props {
   // attachment since most bug reports are about a specific program.
   currentSource: string
   context: FeedbackContext
+  /** The signed-in student's earlier feedback and replies (#64); absent without accounts. */
+  mine?: MyFeedbackState
 }
 
-export function FeedbackDialog({ onClose, currentSource, context }: Props) {
+export function FeedbackDialog({ onClose, currentSource, context, mine }: Props) {
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
+  const showMine = Boolean(mine && userId)
+  const [tab, setTab] = useState<'send' | 'mine'>(showMine && mine!.unread.length > 0 ? 'mine' : 'send')
   const [kind, setKind] = useState<Kind>('bug')
   const [message, setMessage] = useState('')
   const [email, setEmail] = useState('')
@@ -81,6 +87,7 @@ export function FeedbackDialog({ onClose, currentSource, context }: Props) {
         user_agent: navigator.userAgent.slice(0, 300),
       })
       setStatus(error ? { state: 'error', message: error.message } : { state: 'sent' })
+      if (!error) void mine?.reload()
       return
     }
 
@@ -118,11 +125,24 @@ export function FeedbackDialog({ onClose, currentSource, context }: Props) {
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
         <div className="modal-header">
-          <h2 id="feedback-title">Send feedback</h2>
+          <h2 id="feedback-title">{tab === 'mine' ? 'My feedback' : 'Send feedback'}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        {status.state === 'sent' ? (
+        {showMine && (
+          <div className="feedback-kinds feedback-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === 'send'} className={tab === 'send' ? 'mode-tab active' : 'mode-tab'} onClick={() => setTab('send')}>
+              Send feedback
+            </button>
+            <button type="button" role="tab" aria-selected={tab === 'mine'} className={tab === 'mine' ? 'mode-tab active' : 'mode-tab'} onClick={() => setTab('mine')}>
+              My feedback{mine!.unread.length > 0 && <span className="feedback-count">{mine!.unread.length}</span>}
+            </button>
+          </div>
+        )}
+
+        {tab === 'mine' && mine && userId ? (
+          <MyFeedbackList mine={mine} userId={userId} />
+        ) : status.state === 'sent' ? (
           <div className="feedback-sent">
             <p>Thanks! Your feedback was sent{supabase ? ' to the instructor' : ''}.</p>
             <button onClick={onClose}>Close</button>
@@ -196,5 +216,84 @@ export function FeedbackDialog({ onClose, currentSource, context }: Props) {
         )}
       </div>
     </div>
+  )
+}
+
+function MyFeedbackList({ mine, userId }: { mine: MyFeedbackState; userId: string }) {
+  // Highlighted for this visit even though they are marked read straight away.
+  const [fresh, setFresh] = useState<Set<number>>(() => new Set(mine.unread.map((i) => i.id)))
+  const unreadSignature = mine.unread.map((i) => i.id).join(',')
+
+  useEffect(() => {
+    const ids = mine.unread.map((i) => i.id)
+    if (ids.length === 0) return
+    setFresh((prev) => new Set([...prev, ...ids]))
+    void mine.markRead(ids)
+    // Only when the set of unread feedback changes.
+  }, [unreadSignature])
+
+  if (mine.items.length === 0) {
+    return <p className="feedback-mine-empty">You haven't sent any feedback yet.</p>
+  }
+  return (
+    <ul className="feedback-mine">
+      {mine.items.map((item) => (
+        <MyFeedbackItem key={item.id} item={item} userId={userId} fresh={fresh.has(item.id)} onReply={(body) => mine.reply(item.id, body)} />
+      ))}
+    </ul>
+  )
+}
+
+function MyFeedbackItem({ item, userId, fresh, onReply }: {
+  item: MyFeedback
+  userId: string
+  fresh: boolean
+  onReply: (body: string) => Promise<void>
+}) {
+  return (
+    <li className={fresh ? 'feedback-mine-item fresh' : 'feedback-mine-item'}>
+      <div className="feedback-mine-head">
+        <span>{KIND_LABELS[item.kind]} · {formatDate(item.created_at)}</span>
+        <span className={`feedback-status-label ${item.status}`}>{STATUS_LABELS[item.status]}</span>
+      </div>
+      <p className="feedback-mine-message">{item.message}</p>
+      {item.feedback_messages.map((m) => (
+        <div key={m.id} className={m.author_id === userId ? 'feedback-thread-msg own' : 'feedback-thread-msg'}>
+          <span className="feedback-thread-meta">{m.author_id === userId ? 'You' : 'Instructor'} · {formatDate(m.created_at)}</span>
+          <p>{m.body}</p>
+        </div>
+      ))}
+      <ReplyBox label="Send" onSend={onReply} />
+    </li>
+  )
+}
+
+/** A textarea and a send button under a feedback thread; used by the student and the admin inbox. */
+export function ReplyBox({ label, onSend }: { label: string; onSend: (body: string) => Promise<void> }) {
+  const [body, setBody] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function send(e: FormEvent) {
+    e.preventDefault()
+    if (!body.trim()) return
+    setSending(true)
+    setError(null)
+    try {
+      await onSend(body.trim())
+      setBody('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <form className="feedback-reply" onSubmit={send}>
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} maxLength={MAX_REPLY_CHARS} aria-label="Reply" />
+      <button type="submit" disabled={sending || !body.trim()}>{sending ? 'Sending…' : label}</button>
+      {error && <p className="feedback-error">{error}</p>}
+    </form>
   )
 }

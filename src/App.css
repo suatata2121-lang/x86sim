@@ -1764,6 +1764,179 @@ aside .panel {
   cursor: not-allowed;
 }
 
+/* ---- Feedback replies and notices (#64) ---- */
+.feedback-count {
+  display: inline-block;
+  min-width: 1.1rem;
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--error-text-strong);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
+.feedback-tabs {
+  margin-bottom: 0.9rem;
+}
+
+.feedback-mine-empty {
+  color: var(--text-dim);
+}
+
+.feedback-mine {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feedback-mine-item {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.feedback-mine-item.fresh {
+  border-color: var(--accent-border);
+  box-shadow: inset 3px 0 0 var(--accent-text);
+}
+
+.feedback-mine-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.feedback-mine-message {
+  margin: 0.4rem 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedback-status-label {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-button);
+}
+
+.feedback-status-label.seen {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.feedback-status-label.done {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.feedback-thread-msg {
+  margin: 0.4rem 0 0;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--accent-border);
+  border-radius: 4px;
+  background: var(--accent-bg);
+  white-space: normal;
+}
+
+.feedback-thread-msg.own {
+  border-left-color: var(--border-strong);
+  background: var(--bg-panel-alt);
+}
+
+.feedback-thread-msg p {
+  margin: 0.2rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedback-thread-meta {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.feedback-reply {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: flex-end;
+  margin-top: 0.5rem;
+  white-space: normal;
+}
+
+.feedback-reply textarea {
+  flex: 1 1 14rem;
+  box-sizing: border-box;
+  padding: 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-panel-alt);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.feedback-reply button {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+.feedback-reply button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.feedback-reply .feedback-error {
+  flex-basis: 100%;
+}
+
+.feedback-mailto {
+  display: inline-block;
+  margin-top: 0.4rem;
+  color: var(--accent-text);
+}
+
+.feedback-no-reply {
+  margin: 0.4rem 0 0;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  white-space: normal;
+}
+
+.feedback-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 900;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.feedback-toast .link-button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+}
+
 .feedback-sent {
   display: flex;
   flex-direction: column;

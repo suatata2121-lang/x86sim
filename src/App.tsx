@@ -40,6 +40,7 @@ import { findQuiz } from './quizzes'
 import { gradeSource, type GradeReport } from './core/grader'
 import { backendEnabled } from './backend/client'
 import { useAuth } from './backend/auth'
+import { unreadNotices, useMyFeedback } from './backend/feedback'
 import { fetchCompletedAssignments, recordAttempt, trackActivity, useStudySession } from './backend/tracking'
 import { useModuleProgress } from './backend/moduleProgress'
 import './App.css'
@@ -124,6 +125,26 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false)
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
+  const myFeedback = useMyFeedback(backendEnabled ? userId : null)
+  // A short notice when a reply or status change arrives (#64); each one is
+  // announced once per visit, the badge stays until the feedback is opened.
+  const [feedbackNotice, setFeedbackNotice] = useState<string[] | null>(null)
+  const announcedFeedback = useRef(new Set<string>())
+  useEffect(() => {
+    if (!userId || feedbackOpen) return
+    const fresh = myFeedback.unread.filter((i) => {
+      const key = `${i.id}:${i.status_changed_at}:${i.feedback_messages.length}`
+      if (announcedFeedback.current.has(key)) return false
+      announcedFeedback.current.add(key)
+      return true
+    })
+    if (fresh.length > 0) setFeedbackNotice([...new Set(fresh.flatMap((i) => unreadNotices(i, userId)))])
+  }, [myFeedback.unread, userId, feedbackOpen])
+  useEffect(() => {
+    if (!feedbackNotice) return
+    const timer = window.setTimeout(() => setFeedbackNotice(null), 10_000)
+    return () => window.clearTimeout(timer)
+  }, [feedbackNotice])
   const hintLadder = useHintLadder(userId, activeAssignmentId)
   const challenges = useChallenges(userId)
   const scheduleRows = useSchedule(userId)
@@ -769,6 +790,7 @@ export default function App() {
           ))}
           <button className="theme-toggle" onClick={() => setFeedbackOpen(true)} title="Report a bug or suggest an improvement">
             💬 Feedback
+            {myFeedback.unread.length > 0 && <span className="feedback-count" aria-label={`${myFeedback.unread.length} unread`}>{myFeedback.unread.length}</span>}
           </button>
           <button className="theme-toggle" onClick={toggleTheme}>
             {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
@@ -839,9 +861,24 @@ export default function App() {
           />
         )
       })()}
+      {feedbackNotice && !feedbackOpen && (
+        <div className="feedback-toast no-print" role="status">
+          <button
+            className="link-button"
+            onClick={() => {
+              setFeedbackNotice(null)
+              setFeedbackOpen(true)
+            }}
+          >
+            {feedbackNotice.map((n) => <span key={n}>{n}</span>)}
+          </button>
+          <button className="modal-close" onClick={() => setFeedbackNotice(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
       {feedbackOpen && (
         <FeedbackDialog
           onClose={() => setFeedbackOpen(false)}
+          mine={backendEnabled && userId ? myFeedback : undefined}
           currentSource={source}
           context={{ tab: activeTab.title, assignment: activeAssignmentId, section: mode === 'learn' ? `learn/${learnNav.section}` : mode }}
         />

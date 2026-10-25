@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../backend/client'
+import { useAuth } from '../backend/auth'
+import { MAX_REPLY_CHARS, type FeedbackMessage, type FeedbackStatus } from '../backend/feedback'
 import { CURRICULUM, type Assignment } from '../curriculum'
 import {
   LEARNING_PATH, STEPS, checklist, isModuleDone, moduleStatus, type ChecklistRow, type LearningModule, type ModuleProgressRow,
@@ -11,7 +13,7 @@ import { downloadCsv, fetchAll, formatDate, formatDuration, today } from './admi
 import { EndOfTermReport, Funnel, MisconceptionsTab } from './AdminInsights'
 import { AttemptComments, ExtendForStudent, NeedsHelp, ScheduleTab } from './AdminSchedule'
 import { checklistRowLabel, conceptTitle } from './LearningPathCard'
-import { KIND_LABELS, type FeedbackKind } from './FeedbackDialog'
+import { KIND_LABELS, ReplyBox, type FeedbackKind } from './FeedbackDialog'
 
 // Instructor-only panel: who is using the lab, how long, and how far each
 // student got through the curriculum. Row-level security on the database is
@@ -169,10 +171,9 @@ function progressOf(
   }
 }
 
-type FeedbackStatus = 'new' | 'seen' | 'done'
-
 interface FeedbackItem {
   id: number
+  user_id: string | null
   kind: FeedbackKind
   message: string
   reply_email: string | null
@@ -181,7 +182,10 @@ interface FeedbackItem {
   status: FeedbackStatus
   created_at: string
   profiles: { full_name: string; student_no: string; class_group: string; email: string } | null
+  feedback_messages: FeedbackMessage[]
 }
+
+const FEEDBACK_COLUMNS = 'id, user_id, kind, message, reply_email, code, context, status, created_at, profiles(full_name, student_no, class_group, email)'
 
 const ASSIGNMENTS: { assignment: Assignment; stageTitle: string; taskTitle: string }[] = CURRICULUM.flatMap((stage) =>
   stage.tasks.flatMap((task) =>
@@ -560,6 +564,7 @@ export function AdminView({ onClose }: { onClose: () => void }) {
 }
 
 function FeedbackInbox() {
+  const adminId = useAuth().session?.user.id ?? null
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
@@ -569,14 +574,19 @@ function FeedbackInbox() {
     let cancelled = false
     async function load() {
       if (!supabase) return
-      const { data, error } = await supabase
-        .from('feedback')
-        .select('id, kind, message, reply_email, code, context, status, created_at, profiles(full_name, student_no, class_group, email)')
-        .order('created_at', { ascending: false })
-        .limit(500)
+      const query = (columns: string) =>
+        supabase!.from('feedback').select(columns).order('created_at', { ascending: false }).limit(500)
+      let { data, error } = await query(`${FEEDBACK_COLUMNS}, feedback_messages(id, feedback_id, author_id, body, created_at)`)
+      // Until schema.sql adds feedback_messages (#64), load the inbox without replies.
+      if (error) ({ data, error } = await query(FEEDBACK_COLUMNS))
       if (cancelled) return
       setError(error ? error.message : null)
-      if (data) setItems(data as unknown as FeedbackItem[])
+      if (data) {
+        setItems((data as unknown as FeedbackItem[]).map((i) => ({
+          ...i,
+          feedback_messages: [...(i.feedback_messages ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+        })))
+      }
     }
     void load()
     const timer = window.setInterval(load, FEEDBACK_REFRESH_MS)
@@ -600,6 +610,23 @@ function FeedbackInbox() {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)))
     const { error } = await supabase.from('feedback').update({ status }).eq('id', item.id)
     if (error) setError(error.message)
+  }
+
+  async function reply(item: FeedbackItem, body: string) {
+    if (!supabase || !adminId) return
+    const { data, error } = await supabase
+      .from('feedback_messages')
+      .insert({ feedback_id: item.id, author_id: adminId, body: body.slice(0, MAX_REPLY_CHARS) })
+      .select('id, feedback_id, author_id, body, created_at')
+      .single()
+    if (error) throw error
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, feedback_messages: [...i.feedback_messages, data as FeedbackMessage] } : i)))
+  }
+
+  // The student wrote last: their reply is waiting for an answer.
+  const studentReplied = (i: FeedbackItem) => {
+    const last = i.feedback_messages[i.feedback_messages.length - 1]
+    return Boolean(last && i.user_id && last.author_id === i.user_id)
   }
 
   const from = (i: FeedbackItem) =>
@@ -646,8 +673,26 @@ function FeedbackInbox() {
                 <td>{from(i)}</td>
                 <td>{KIND_LABELS[i.kind]}</td>
                 <td className="feedback-message">
+                  {studentReplied(i) && <span className="admin-badge tried">New reply</span>}{' '}
                   {i.message}
                   {i.code && <> <button className="link-button no-print" onClick={() => setOpenCode(i)}>View code</button></>}
+                  {i.feedback_messages.map((m) => (
+                    <div key={m.id} className={m.author_id === i.user_id ? 'feedback-thread-msg' : 'feedback-thread-msg own'}>
+                      <span className="feedback-thread-meta">{m.author_id === i.user_id ? 'Student' : 'Instructor'} · {formatDate(m.created_at)}</span>
+                      <p>{m.body}</p>
+                    </div>
+                  ))}
+                  <div className="no-print">
+                    {i.user_id ? (
+                      <ReplyBox label="Reply" onSend={(body) => reply(i, body)} />
+                    ) : i.reply_email ? (
+                      <a className="feedback-mailto" href={`mailto:${i.reply_email}?subject=${encodeURIComponent('Re: your x86sim feedback')}`}>
+                        ✉ Reply by email ({i.reply_email})
+                      </a>
+                    ) : (
+                      <p className="feedback-no-reply">Sent without an account, no reply possible.</p>
+                    )}
+                  </div>
                 </td>
                 <td>{where(i) || '-'}</td>
                 <td className="no-print">
