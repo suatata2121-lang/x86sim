@@ -15,12 +15,14 @@ interface Props {
   initialView?: View
   /** Shown on open, e.g. when a reset link had expired. */
   initialError?: string
+  /** Prefills the email, e.g. when reopening "Confirm your email" for a pending sign-up. */
+  initialEmail?: string
 }
 
-export function AccountDialog({ onClose, initialView = 'signin', initialError }: Props) {
+export function AccountDialog({ onClose, initialView = 'signin', initialError, initialEmail }: Props) {
   const auth = useAuth()
   const [view, setView] = useState<View>(initialView)
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(initialEmail ?? '')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [studentNo, setStudentNo] = useState('')
@@ -92,6 +94,7 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
         } catch (err) {
           // Not an error to read and give up on: the code screen is the way forward.
           if (err instanceof EmailNotConfirmedError) {
+            auth.setPendingConfirmation(email.trim())
             switchView('confirm')
             return
           }
@@ -116,6 +119,7 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError }:
           setAlreadyExists(true)
           setError('An account with this email already exists. Sign in, reset your password, or confirm your email with the code we sent.')
         } else if (needsEmailConfirmation) {
+          auth.setPendingConfirmation(email.trim())
           switchView('confirm')
         } else {
           onClose()

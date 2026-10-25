@@ -36,6 +36,15 @@ interface AuthState {
   passwordRecovery: boolean
   /** The page was opened from an email link that had expired or was already used. */
   linkExpired: boolean
+  /**
+   * Email of a sign-up still waiting for its code, for the rest of this
+   * browser session; null once confirmed. Drives the "not active yet" note.
+   */
+  pendingConfirmation: string | null
+  setPendingConfirmation(email: string | null): void
+  /** A session for an unconfirmed email was refused; open "Confirm your email". */
+  confirmationRequested: boolean
+  dismissConfirmationRequest(): void
   /** Throws EmailNotConfirmedError for an account whose email is not confirmed yet. */
   signIn(email: string, password: string): Promise<void>
   signUp(fields: SignUpFields): Promise<{ needsEmailConfirmation: boolean; alreadyExists: boolean }>
@@ -59,6 +68,26 @@ export class EmailNotConfirmedError extends Error {}
 
 const INVALID_CODE = 'That code is not valid or has expired.'
 
+const PENDING_KEY = 'x86sim:pending-confirmation'
+
+// sessionStorage can throw (blocked site data); the note is only a convenience.
+function readPending(): string | null {
+  try {
+    return sessionStorage.getItem(PENDING_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writePending(email: string | null) {
+  try {
+    if (email) sessionStorage.setItem(PENDING_KEY, email)
+    else sessionStorage.removeItem(PENDING_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 function requireClient() {
   if (!supabase) throw new Error('Accounts are not configured on this site.')
   return supabase
@@ -72,15 +101,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // the subscription below still opens "choose a new password".
   const [passwordRecovery, setPasswordRecovery] = useState(arrivedFromRecoveryLink)
   const [linkExpired, setLinkExpired] = useState(emailLinkError !== null)
+  const [pendingConfirmation, setPending] = useState(readPending)
+  const [confirmationRequested, setConfirmationRequested] = useState(false)
+
+  function setPendingConfirmation(email: string | null) {
+    writePending(email)
+    setPending(email)
+  }
 
   useEffect(() => {
     if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+    const client = supabase
+    // With "Confirm email" on Supabase never hands out such a session; this is
+    // the safety net if the setting is ever off, so an unconfirmed account
+    // can't use the site as a registered student (#62).
+    function accept(next: Session | null) {
+      if (next && !next.user.email_confirmed_at) {
+        setPendingConfirmation(next.user.email ?? null)
+        setConfirmationRequested(true)
+        // Deferred: calling auth methods inside onAuthStateChange can deadlock.
+        setTimeout(() => void client.auth.signOut({ scope: 'local' }), 0)
+        setSession(null)
+        return
+      }
+      if (next) setPendingConfirmation(null)
+      setSession(next)
+    }
+    client.auth.getSession().then(({ data }) => {
+      accept(data.session)
       setReady(true)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
-      setSession(next)
+    const { data: sub } = client.auth.onAuthStateChange((event, next) => {
+      accept(next)
       if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
     })
     return () => sub.subscription.unsubscribe()
@@ -115,6 +167,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: profile?.role === 'admin',
     passwordRecovery,
     linkExpired,
+    pendingConfirmation,
+    setPendingConfirmation,
+    confirmationRequested,
+    dismissConfirmationRequest() {
+      setConfirmationRequested(false)
+    },
     async signIn(email, password) {
       const { error } = await requireClient().auth.signInWithPassword({ email, password })
       if (error?.code === 'email_not_confirmed') throw new EmailNotConfirmedError(error.message)
