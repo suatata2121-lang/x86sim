@@ -733,6 +733,97 @@ drop policy if exists "feedback: admin updates" on public.feedback;
 create policy "feedback: admin updates" on public.feedback
   for update using (public.is_admin()) with check (public.is_admin());
 
+-- Replies (#64): the instructor and the student who sent the feedback can
+-- write under it, and the student sees status changes and replies on the
+-- site. status_changed_at is when an admin last changed the status;
+-- student_read_at is when the student last opened it. Anything newer than
+-- student_read_at is unread for the student.
+alter table public.feedback add column if not exists status_changed_at timestamptz;
+alter table public.feedback add column if not exists student_read_at timestamptz;
+
+create or replace function public.feedback_status_stamp()
+returns trigger
+language plpgsql
+as $$
+begin
+  -- Only an admin's change notifies the student; the reopen caused by the
+  -- student's own reply (feedback_message_reopen) runs as the student.
+  if new.status is distinct from old.status and public.is_admin() then
+    new.status_changed_at := now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists feedback_status_stamp on public.feedback;
+create trigger feedback_status_stamp
+  before update on public.feedback
+  for each row execute function public.feedback_status_stamp();
+
+-- Students can't update feedback rows, so this is how they mark their own as read.
+create or replace function public.mark_feedback_read(p_id bigint)
+returns void
+language sql
+security definer set search_path = public
+as $$
+  update public.feedback set student_read_at = now()
+   where id = p_id and user_id = auth.uid();
+$$;
+
+revoke all on function public.mark_feedback_read(bigint) from public, anon;
+grant execute on function public.mark_feedback_read(bigint) to authenticated;
+
+create table if not exists public.feedback_messages (
+  id          bigint generated always as identity primary key,
+  feedback_id bigint not null references public.feedback (id) on delete cascade,
+  author_id   uuid references public.profiles (id) on delete set null,
+  body        text not null check (length(body) between 1 and 5000),
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists feedback_messages_feedback_idx on public.feedback_messages (feedback_id, created_at);
+
+alter table public.feedback_messages enable row level security;
+
+drop policy if exists "feedback_messages: read own or admin" on public.feedback_messages;
+create policy "feedback_messages: read own or admin" on public.feedback_messages
+  for select using (
+    public.is_admin()
+    or exists (select 1 from public.feedback f where f.id = feedback_id and f.user_id = auth.uid())
+  );
+
+-- Feedback sent without an account has nobody to answer on the site.
+drop policy if exists "feedback_messages: insert own or admin" on public.feedback_messages;
+create policy "feedback_messages: insert own or admin" on public.feedback_messages
+  for insert with check (
+    author_id = auth.uid()
+    and exists (
+      select 1 from public.feedback f
+       where f.id = feedback_id
+         and f.user_id is not null
+         and (f.user_id = auth.uid() or public.is_admin())
+    )
+  );
+
+-- A student's reply puts the feedback back at the top of the admin inbox.
+create or replace function public.feedback_message_reopen()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    update public.feedback set status = 'new' where id = new.feedback_id and status <> 'new';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists feedback_message_reopen on public.feedback_messages;
+create trigger feedback_message_reopen
+  after insert on public.feedback_messages
+  for each row execute function public.feedback_message_reopen();
+
 -- ------------------------------------------------------------------ report --
 -- One row per student for the admin panel. security_invoker makes the view
 -- obey the RLS above, so a student querying it sees only their own row.
