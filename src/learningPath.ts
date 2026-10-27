@@ -8,7 +8,7 @@ import type { Reg16 } from './core/types'
 import type { PredictQuestion } from './core/predict'
 import { PREDICT_QUESTIONS } from './predictQuestions'
 
-export type AsidePanel = 'registers' | 'stack' | 'devices' | 'databus' | 'memory' | 'profiler'
+export type AsidePanel = 'registers' | 'stack' | 'devices' | 'memory' | 'profiler'
 
 export interface ObserveSpec {
   examples: string[]
@@ -172,7 +172,7 @@ export const LEARNING_PATH: LearningModule[] = [
       panel: 'memory',
       guide: [
         'Open Memory and jump to the NUMS label: these are the bytes the loop reads.',
-        'On MOV BL, [NUMS+SI] the Data Bus panel shows a memory read. Instructions that only use registers never touch the bus.',
+        'MOV BL, [NUMS+SI] reads memory over the bus: the byte at NUMS+SI ends up in BL. Instructions that only use registers never touch the bus.',
       ],
     },
     assignments: ['t3-snapshot'],
@@ -278,9 +278,9 @@ export const LEARNING_PATH: LearningModule[] = [
     concepts: [hw('biu-eu'), hw('bus-timing'), hw('control-signals')],
     observe: {
       examples: ['array-sum'],
-      panel: 'databus',
+      panel: 'memory',
       guide: [
-        'Step through MOV BL, [NUMS+SI] and see the memory read it causes.',
+        'Step through MOV BL, [NUMS+SI]: the CPU reads the byte at NUMS+SI from memory (find it in the Memory panel) into BL.',
         'Compare it with the timing diagram on the Bus Cycles page: in T1 the address goes out on the bus, in T3 the data comes back.',
       ],
     },

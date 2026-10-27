@@ -6,7 +6,6 @@ import { RegisterView } from './components/RegisterView'
 import { MemoryView } from './components/MemoryView'
 import { CodeEditor } from './components/CodeEditor'
 import { DevicesView } from './components/Devices'
-import { DataBusView } from './components/DataBusView'
 import { StackView } from './components/StackView'
 import { ProfilerView } from './components/ProfilerView'
 import { GraderView } from './components/GraderView'
@@ -68,7 +67,6 @@ const ASIDE_TABS: { id: AsideTab; label: string }[] = [
   { id: 'registers', label: 'Registers' },
   { id: 'stack', label: 'Stack' },
   { id: 'devices', label: 'Devices' },
-  { id: 'databus', label: 'Data Bus' },
   { id: 'memory', label: 'Memory' },
   { id: 'profiler', label: 'Profiler' },
 ]
@@ -1008,7 +1006,7 @@ export default function App() {
           onClose={() => setFeedbackOpen(false)}
           mine={backendEnabled && userId ? myFeedback : undefined}
           currentSource={source}
-          context={{ tab: activeTab.title, assignment: activeAssignmentId, section: mode === 'learn' ? `learn/${learnNav.section}` : mode }}
+          context={{ tab: activeTab.title, assignment: activeAssignmentId, section: mode === 'learn' ? `learn/${learnNav.section ?? 'home'}` : mode }}
         />
       )}
       {(accountOpen || confirmOpen || auth.confirmationRequested || auth.passwordRecovery || auth.linkExpired) && (
@@ -1384,13 +1382,6 @@ export default function App() {
             ))}
           </div>
           {shownAsideTab === 'registers' && <RegisterView regs={regs} flags={flags} stepKey={cpuRef.current.steps} />}
-          {shownAsideTab === 'databus' && (
-            <DataBusView
-              key={`bus-${cpuGeneration}`}
-              lastInstruction={cpuRef.current.lastInstruction}
-              steps={cpuRef.current.steps}
-            />
-          )}
           {shownAsideTab === 'stack' && (
             <StackView
               key={`stack-${cpuGeneration}`}
@@ -1404,7 +1395,7 @@ export default function App() {
           )}
           {shownAsideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />}
           {shownAsideTab === 'memory' && (
-            <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} />
+            <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} segments={regs} />
           )}
           {shownAsideTab === 'profiler' && (
             <ProfilerView
