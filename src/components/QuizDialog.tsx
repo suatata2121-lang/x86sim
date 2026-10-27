@@ -16,6 +16,8 @@ interface Props {
    * the same attempt comes back after the dialog closes or the page reloads.
    */
   storageKey?: string
+  /** Opens My Notes on this module (#71), offered after a pass. */
+  onReviewNotes?: () => void
   /** Offered after a pass, e.g. the next module. */
   next?: { label: string; onClick: () => void }
 }
@@ -58,7 +60,7 @@ function saveAttempt(key: string | undefined, attempt: SavedAttempt | null) {
 // those only with a pass. An unsubmitted attempt is kept in sessionStorage and
 // resumed instead of redrawn (issue #33); it holds no right answers, so
 // resuming leaks nothing, and a new set is drawn only after a submit.
-export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, storageKey, next }: Props) {
+export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, onReviewNotes, storageKey, next }: Props) {
   const [questions, setQuestions] = useState<DrawnQuestion[] | null>(null)
   const [chosen, setChosen] = useState<Record<string, string>>({})
   const [result, setResult] = useState<QuizResult | null>(null)
@@ -205,6 +207,11 @@ export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, 
             <p className="quiz-score pass">
               You scored {result.score}/{result.total} and passed. {quiz.passNote}
             </p>
+            {onReviewNotes && (
+              <p>
+                <button className="link-button" onClick={onReviewNotes}>Review your notes for this module</button>
+              </p>
+            )}
             <ol className="quiz-questions">
               {result.answers.map((a) => (
                 <li key={a.question_id}>
