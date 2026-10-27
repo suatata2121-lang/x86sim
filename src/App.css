@@ -5032,3 +5032,13 @@ aside .panel {
     display: none;
   }
 }
+
+/* One-sentence takeaway under a worked example (shift-and-add, #70). */
+.nv-hint {
+  margin: 0.4rem 0 0;
+  max-width: 40rem;
+  color: var(--text-dim);
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+  white-space: normal;
+}
