@@ -383,31 +383,62 @@ function Column({ op, a, b, bits, base, showFlags }: { op: 'add' | 'sub'; a: num
   )
 }
 
+// One colour per multiplier bit, shared by that bit and its partial-product
+// row (#70), so students see which bit made which row. Cycles past four bits.
+const BIT_COLORS = ['var(--num-hex)', 'var(--num-oct)', 'var(--num-carry)', 'var(--num-dec)']
+
 function ShiftAdd({ a, b }: { a: number; b: number }) {
   const product = a * b
+  const aBin = a.toString(2)
+  const bBin = b.toString(2)
   const width = product.toString(2).length
-  const bBits = b.toString(2).length
-  const rows = Array.from({ length: bBits }, (_, j) => ({ j, on: ((b >> j) & 1) === 1 }))
+  const rows = Array.from({ length: bBin.length }, (_, j) => ({ j, on: ((b >> j) & 1) === 1, color: BIT_COLORS[j % BIT_COLORS.length] }))
   const cols = `auto repeat(${width}, 1.35rem)`
+  // Right-aligned in `width` columns; blanks on the left stay empty.
   const right = (s: string) => s.padStart(width, ' ').split('')
   return (
-    <Block legend={[[BASE_COLOR[2], 'binary'], ['var(--num-dec)', 'decimal']]}>
-      <div className="nv-title"><Num base={2}>{a.toString(2)}</Num> × <Num base={2}>{b.toString(2)}</Num> (<Num base={10}>{a}</Num> × <Num base={10}>{b}</Num>)</div>
+    <Block legend={[[BASE_COLOR[2], 'binary'], ['var(--num-dec)', 'decimal'], ...rows.map(({ j, color }): LegendItem => [color, `multiplier bit ${j} and its row`])]}>
+      <div className="nv-title"><Num base={2}>{aBin}</Num> × <Num base={2}>{bBin}</Num> (<Num base={10}>{a}</Num> × <Num base={10}>{b}</Num>)</div>
       <div className="nv-grid" style={{ gridTemplateColumns: cols }}>
-        {rows.map(({ j, on }) => (
-          <Row key={j} label={on ? `bit ${j} = 1: shift left ${j}` : `bit ${j} = 0`}>
-            {right(on ? (a << j).toString(2) : '0').map((ch, i) => (
-              <Cell key={i} color={BASE_COLOR[2]} faint={!on}>{ch.trim()}</Cell>
-            ))}
-          </Row>
-        ))}
+        <Row label="multiplicand">
+          {right(aBin).map((ch, i) => <Cell key={i} color={BASE_COLOR[2]}>{ch.trim()}</Cell>)}
+        </Row>
+        <Row label="× multiplier">
+          {right(bBin).map((ch, i) => {
+            const j = width - 1 - i
+            return <Cell key={i} color={ch.trim() ? rows[j]?.color : undefined} className={ch.trim() ? 'box' : undefined}>{ch.trim()}</Cell>
+          })}
+        </Row>
+        <span className="nv-rowlabel" />
+        <span className="nv-rule" style={{ gridColumn: `2 / span ${width}` }} />
+        {rows.map(({ j, on, color }) => {
+          // A 0 bit still takes its place in the column, as a faint 0000.
+          const digits = (on ? aBin : '0'.repeat(aBin.length)) + '0'.repeat(j)
+          return (
+            <Row
+              key={j}
+              label={<span style={{ color }}>{on
+                ? `bit ${j} of ${bBin} is 1 → copy ${aBin}, shifted left ${j}`
+                : `bit ${j} of ${bBin} is 0 → add nothing (${'0'.repeat(aBin.length)})`}</span>}
+            >
+              {right(digits).map((ch, i) => (
+                // The last j digits are the zeros the shift brings in.
+                <Cell key={i} color={color} faint={!on || i >= width - j}>{ch.trim()}</Cell>
+              ))}
+            </Row>
+          )
+        })}
         <span className="nv-rowlabel" />
         <span className="nv-rule" style={{ gridColumn: `2 / span ${width}` }} />
         <Row label="sum">
           {right(product.toString(2)).map((ch, i) => <Cell key={i} color={BASE_COLOR[2]} className="strong">{ch.trim()}</Cell>)}
         </Row>
       </div>
-      <div className="nv-total">= <Num base={2} strong>{product.toString(2)}</Num> = <Num base={10} strong>{product}</Num></div>
+      <div className="nv-total">sum = <Num base={2} strong>{product.toString(2)}</Num> = <Num base={10} strong>{product}</Num></div>
+      <div className="nv-check">{a} × {b} = {product} ✓</div>
+      <p className="nv-hint">
+        Each 1 bit of the multiplier adds a copy of the multiplicand, shifted left by that bit's position; each 0 bit adds nothing.
+      </p>
     </Block>
   )
 }
