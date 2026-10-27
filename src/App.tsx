@@ -11,6 +11,7 @@ import { StackView } from './components/StackView'
 import { ProfilerView } from './components/ProfilerView'
 import { GraderView } from './components/GraderView'
 import { FeedbackDialog } from './components/FeedbackDialog'
+import { HelpDialog } from './components/HelpDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { HintLadder } from './components/HintLadder'
 import { useHintLadder } from './backend/hints'
@@ -209,7 +210,11 @@ export default function App() {
   // First sign-in (#14): the tour, then the placement quiz. Only for a
   // student whose profile says it hasn't been done (null, not undefined:
   // undefined means the column doesn't exist yet).
-  const [onboarding, setOnboarding] = useState<'tour' | 'placement' | null>(null)
+  // 'tour-again' is the Help menu's replay (#72): the same tour, no placement quiz after it.
+  const [onboarding, setOnboarding] = useState<'tour' | 'tour-again' | 'placement' | null>(null)
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const helpMenuRef = useRef<HTMLDivElement>(null)
   const onboardingStarted = useRef(false)
   const needsOnboarding = backendEnabled && auth.profile?.role === 'student' && auth.profile.onboarded_at === null
   const [pathCardHidden, setPathCardHidden] = useState(() => window.localStorage.getItem(PATH_CARD_HIDDEN_KEY) === '1')
@@ -612,16 +617,31 @@ export default function App() {
   }
 
   // The tour runs on the Hello World example with the Registers panel open.
-  useEffect(() => {
-    if (!needsOnboarding || onboardingStarted.current) return
-    onboardingStarted.current = true
+  function startTour(kind: 'tour' | 'tour-again') {
+    setAdminOpen(false)
+    setObserve(null)
     setMode('examples')
     setSelectedExampleId('hello')
     setAsideTab('registers')
     loadExample('hello')
-    setOnboarding('tour')
-    // loadExample is a fresh closure every render; start once.
+    setOnboarding(kind)
+  }
+
+  useEffect(() => {
+    if (!needsOnboarding || onboardingStarted.current) return
+    onboardingStarted.current = true
+    startTour('tour')
+    // startTour is a fresh closure every render; start once.
   }, [needsOnboarding])
+
+  useEffect(() => {
+    if (!helpMenuOpen) return
+    function onDown(e: globalThis.MouseEvent) {
+      if (!helpMenuRef.current?.contains(e.target as Node)) setHelpMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [helpMenuOpen])
 
   function finishPlacement(score: number | null, credit: boolean) {
     setOnboarding(null)
@@ -788,6 +808,17 @@ export default function App() {
           ) : (
             <button className="theme-toggle" onClick={() => setAccountOpen(true)}>👤 Sign in</button>
           ))}
+          <div className="help-menu" ref={helpMenuRef}>
+            <button className="theme-toggle" aria-haspopup="menu" aria-expanded={helpMenuOpen} onClick={() => setHelpMenuOpen((o) => !o)}>
+              ? Help
+            </button>
+            {helpMenuOpen && (
+              <div className="help-menu-list" role="menu">
+                <button role="menuitem" onClick={() => { setHelpMenuOpen(false); startTour('tour-again') }}>Take the tour again</button>
+                <button role="menuitem" onClick={() => { setHelpMenuOpen(false); setHelpOpen(true) }}>How to use simx86</button>
+              </div>
+            )}
+          </div>
           <button className="theme-toggle" onClick={() => setFeedbackOpen(true)} title="Report a bug or suggest an improvement">
             💬 Feedback
             {myFeedback.unread.length > 0 && <span className="feedback-count" aria-label={`${myFeedback.unread.length} unread`}>{myFeedback.unread.length}</span>}
@@ -824,6 +855,21 @@ export default function App() {
         )
       })()}
       {onboarding === 'tour' && <Tour onDone={() => setOnboarding('placement')} />}
+      {onboarding === 'tour-again' && <Tour onDone={() => setOnboarding(null)} />}
+      {helpOpen && (
+        <HelpDialog
+          onClose={() => setHelpOpen(false)}
+          onOpenRegisters={() => {
+            setAdminOpen(false)
+            setAsideTab('registers')
+          }}
+          onOpenFeedback={() => setFeedbackOpen(true)}
+          onOpenPath={backendEnabled && auth.session ? () => {
+            setAdminOpen(false)
+            setPathCardHiddenPersist(false)
+          } : undefined}
+        />
+      )}
       {onboarding === 'placement' && <PlacementDialog onFinish={finishPlacement} />}
       {reflectModuleId && (() => {
         const module = LEARNING_PATH.find((m) => m.id === reflectModuleId)
