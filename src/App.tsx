@@ -905,6 +905,32 @@ export default function App() {
           }}
         />
       )}
+      {auth.signedOutUnexpectedly && !accountOpen && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && auth.dismissSignedOutWarning()}>
+          <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="signed-out-title" aria-describedby="signed-out-body">
+            <div className="modal-header">
+              <h2 id="signed-out-title">You have been signed out</h2>
+              <button className="modal-close" onClick={() => auth.dismissSignedOutWarning()} aria-label="Close">×</button>
+            </div>
+            <p id="signed-out-body">
+              Your session ended, so your progress is no longer being saved. Sign in again to keep your work and lab time in your record.
+            </p>
+            <div className="feedback-actions">
+              <button onClick={() => auth.dismissSignedOutWarning()}>Not now</button>
+              <button
+                className="primary"
+                autoFocus
+                onClick={() => {
+                  auth.dismissSignedOutWarning()
+                  setAccountOpen(true)
+                }}
+              >
+                Sign in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {backendEnabled && auth.ready && !auth.session && auth.pendingConfirmation && (
         <p className="account-banner account-banner-pending no-print">
           <button className="link-button" onClick={() => setConfirmOpen(true)}>
