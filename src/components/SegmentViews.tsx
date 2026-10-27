@@ -376,9 +376,11 @@ export function EaCalculator({ done, onDone }: { done?: Set<string>; onDone?: (p
       <table className="fde-state">
         <tbody>
           <tr><td>Addressing mode</td><td>{parsed.mode}</td></tr>
-          <tr><td>Effective address</td><td>{terms.join(' + ')} = {hex(ea, 4)}</td></tr>
+          {/* Keyed by value so the row remounts and flashes on every change:
+              students missed that the result follows their edits (#69). */}
+          <tr key={`ea-${ea}`} className="sv-flash"><td>Effective address</td><td>{terms.join(' + ')} = {hex(ea, 4)}</td></tr>
           <tr><td>Segment</td><td>{why}</td></tr>
-          <tr>
+          <tr key={`pa-${seg}-${physical}`} className="sv-flash">
             <td>Physical address</td>
             <td>
               {seg} × 10h + EA = {hex(val(seg) * 16, 5)} + {hex(ea, 4)} ={' '}
@@ -403,10 +405,11 @@ export function EaCalculator({ done, onDone }: { done?: Set<string>; onDone?: (p
       <label className="sv-field sv-operand">
         <span>Memory operand or instruction</span>
         <input className="mb-address" value={operand} spellCheck={false} onChange={(e) => setOperand(e.target.value)} />
+        <span className="sv-hint">Numbers: hex with h (20h), otherwise decimal.</span>
       </label>
       <div className="mb-inputs sv-regs">
         {REG_FIELDS.map((r) => (
-          <HexInput key={r} label={r} value={regText[r]} digits={4} width="4.5rem" onChange={(v) => setRegText((s) => ({ ...s, [r]: v }))} />
+          <HexInput key={r} label={`${r} (hex)`} value={regText[r]} digits={4} width="4.5rem" onChange={(v) => setRegText((s) => ({ ...s, [r]: v }))} />
         ))}
       </div>
       {body}

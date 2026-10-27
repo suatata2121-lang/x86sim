@@ -4306,6 +4306,20 @@ aside .panel {
   margin: 0.5rem 0;
 }
 
+.sv-hint {
+  font-size: 0.75rem;
+}
+
+/* A result row that just changed (EaCalculator rows remount on new values). */
+.sv-flash td {
+  animation: sv-flash-anim 0.8s ease-out;
+}
+
+@keyframes sv-flash-anim {
+  from { background: var(--warning-bg-strong); }
+  to { background: transparent; }
+}
+
 .sv-operand input {
   width: 100%;
   max-width: 24rem;
