@@ -45,6 +45,9 @@ import { useAuth } from './backend/auth'
 import { unreadNotices, useMyFeedback } from './backend/feedback'
 import { fetchCompletedAssignments, recordAttempt, trackActivity, useStudySession } from './backend/tracking'
 import { useModuleProgress } from './backend/moduleProgress'
+import { useNotes } from './backend/notes'
+import { NotesPanel } from './components/NotesPanel'
+import { AddToNotes } from './components/AddToNotes'
 import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
@@ -54,6 +57,7 @@ const THEME_STORAGE_KEY = 'x86sim-theme'
 const COMPLETED_ASSIGNMENTS_KEY = 'x86sim-completed-assignments'
 const PATH_CARD_HIDDEN_KEY = 'x86sim-path-card-hidden'
 const FOCUS_MODE_KEY = 'x86sim-focus-mode'
+const NOTES_OPEN_KEY = 'x86sim-notes-open'
 const ALL_ASSIGNMENTS: Assignment[] = CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments))
 const BLANK_SOURCE = '; Write your code here.\n; Need inspiration? Check the Examples or Learn tabs on the left.\n\n'
 
@@ -231,6 +235,16 @@ export default function App() {
   // (#27), so they only wait on a running program, not on the Assemble button.
   const assembledSourceRef = useRef<string | null>(null)
   const [stepChange, setStepChange] = useState<StepChange | null>(null)
+  // My Notes (#71): open state remembered; null module = the one the student is on.
+  const notesStore = useNotes(userId)
+  const [notesOpen, setNotesOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem(NOTES_OPEN_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const [notesModuleId, setNotesModuleId] = useState<string | null>(null)
   // Focus mode (#73): only the task, the editor and the registers. Remembered,
   // but it only applies while an assignment is open in the editor.
   const [focusMode, setFocusMode] = useState(() => {
@@ -474,6 +488,21 @@ export default function App() {
     setActiveTabId(tab.id)
     setActiveAssignmentId(assignment.id)
     resetExecutionState()
+  }
+
+  function setNotesOpenPersist(open: boolean) {
+    setNotesOpen(open)
+    try {
+      window.localStorage.setItem(NOTES_OPEN_KEY, open ? '1' : '0')
+    } catch {
+      // ignore (e.g. private browsing with storage disabled)
+    }
+  }
+
+  /** Opens My Notes on a module; without one, on the module the student is on. */
+  function openNotes(moduleId?: string) {
+    setNotesModuleId(moduleId ?? null)
+    setNotesOpenPersist(true)
   }
 
   function setFocusModePersist(on: boolean) {
@@ -798,6 +827,18 @@ export default function App() {
             : null
   const studentModule = auth.session && moduleProgress.loaded ? currentModule(moduleProgress.rows, pathProgress) : null
   const pageTools = pageRef ? moduleForPage(pageRef, studentModule)?.tools : undefined
+  // The module a note belongs to: the open Learn page's, else the student's current one.
+  const hereModule = (pageRef && moduleForPage(pageRef, studentModule)) || studentModule || LEARNING_PATH[0]
+  const shownNotesModuleId = notesModuleId ?? hereModule.id
+
+  function addQuoteToNotes(text: string) {
+    const topic = pageRef ? conceptTitle(pageRef) : 'Learn'
+    const quote = [...text.split(/\r?\n/).filter((l) => l.trim()).map((l) => `> ${l.trim()}`), `> — ${topic}`].join('\n')
+    const prev = notesStore.notes.get(hereModule.id) ?? ''
+    notesStore.setNote(hereModule.id, prev.trim() ? `${prev.replace(/\s+$/, '')}\n\n${quote}\n` : `${quote}\n`)
+    openNotes(hereModule.id)
+  }
+
   const showEditor = !observe && !hardwareMode && (!pageTools || pageTools.includes('editor'))
   const showRun = !observe && !hardwareMode && (!pageTools || pageTools.includes('run'))
   const focus = focusMode && !!activeAssignmentId && showEditor && showRun && !adminOpen
@@ -817,7 +858,7 @@ export default function App() {
   const shownAsideTab = asideTabs.some((t) => t.id === asideTab) ? asideTab : asideTabs[0]?.id
 
   return (
-    <div className={focus ? 'app focus-mode' : 'app'}>
+    <div className={`app${focus ? ' focus-mode' : ''}${notesOpen ? ' notes-open' : ''}`}>
       <header>
         <div>
           <h1>x86sim</h1>
@@ -853,6 +894,9 @@ export default function App() {
               </div>
             )}
           </div>
+          <button className="theme-toggle" onClick={() => (notesOpen ? setNotesOpenPersist(false) : openNotes())} aria-pressed={notesOpen}>
+            📝 Notes
+          </button>
           <button className="theme-toggle" onClick={() => setFeedbackOpen(true)} title="Report a bug or suggest an improvement">
             💬 Feedback
             {myFeedback.unread.length > 0 && <span className="feedback-count" aria-label={`${myFeedback.unread.length} unread`}>{myFeedback.unread.length}</span>}
@@ -883,6 +927,10 @@ export default function App() {
               if (ref) openConcept(ref)
             }}
             onClose={() => setQuizModuleId(null)}
+            onReviewNotes={() => {
+              setQuizModuleId(null)
+              openNotes(module.id)
+            }}
             storageKey={userId ? `quiz-attempt:${module.id}:${userId}` : undefined}
             next={nextModule && { label: `Next module: ${nextModule.title} →`, onClick: () => setQuizModuleId(null) }}
           />
@@ -1374,6 +1422,18 @@ export default function App() {
         )}
       </main>
       )}
+      {notesOpen && (
+        <NotesPanel
+          moduleId={shownNotesModuleId}
+          onSelect={(id) => setNotesModuleId(id)}
+          notes={notesStore.notes}
+          loaded={notesStore.loaded}
+          saveState={notesStore.saveState}
+          onChange={notesStore.setNote}
+          onClose={() => setNotesOpenPersist(false)}
+        />
+      )}
+      {mode === 'learn' && <AddToNotes onAdd={addQuoteToNotes} />}
       <footer className="app-footer">
         <p>
           Developed by Dr. Murat Adnan TAMER as part of the Microprocessors course at Haliç

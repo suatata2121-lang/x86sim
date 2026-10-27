@@ -4865,3 +4865,170 @@ aside .panel {
   color: var(--text-dim);
   font-size: 0.85rem;
 }
+
+/* ---- My Notes (#71): fixed on the right; the page makes room for it ---- */
+
+.app.notes-open {
+  margin-right: 22rem;
+}
+
+.notes-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-shadow: -4px 0 14px rgba(0, 0, 0, 0.15);
+}
+
+.notes-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.notes-header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.notes-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.notes-controls select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem;
+}
+
+.notes-text {
+  flex: 1;
+  min-height: 12rem;
+  resize: none;
+  padding: 0.5rem;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.notes-preview {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 0.9rem;
+}
+
+.notes-all-module + .notes-all-module {
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.notes-all-module h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+}
+
+.note-markdown h3,
+.note-markdown h4,
+.note-markdown h5 {
+  margin: 0.6rem 0 0.3rem;
+}
+
+.note-markdown p,
+.note-markdown ul,
+.note-markdown ol {
+  margin: 0 0 0.5rem;
+}
+
+.note-markdown ul,
+.note-markdown ol {
+  padding-left: 1.2rem;
+}
+
+.note-markdown blockquote {
+  margin: 0 0 0.5rem;
+  padding: 0.2rem 0.6rem;
+  border-left: 3px solid var(--accent-text);
+  color: var(--text-dim);
+}
+
+.note-markdown blockquote p {
+  margin: 0;
+}
+
+.note-code {
+  margin: 0 0 0.5rem;
+  padding: 0.4rem;
+  background: var(--bg-panel-alt);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+}
+
+.note-table {
+  margin: 0 0 0.5rem;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.note-table th,
+.note-table td {
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+}
+
+.notes-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.notes-save.saved {
+  color: var(--success-text);
+}
+
+.notes-save.error {
+  color: var(--error-text);
+}
+
+.add-to-notes {
+  position: fixed;
+  z-index: 60;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-width: 1000px) {
+  .app.notes-open {
+    margin-right: 0;
+  }
+
+  .notes-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@media print {
+  .notes-panel,
+  .add-to-notes {
+    display: none;
+  }
+}

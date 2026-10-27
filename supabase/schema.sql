@@ -738,6 +738,52 @@ grant execute on function public.quiz_submit(text, jsonb) to authenticated;
 revoke all on function public.quiz_ready(text) from public, anon;
 grant execute on function public.quiz_ready(text) to authenticated;
 
+-- ------------------------------------------------------------- my notes --
+-- A student's own notes, one per learning-path module (#71). Private on
+-- purpose: unlike every other table, admins can't read these rows either;
+-- note_counts() gives the report counts without any content.
+create table if not exists public.student_notes (
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  module_id  text not null,
+  body       text not null default '' check (char_length(body) <= 20000),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, module_id)
+);
+
+alter table public.student_notes enable row level security;
+
+drop policy if exists "notes: read own" on public.student_notes;
+create policy "notes: read own" on public.student_notes
+  for select using (user_id = auth.uid());
+
+drop policy if exists "notes: insert own" on public.student_notes;
+create policy "notes: insert own" on public.student_notes
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "notes: update own" on public.student_notes;
+create policy "notes: update own" on public.student_notes
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+drop policy if exists "notes: delete own" on public.student_notes;
+create policy "notes: delete own" on public.student_notes
+  for delete using (user_id = auth.uid());
+
+-- How many students keep a (non-empty) note per module; admins only.
+create or replace function public.note_counts()
+returns table (module_id text, students bigint)
+language sql
+stable
+security definer set search_path = public
+as $$
+  select n.module_id, count(distinct n.user_id)
+    from public.student_notes n
+   where public.is_admin() and btrim(n.body) <> ''
+   group by n.module_id;
+$$;
+
+revoke all on function public.note_counts() from public, anon;
+grant execute on function public.note_counts() to authenticated;
+
 -- ---------------------------------------------------------------- feedback --
 -- Problems and requests sent from the site's Feedback button, read in the
 -- admin panel's inbox. Visitors who aren't signed in may send too (user_id
