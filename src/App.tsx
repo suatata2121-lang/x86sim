@@ -14,6 +14,7 @@ import { FeedbackDialog } from './components/FeedbackDialog'
 import { HelpDialog } from './components/HelpDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { HintLadder } from './components/HintLadder'
+import { WhatChanged, describeStep, type StepChange } from './components/WhatChanged'
 import { useHintLadder } from './backend/hints'
 import { useChallenges } from './backend/challenges'
 import { ChallengePanel } from './components/ChallengePanel'
@@ -52,6 +53,7 @@ const MAX_STEP_HISTORY = 200
 const THEME_STORAGE_KEY = 'x86sim-theme'
 const COMPLETED_ASSIGNMENTS_KEY = 'x86sim-completed-assignments'
 const PATH_CARD_HIDDEN_KEY = 'x86sim-path-card-hidden'
+const FOCUS_MODE_KEY = 'x86sim-focus-mode'
 const ALL_ASSIGNMENTS: Assignment[] = CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments))
 const BLANK_SOURCE = '; Write your code here.\n; Need inspiration? Check the Examples or Learn tabs on the left.\n\n'
 
@@ -228,6 +230,16 @@ export default function App() {
   // Step, Run and Animate assemble first when the code is new or edited
   // (#27), so they only wait on a running program, not on the Assemble button.
   const assembledSourceRef = useRef<string | null>(null)
+  const [stepChange, setStepChange] = useState<StepChange | null>(null)
+  // Focus mode (#73): only the task, the editor and the registers. Remembered,
+  // but it only applies while an assignment is open in the editor.
+  const [focusMode, setFocusMode] = useState(() => {
+    try {
+      return window.localStorage.getItem(FOCUS_MODE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   const needsAssemble = !assembled || assembledSourceRef.current !== source
   const canRun = (needsAssemble || !halted) && !waitingForInput && !isAnimating
 
@@ -346,6 +358,8 @@ export default function App() {
     setWaitingForInput(cpu.waitingForInput)
     const instr = cpu.instructions[cpu.ip]
     setCurrentLine(instr ? instr.line : null)
+    const history = stepHistoryRef.current
+    setStepChange(describeStep(history[history.length - 1], cpu, assembledSourceRef.current))
   }
 
   // Starts a fresh execution session for whatever tab is now active: a new
@@ -460,6 +474,15 @@ export default function App() {
     setActiveTabId(tab.id)
     setActiveAssignmentId(assignment.id)
     resetExecutionState()
+  }
+
+  function setFocusModePersist(on: boolean) {
+    setFocusMode(on)
+    try {
+      window.localStorage.setItem(FOCUS_MODE_KEY, on ? '1' : '0')
+    } catch {
+      // ignore (e.g. private browsing with storage disabled)
+    }
   }
 
   function setPathCardHiddenPersist(hidden: boolean) {
@@ -777,13 +800,24 @@ export default function App() {
   const pageTools = pageRef ? moduleForPage(pageRef, studentModule)?.tools : undefined
   const showEditor = !observe && !hardwareMode && (!pageTools || pageTools.includes('editor'))
   const showRun = !observe && !hardwareMode && (!pageTools || pageTools.includes('run'))
+  const focus = focusMode && !!activeAssignmentId && showEditor && showRun && !adminOpen
+
+  // Esc leaves focus mode, unless it is closing a dialog on top of it.
+  useEffect(() => {
+    if (!focus) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !document.querySelector('.modal-backdrop, .tour-layer')) setFocusModePersist(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [focus])
   const asideTabs = observe || hardwareMode ? [] : ASIDE_TABS.filter((t) => !pageTools || pageTools.includes(t.id))
   const observeModule = observe ? LEARNING_PATH.find((m) => m.id === observe.moduleId) ?? null : null
   const observeExample = observe ? EXAMPLES.find((e) => e.id === observe.exampleId) ?? null : null
   const shownAsideTab = asideTabs.some((t) => t.id === asideTab) ? asideTab : asideTabs[0]?.id
 
   return (
-    <div className="app">
+    <div className={focus ? 'app focus-mode' : 'app'}>
       <header>
         <div>
           <h1>x86sim</h1>
@@ -994,7 +1028,7 @@ export default function App() {
       {adminOpen && auth.isAdmin ? <AdminView onClose={() => setAdminOpen(false)} /> : (
       <main>
         <section className="editor-panel">
-          {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && (
+          {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && !focus && (
             <LearningPathCard
               rows={moduleProgress.rows}
               progress={pathProgress}
@@ -1018,7 +1052,7 @@ export default function App() {
               unlockAll={auth.isAdmin}
             />
           )}
-          {backendEnabled && auth.session && moduleProgress.loaded && !observe && reviewCard && (
+          {backendEnabled && auth.session && moduleProgress.loaded && !observe && !focus && reviewCard && (
             <ReviewCard
               key={`${reviewCard.module.id}-${reviewCard.question.id}`}
               title={reviewCard.module.title}
@@ -1031,7 +1065,7 @@ export default function App() {
               onDone={() => setAnsweredReview(null)}
             />
           )}
-          {showEditor && (
+          {showEditor && !focus && (
             <div className="tabs-bar">
               {tabs.map((tab) => (
                 <div
@@ -1056,7 +1090,18 @@ export default function App() {
             </div>
           )}
           <div className="editor-row">
-            <div className="mode-sidebar">
+            {focus && (() => {
+              const a = ALL_ASSIGNMENTS.find((x) => x.id === activeAssignmentId)
+              return a && (
+                <details className="panel focus-task" open>
+                  <summary>{a.title}</summary>
+                  <p className="example-description">{a.concept}</p>
+                  <h4>The tests check</h4>
+                  <ul>{a.testCases.map((t) => <li key={t.name}>{t.name}</li>)}</ul>
+                </details>
+              )
+            })()}
+            {!focus && <div className="mode-sidebar">
               <div className="mode-tabs mode-tabs-vertical">
                 <button className={mode === 'new' ? 'mode-tab active' : 'mode-tab'} onClick={() => { setObserve(null); setMode('new') }}>New</button>
                 <button className={mode === 'examples' ? 'mode-tab active' : 'mode-tab'} onClick={() => { setObserve(null); setMode('examples') }}>Examples</button>
@@ -1094,7 +1139,7 @@ export default function App() {
                   onSelectAssignment={handleSelectAssignment}
                 />
               )}
-            </div>
+            </div>}
             <div className="editor-col">
               {observeModule && observeExample && (
                 <ObserveView
@@ -1110,7 +1155,7 @@ export default function App() {
                   onOpenInEditor={() => openExample(observeExample.id, 'registers')}
                 />
               )}
-              {mode === 'learn' && (
+              {mode === 'learn' && !focus && (
                 <LearnDetail
                   nav={learnNav}
                   activeAssignmentId={activeAssignmentId}
@@ -1147,6 +1192,7 @@ export default function App() {
                   theme={theme}
                 />
               )}
+              {showRun && <WhatChanged change={stepChange} />}
             </div>
           </div>
           {showRun && (
@@ -1166,6 +1212,13 @@ export default function App() {
                     Clear breakpoints
                   </button>
                 )}
+                {focus
+                  ? <button className="focus-toggle" onClick={() => setFocusModePersist(false)}>Exit focus</button>
+                  : activeAssignmentId && (
+                    <button className="focus-toggle" onClick={() => setFocusModePersist(true)} title="Show only the task, the editor and the registers">
+                      ⛶ Focus
+                    </button>
+                  )}
               </div>
               {activeAssignmentId && (
                 <p className="status">
@@ -1267,7 +1320,10 @@ export default function App() {
           )}
         </section>
         {asideTabs.length > 0 && (
-        <aside className={shownAsideTab === 'registers' ? 'aside-compact' : undefined}>
+        <aside className={focus || shownAsideTab === 'registers' ? 'aside-compact' : undefined}>
+          {focus && <WhatChanged change={stepChange} className="what-changed-aside" />}
+          {focus && <RegisterView regs={regs} flags={flags} stepKey={cpuRef.current.steps} />}
+          {!focus && <>
           <div className="mode-tabs aside-tabs">
             {asideTabs.map((t) => (
               <button
@@ -1313,6 +1369,7 @@ export default function App() {
               instructionCount={cpuRef.current.instructions.length}
             />
           )}
+          </>}
         </aside>
         )}
       </main>

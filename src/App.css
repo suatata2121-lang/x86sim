@@ -510,6 +510,64 @@ aside {
   min-width: 0;
 }
 
+/* One line under the editor after each Step: the instruction and what it changed (#73). */
+.what-changed {
+  margin: 0.4rem 0 0;
+  padding: 0.3rem 0.6rem;
+  border-left: 3px solid var(--warning-text);
+  background: var(--warning-bg-strong);
+  border-radius: 3px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.what-changed code {
+  font-weight: 700;
+}
+
+.what-changed-aside {
+  margin: 0 0 0.5rem;
+}
+
+/* Focus mode (#73): task, editor and registers only. */
+.focus-mode > header,
+.focus-mode > .app-footer {
+  display: none;
+}
+
+.focus-task {
+  flex: 0 0 240px;
+  margin: 0;
+}
+
+.focus-task summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.focus-task h4 {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.85rem;
+}
+
+.focus-task ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.focus-toggle {
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  .focus-task {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}
+
 .learn-detail-panel {
   margin-bottom: 0.6rem;
   max-height: 340px;
