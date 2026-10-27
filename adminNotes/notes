@@ -23,5 +23,3 @@ Data/bus sekmesini kaldırabiliriz. işlevsiz gözüküyor.
 memory'de adresler 5 basamaklı fiziksel adres olmalı. arama kısmına ise lojik adres formatı ile arama yapılabilir. mesela segment adres DS 0000h, offset BX 0100h ise. fiziksel adres 00100h ve lojik adres 0000:0100
 Learn'de curriculum sekmesi direk açılıyor. açılmasın.
 admin hesabıyla giriş yapınca tüm modüllere unlock olarak erişilebilmeli.
-
-Kulalnıcı yorumları:
