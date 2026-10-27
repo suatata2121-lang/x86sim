@@ -30,8 +30,9 @@ type LearnSection = 'curriculum' | 'reference' | 'hardware' | 'numbering'
 // (LearnDetail, shown above the code editor) can stay in sync while living
 // in two different places in the layout.
 export interface LearnNav {
-  section: LearnSection
-  setSection: (s: LearnSection) => void
+  /** Null until the student opens a section: Learn starts with all of them closed. */
+  section: LearnSection | null
+  setSection: (s: LearnSection | null) => void
   stageId: string | null
   setStageId: (id: string | null) => void
   taskId: string | null
@@ -51,7 +52,7 @@ export interface LearnNav {
 }
 
 export function useLearnNav(): LearnNav {
-  const [section, setSection] = useState<LearnSection>('curriculum')
+  const [section, setSection] = useState<LearnSection | null>(null)
   const [stageId, setStageId] = useState<string | null>(null)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [categoryId, setCategoryId] = useState<string | null>(null)
@@ -361,7 +362,7 @@ export function LearnSidebar({
         title="Instruction Reference"
         accent={SECTION_ACCENTS.reference}
         isOpen={nav.section === 'reference'}
-        onToggle={() => nav.setSection('reference')}
+        onToggle={() => nav.setSection(nav.section === 'reference' ? null : 'reference')}
       >
         <ReferenceNav nav={nav} />
       </LearnAccordionSection>
@@ -369,7 +370,7 @@ export function LearnSidebar({
         title="Curriculum"
         accent={SECTION_ACCENTS.curriculum}
         isOpen={nav.section === 'curriculum'}
-        onToggle={() => nav.setSection('curriculum')}
+        onToggle={() => nav.setSection(nav.section === 'curriculum' ? null : 'curriculum')}
       >
         <CurriculumNav
           nav={nav}
@@ -382,7 +383,7 @@ export function LearnSidebar({
         title="Hardware"
         accent={SECTION_ACCENTS.hardware}
         isOpen={nav.section === 'hardware'}
-        onToggle={() => nav.setSection('hardware')}
+        onToggle={() => nav.setSection(nav.section === 'hardware' ? null : 'hardware')}
       >
         <HardwareNav nav={nav} />
       </LearnAccordionSection>
@@ -390,7 +391,7 @@ export function LearnSidebar({
         title="Numbering Systems"
         accent={SECTION_ACCENTS.numbering}
         isOpen={nav.section === 'numbering'}
-        onToggle={() => nav.setSection('numbering')}
+        onToggle={() => nav.setSection(nav.section === 'numbering' ? null : 'numbering')}
       >
         <NumberingNav nav={nav} />
       </LearnAccordionSection>
@@ -429,6 +430,16 @@ export function LearnDetail({
   const hwTopic: HardwareTopic | null = hwCategory?.topics.find((t) => t.id === nav.hwTopicId) ?? null
   const numCategory: NumberingCategory | null = NUMBERING_REFERENCE.find((c) => c.id === nav.numCategoryId) ?? null
   const numTopic: NumberingTopic | null = numCategory?.topics.find((t) => t.id === nav.numTopicId) ?? null
+
+  if (!nav.section) {
+    return (
+      <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
+        <p className="example-description">
+          Open a section on the left: Instruction Reference, Curriculum (the lab tasks), Hardware or Numbering Systems.
+        </p>
+      </div>
+    )
+  }
 
   if (nav.section === 'numbering') {
     if (!numCategory) {
