@@ -564,8 +564,9 @@ on conflict (module_id) do update set position = excluded.position;
 
 -- Whether the signed-in student has done everything the quiz requires: the
 -- module's checklist, and the last quiz before it in module_order passed
--- (Module 0's also by placement credit). Modules without a quiz between the
--- two are gated in the browser only; they have nothing graded to check.
+-- (Module 0's also by placement credit; admins skip the order). Modules
+-- without a quiz between the two are gated in the browser only; they have
+-- nothing graded to check.
 create or replace function public.quiz_ready(p_module text)
 returns boolean
 language sql
@@ -582,6 +583,7 @@ as $$
          order by o.position desc limit 1
       ) prev on true
      where mine.module_id = p_module
+       and not public.is_admin()
        and not exists (select 1 from public.quiz_attempts a
                         where a.user_id = auth.uid() and a.module_id = prev.module_id and a.passed)
        and not (prev.module_id = 'm0'
