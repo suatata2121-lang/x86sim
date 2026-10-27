@@ -67,6 +67,8 @@ interface Props {
   collapsed?: string
   onExpand?: () => void
   onCollapse?: () => void
+  /** Admins can open every module to check content, whatever their own progress. */
+  unlockAll?: boolean
 }
 
 // The "Continue" home for signed-in students (issue #9): the module they are
@@ -77,7 +79,7 @@ interface Props {
 export function LearningPathCard({
   rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onOpenReflect,
   onStepOpened, onHide,
-  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse,
+  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse, unlockAll = false,
 }: Props) {
   const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
@@ -87,6 +89,7 @@ export function LearningPathCard({
   const [lockedPick, setLockedPick] = useState<LearningModule | null>(null)
   const current = currentModule(rows, progress, (m) => isOpenNow(dates?.(m.id) ?? null))
   const module = LEARNING_PATH.find((m) => m.id === viewedId) ?? current
+  const unlocked = (m: LearningModule) => unlockAll || isUnlocked(m, progress, rows)
   const doneCount = LEARNING_PATH.filter((m) => isModuleDone(m, progress, rows.get(m.id)?.step)).length
 
   function openStep(m: LearningModule, step: StepId, index?: number) {
@@ -105,7 +108,7 @@ export function LearningPathCard({
   }
 
   function pickModule(m: LearningModule) {
-    if (!isUnlocked(m, progress, rows)) {
+    if (!unlocked(m)) {
       setLockedPick(m)
       return
     }
@@ -171,7 +174,7 @@ export function LearningPathCard({
     <div className="path-bar" role="list" aria-label="Learning path modules">
       {LEARNING_PATH.map((m, i) => {
         const status = moduleStatus(m, progress, rows.get(m.id)?.step)
-        const locked = !isUnlocked(m, progress, rows)
+        const locked = !unlocked(m)
         return (
           <button
             key={m.id}
@@ -188,7 +191,7 @@ export function LearningPathCard({
           </button>
         )
       })}
-      {lockedPick && !isUnlocked(lockedPick, progress, rows) && (
+      {lockedPick && !unlocked(lockedPick) && (
         <p className="path-note path-locked-note" role="status">
           🔒 Module {LEARNING_PATH.indexOf(lockedPick)}: {lockedTitle(lockedPick)}
         </p>

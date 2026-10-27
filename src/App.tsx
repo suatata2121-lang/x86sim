@@ -943,6 +943,7 @@ export default function App() {
                 : undefined}
               onExpand={() => setObserveCardOpen(true)}
               onCollapse={observe ? () => setObserveCardOpen(false) : undefined}
+              unlockAll={auth.isAdmin}
             />
           )}
           {backendEnabled && auth.session && moduleProgress.loaded && !observe && reviewCard && (
