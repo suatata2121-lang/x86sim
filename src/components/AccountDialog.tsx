@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { EmailNotConfirmedError, useAuth } from '../backend/auth'
+import { CodeRejectedError, EmailNotConfirmedError, useAuth } from '../backend/auth'
 
 type View = 'signin' | 'signup' | 'confirm' | 'reset' | 'newpassword'
 
@@ -36,6 +36,8 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
   const [code, setCode] = useState('')
   // Sign-up for an address that already has an account: offer the ways back in.
   const [alreadyExists, setAlreadyExists] = useState(false)
+  // A code that was refused: offer "Sign in", since the account is often confirmed already.
+  const [codeRejected, setCodeRejected] = useState(false)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -52,6 +54,7 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
     setCodeSent(false)
     setCode('')
     setAlreadyExists(false)
+    setCodeRejected(false)
   }
 
   async function handleResendConfirmation() {
@@ -71,11 +74,13 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
   async function handleVerifyCode() {
     setBusy(true)
     setError(null)
+    setCodeRejected(false)
     try {
       await auth.verifyRecoveryCode(email.trim(), code.trim())
       setPassword('')
       switchView('newpassword')
     } catch (err) {
+      setCodeRejected(err instanceof CodeRejectedError)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
@@ -87,6 +92,7 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
     setBusy(true)
     setError(null)
     setNotice(null)
+    setCodeRejected(false)
     try {
       if (view === 'signin') {
         try {
@@ -102,7 +108,18 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
         }
         onClose()
       } else if (view === 'confirm') {
-        await auth.confirmSignupCode(email.trim(), code.trim())
+        try {
+          await auth.confirmSignupCode(email.trim(), code.trim())
+        } catch (err) {
+          // Straight after sign-up the password is still here: if the link in
+          // the email already confirmed the account, just sign the student in.
+          if (!(err instanceof CodeRejectedError) || !password) throw err
+          try {
+            await auth.signIn(email.trim(), password)
+          } catch {
+            throw err
+          }
+        }
         onClose()
       } else if (view === 'signup') {
         if (!SCHOOL_EMAIL.test(email.trim().toLowerCase())) {
@@ -126,13 +143,14 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
         }
       } else if (view === 'reset') {
         await auth.sendPasswordReset(email.trim())
-        setNotice('If that email has an account, a reset link and a 6-digit code are on their way. Check your spam folder too.')
+        setNotice('If that email has an account, a reset link and a code are on their way. Check your spam folder too.')
         setCodeSent(true)
       } else {
         await auth.updatePassword(password)
         onClose()
       }
     } catch (err) {
+      setCodeRejected(err instanceof CodeRejectedError)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
@@ -161,7 +179,10 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
           {view === 'confirm' && (
             <>
               <p className="account-notice">
-                We sent a 6-digit code to {email.trim()}. Enter it below, or click the link in the email.
+                We sent a code to {email.trim()}. Enter it below, or click the link in the email.
+              </p>
+              <p className="account-notice">
+                If you already clicked the link in the email, your account is confirmed and you can sign in.
               </p>
               <label>
                 Code from the email
@@ -243,7 +264,17 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
             </div>
           )}
 
-          {error && <p className="feedback-error">{error}</p>}
+          {error && (
+            <p className="feedback-error">
+              {error}
+              {codeRejected && (
+                <>
+                  {' '}
+                  <button type="button" className="link-button" onClick={() => switchView('signin')}>Sign in</button>
+                </>
+              )}
+            </p>
+          )}
           {notice && <p className="account-notice">{notice}</p>}
 
           <div className="feedback-actions">

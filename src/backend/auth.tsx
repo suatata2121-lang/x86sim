@@ -55,11 +55,11 @@ interface AuthState {
   /** Throws EmailNotConfirmedError for an account whose email is not confirmed yet. */
   signIn(email: string, password: string): Promise<void>
   signUp(fields: SignUpFields): Promise<{ needsEmailConfirmation: boolean; alreadyExists: boolean }>
-  /** The 6-digit code from the sign-up email; signs the student in. */
+  /** The code from the sign-up email; signs the student in. Throws CodeRejectedError. */
   confirmSignupCode(email: string, code: string): Promise<void>
   resendConfirmation(email: string): Promise<void>
   sendPasswordReset(email: string): Promise<void>
-  /** The 6-digit code from the reset email: a fallback when the link is broken. */
+  /** The code from the reset email: a fallback when the link is broken. Throws CodeRejectedError. */
   verifyRecoveryCode(email: string, code: string): Promise<void>
   updatePassword(password: string): Promise<void>
   dismissPasswordRecovery(): void
@@ -73,7 +73,14 @@ const AuthContext = createContext<AuthState | null>(null)
 /** Sign-in refused because the email has not been confirmed yet. */
 export class EmailNotConfirmedError extends Error {}
 
-const INVALID_CODE = 'That code is not valid or has expired.'
+// Usually the code was already used: school Outlook (Safe Links) opens the
+// email's link before the student does, which confirms the account and
+// spends the code (#68). So the way forward is signing in, not a new code.
+export class CodeRejectedError extends Error {
+  constructor() {
+    super('This code was already used or has expired. Your email may already be confirmed: try signing in.')
+  }
+}
 
 const PENDING_KEY = 'x86sim:pending-confirmation'
 
@@ -228,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async confirmSignupCode(email, code) {
       const { error } = await requireClient().auth.verifyOtp({ email, token: code, type: 'signup' })
-      if (error) throw new Error(INVALID_CODE)
+      if (error) throw new CodeRejectedError()
     },
     async resendConfirmation(email) {
       const { error } = await requireClient().auth.resend({
@@ -249,7 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async verifyRecoveryCode(email, code) {
       const { error } = await requireClient().auth.verifyOtp({ email, token: code, type: 'recovery' })
-      if (error) throw new Error(INVALID_CODE)
+      if (error) throw new CodeRejectedError()
       setPasswordRecovery(true)
     },
     async updatePassword(password) {

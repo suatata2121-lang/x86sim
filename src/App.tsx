@@ -894,7 +894,7 @@ export default function App() {
           initialEmail={auth.pendingConfirmation ?? undefined}
           initialError={
             auth.linkExpired && !auth.passwordRecovery
-              ? 'This reset link has expired or was already used. Enter your email to get a new one, or use the 6-digit code from the email.'
+              ? 'This reset link has expired or was already used. Enter your email to get a new one, or use the code from the email.'
               : undefined
           }
           onClose={() => {
@@ -934,7 +934,7 @@ export default function App() {
       {backendEnabled && auth.ready && !auth.session && auth.pendingConfirmation && (
         <p className="account-banner account-banner-pending no-print">
           <button className="link-button" onClick={() => setConfirmOpen(true)}>
-            Your account isn't active yet. Enter the 6-digit code from your email to finish signing up.
+            Your account isn't active yet. Enter the code from your email to finish signing up.
           </button>
         </p>
       )}
