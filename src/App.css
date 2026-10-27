@@ -2536,10 +2536,15 @@ aside .panel {
   outline-offset: 1px;
 }
 
-/* Locked until a required module (Module 0's quiz) is done. */
+/* Locked until the module before it is done (#74). */
 .path-segment.locked {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.path-locked-note {
+  grid-column: 1 / -1;
+  margin: 0.3rem 0 0;
 }
 
 .path-unread {

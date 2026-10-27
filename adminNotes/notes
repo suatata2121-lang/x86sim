@@ -17,3 +17,9 @@ microprocessor ile ilgili slide dosyaları github'a yüklendiğinde teorik bilgi
 feedback kısmı şuan pasif gibi çalışmıyor.
 kullanıcı profili oluştur. kullanıcılar mail adresleri ile kayıt olsunlar. sitede geçirdikleri süre ve çeşitli istatistikleri takip edebileyim.
 öğrencilere site üzerinden ödev gönderebileyim.
+
+27/10/26
+Data/bus sekmesini kaldırabiliriz. işlevsiz gözüküyor.
+memory'de adresler 5 basamaklı fiziksel adres olmalı. arama kısmına ise lojik adres formatı ile arama yapılabilir. mesela segment adres DS 0000h, offset BX 0100h ise. fiziksel adres 00100h ve lojik adres 0000:0100
+Learn'de curriculum sekmesi direk açılıyor. açılmasın.
+admin hesabıyla giriş yapınca tüm modüllere unlock olarak erişilebilmeli.

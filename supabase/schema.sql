@@ -537,7 +537,36 @@ values
    array['t22-pic-mask', 't23-ivt-entry', 't24-isr-address'])
 on conflict (module_id) do nothing;
 
--- Whether the signed-in student has done everything the quiz requires.
+-- The learning path's module order (src/learningPath.ts LEARNING_PATH, #74):
+-- modules open strictly in this order, so quiz_ready can tell which quiz
+-- comes before a module's. Keep it in step with LEARNING_PATH when modules
+-- are added or moved; re-running this file rewrites the positions.
+create table if not exists public.module_order (
+  module_id text primary key,
+  position  integer not null
+);
+
+alter table public.module_order enable row level security;
+
+drop policy if exists "module order: signed-in read" on public.module_order;
+create policy "module order: signed-in read" on public.module_order
+  for select using (auth.uid() is not null);
+
+drop policy if exists "module order: admin writes" on public.module_order;
+create policy "module order: admin writes" on public.module_order
+  for all using (public.is_admin()) with check (public.is_admin());
+
+insert into public.module_order (module_id, position)
+values
+  ('m0', 0), ('m1', 1), ('m2', 2), ('m12', 3), ('m3', 4), ('m4', 5), ('m5', 6),
+  ('m6', 7), ('m7', 8), ('m11', 9), ('m8', 10), ('m13', 11), ('m9', 12), ('m10', 13)
+on conflict (module_id) do update set position = excluded.position;
+
+-- Whether the signed-in student has done everything the quiz requires: the
+-- module's checklist, and the last quiz before it in module_order passed
+-- (Module 0's also by placement credit; admins skip the order). Modules
+-- without a quiz between the two are gated in the browser only; they have
+-- nothing graded to check.
 create or replace function public.quiz_ready(p_module text)
 returns boolean
 language sql
@@ -545,6 +574,21 @@ stable
 security definer set search_path = public
 as $$
   select not exists (
+    select 1
+      from public.module_order mine
+      join lateral (
+        select o.module_id from public.module_order o
+          join public.quiz_settings q on q.module_id = o.module_id
+         where o.position < mine.position
+         order by o.position desc limit 1
+      ) prev on true
+     where mine.module_id = p_module
+       and not public.is_admin()
+       and not exists (select 1 from public.quiz_attempts a
+                        where a.user_id = auth.uid() and a.module_id = prev.module_id and a.passed)
+       and not (prev.module_id = 'm0'
+                and exists (select 1 from public.profiles p where p.id = auth.uid() and p.placement_credit))
+  ) and not exists (
     select 1 from public.quiz_settings s
      where s.module_id = p_module
        and (

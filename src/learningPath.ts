@@ -72,8 +72,6 @@ export interface LearningModule {
    */
   quiz?: string
   interactives?: Interactive[]
-  /** Modules that must be done before this one can be opened. */
-  requires?: string[]
   /** Tools shown next to this module's Learn pages; all of them when absent. */
   tools?: ModuleTool[]
 }
@@ -121,7 +119,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm1',
     title: 'The CPU and Its Registers',
     summary: 'See how the CPU fetches, decodes and executes instructions that move data between registers.',
-    requires: ['m0'],
     concepts: [hw('fetch-decode-execute'), hw('register-file'), hw('data-movement')],
     observe: {
       examples: ['arithmetic'],
@@ -166,7 +163,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm2',
     title: 'Memory and the Bus',
     summary: 'Follow data as it travels between the CPU and memory over the address and data buses.',
-    requires: ['m1'],
     concepts: [
       hw('von-neumann-harvard'), hw('bus-types'), hw('address-demux'), hw('segmented-addressing'),
       hw('memory-banking'), hw('memory-interfacing'),
@@ -197,7 +193,6 @@ export const LEARNING_PATH: LearningModule[] = [
     summary:
       'Turn segment:offset pairs into physical addresses, work out where each addressing mode points, and read ' +
       'multi-byte values byte by byte.',
-    requires: ['m2'],
     concepts: [hw('program-segments'), hw('addressing-modes'), hw('byte-order')],
     observe: {
       examples: ['endian-store', 'base-index'],
@@ -232,7 +227,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm3',
     title: 'The ALU and Flags',
     summary: 'Use arithmetic and logic instructions and read the flags they leave behind to make decisions.',
-    requires: ['m0'],
     concepts: [hw('alu-operations'), hw('flags-register')],
     observe: {
       examples: ['bitwise', 'xchg-neg-test'],
@@ -248,7 +242,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm4',
     title: 'Loops and the Instruction Queue',
     summary: 'Write loops and see how the prefetch queue and jumps affect how long they take.',
-    requires: ['m0'],
     concepts: [hw('prefetch-queue'), hw('pipeline-stalls')],
     observe: {
       examples: ['counting-loop', 'max-of-two'],
@@ -264,7 +257,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm5',
     title: 'The Stack and Subroutines',
     summary: 'Call subroutines and watch PUSH, POP, CALL and RET move the stack pointer.',
-    requires: ['m0'],
     concepts: [hw('push-pop'), hw('call-ret')],
     observe: {
       examples: ['call-ret', 'masm-boilerplate', 'stack-trace'],
@@ -283,7 +275,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm6',
     title: 'BIU/EU and Bus Timing',
     summary: 'Split the 8086 into its bus and execution units and follow a bus cycle clock by clock.',
-    requires: ['m0'],
     concepts: [hw('biu-eu'), hw('bus-timing'), hw('control-signals')],
     observe: {
       examples: ['array-sum'],
@@ -299,7 +290,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm7',
     title: 'I/O Ports and Devices',
     summary: 'Drive real-world devices such as a traffic light and a stepper motor through I/O ports.',
-    requires: ['m0'],
     concepts: [hw('io-ports'), hw('io-mapping')],
     observe: {
       examples: ['traffic-light', 'stepper-motor', 'seven-segment', 'thermometer'],
@@ -319,7 +309,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm11',
     title: 'The 8255 Programmable Peripheral Interface',
     summary: "Program the 8255's three ports with a control word, read switches and drive a display through it.",
-    requires: ['m7'],
     concepts: [hw('ppi-8255-overview'), hw('ppi-8255-control-word'), hw('ppi-8255-bsr')],
     observe: {
       examples: ['ppi-switches'],
@@ -348,7 +337,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm8',
     title: 'Interrupts and Sharing the Bus',
     summary: 'Use software interrupts for input and output and see how other devices borrow the bus.',
-    requires: ['m0'],
     concepts: [hw('software-vs-hardware-interrupts'), hw('bus-request-grant'), hw('dma-8257'), hw('lock-signal')],
     observe: {
       examples: ['keyboard-echo'],
@@ -370,7 +358,6 @@ export const LEARNING_PATH: LearningModule[] = [
     summary:
       "Find an interrupt's vector, follow what the CPU saves and restores, and see how the 8259 decides which " +
       'device gets served.',
-    requires: ['m8'],
     concepts: [hw('interrupt-types'), hw('interrupt-vector-table'), hw('interrupt-sequence'), hw('pic-8259')],
     observe: {
       examples: ['keyboard-echo', 'int21-demo'],
@@ -400,7 +387,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm9',
     title: 'Signed and Multi-Word Arithmetic',
     summary: 'Handle negative numbers and values wider than 16 bits with carries, borrows and signed division.',
-    requires: ['m0'],
     concepts: [num('signed-numbers')],
     observe: {
       examples: ['muldiv'],
@@ -416,7 +402,6 @@ export const LEARNING_PATH: LearningModule[] = [
     id: 'm10',
     title: 'Rotation, Saved Flags and String Copies',
     summary: 'Rotate bits, preserve flags across calls and copy blocks of memory with string instructions.',
-    requires: ['m0'],
     concepts: [{ section: 'reference', id: 'string-ops' }],
     observe: {
       examples: ['string-copy'],
@@ -538,12 +523,23 @@ export function quizBlockers(module: LearningModule, progress: PathProgress): nu
   return checklist(module, progress).filter((r) => r.kind !== 'quiz' && !r.done).length
 }
 
-/** Whether every module this one requires is done. */
+/**
+ * The module right before this one in LEARNING_PATH; null for the first.
+ * Modules open strictly in order (#74), so the chain follows the array and
+ * a module inserted later slots in without touching its neighbours.
+ */
+export function previousModule(module: LearningModule): LearningModule | null {
+  const i = LEARNING_PATH.indexOf(module)
+  return i > 0 ? LEARNING_PATH[i - 1] : null
+}
+
+/**
+ * Whether the module before this one is done. Work already recorded in a
+ * later module is kept and counts again once the chain reaches it.
+ */
 export function isUnlocked(module: LearningModule, progress: PathProgress, rows: Map<string, ModuleProgressRow>): boolean {
-  return (module.requires ?? []).every((id) => {
-    const required = LEARNING_PATH.find((m) => m.id === id)
-    return !required || isModuleDone(required, progress, rows.get(id)?.step)
-  })
+  const previous = previousModule(module)
+  return !previous || isModuleDone(previous, progress, rows.get(previous.id)?.step)
 }
 
 /** The step after `step`; past the last one 'done', but only for modules with no assignment or quiz to close them. */

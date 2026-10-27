@@ -5,7 +5,7 @@ import { HARDWARE_REFERENCE } from '../hardwareReference'
 import { NUMBERING_REFERENCE } from '../numberingSystems'
 import { INSTRUCTION_REFERENCE } from '../instructionReference'
 import {
-  LEARNING_PATH, STEPS, activeSteps, checklist, currentModule, isModuleDone, isUnlocked, moduleStatus, nextStep,
+  LEARNING_PATH, STEPS, activeSteps, checklist, currentModule, isModuleDone, isUnlocked, moduleStatus, nextStep, previousModule,
   quizBlockers, resumeStep, shownSteps, unansweredPredictions, unreadConcepts, type ChecklistRow,
   type AsidePanel, type ConceptRef, type LearningModule, type ModuleProgressRow, type PathProgress, type StepId,
   type StoredStep,
@@ -67,24 +67,29 @@ interface Props {
   collapsed?: string
   onExpand?: () => void
   onCollapse?: () => void
+  /** Admins can open every module to check content, whatever their own progress. */
+  unlockAll?: boolean
 }
 
 // The "Continue" home for signed-in students (issue #9): the module they are
 // on, its steps, and an 11-segment bar of the whole path. Modules can be
-// picked from the bar in any order, except ones whose `requires` aren't done
-// yet (Module 0's quiz gates the rest, #20). A module that closes with a quiz
+// picked from the bar in any order once unlocked; they unlock strictly in
+// order, each when the one before it is done (#74). A module that closes with a quiz
 // also shows its checklist (#25): what to read, try, pass, then the quiz.
 export function LearningPathCard({
   rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onOpenReflect,
   onStepOpened, onHide,
-  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse,
+  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse, unlockAll = false,
 }: Props) {
   const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
   // the student moves on; otherwise the card follows currentModule().
   const [viewedId, setViewedId] = useState<string | null>(null)
+  // Why the last segment clicked is locked; the tooltip alone is missed on touch screens.
+  const [lockedPick, setLockedPick] = useState<LearningModule | null>(null)
   const current = currentModule(rows, progress, (m) => isOpenNow(dates?.(m.id) ?? null))
   const module = LEARNING_PATH.find((m) => m.id === viewedId) ?? current
+  const unlocked = (m: LearningModule) => unlockAll || isUnlocked(m, progress, rows)
   const doneCount = LEARNING_PATH.filter((m) => isModuleDone(m, progress, rows.get(m.id)?.step)).length
 
   function openStep(m: LearningModule, step: StepId, index?: number) {
@@ -103,16 +108,18 @@ export function LearningPathCard({
   }
 
   function pickModule(m: LearningModule) {
-    if (!isUnlocked(m, progress, rows)) return
+    if (!unlocked(m)) {
+      setLockedPick(m)
+      return
+    }
+    setLockedPick(null)
     setViewedId(m.id)
     if (!isModuleDone(m, progress, rows.get(m.id)?.step)) onSetStep(m.id, resumeStep(m, rows.get(m.id), progress))
   }
 
   function lockedTitle(m: LearningModule) {
-    const missing = LEARNING_PATH.find((r) => m.requires?.includes(r.id) && !isModuleDone(r, progress, rows.get(r.id)?.step))
-    if (!missing) return ''
-    const i = LEARNING_PATH.indexOf(missing)
-    return missing.quiz ? `Pass the Module ${i} quiz to unlock` : `Finish Module ${i} to unlock`
+    const previous = previousModule(m)
+    return previous ? `Finish ${previous.title} to open this module.` : ''
   }
 
   function openRow(m: LearningModule, r: ChecklistRow) {
@@ -167,7 +174,7 @@ export function LearningPathCard({
     <div className="path-bar" role="list" aria-label="Learning path modules">
       {LEARNING_PATH.map((m, i) => {
         const status = moduleStatus(m, progress, rows.get(m.id)?.step)
-        const locked = !isUnlocked(m, progress, rows)
+        const locked = !unlocked(m)
         return (
           <button
             key={m.id}
@@ -184,6 +191,11 @@ export function LearningPathCard({
           </button>
         )
       })}
+      {lockedPick && !unlocked(lockedPick) && (
+        <p className="path-note path-locked-note" role="status">
+          🔒 Module {LEARNING_PATH.indexOf(lockedPick)}: {lockedTitle(lockedPick)}
+        </p>
+      )}
     </div>
   )
 
