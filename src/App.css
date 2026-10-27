@@ -1623,6 +1623,57 @@ aside .panel {
   flex-shrink: 0;
 }
 
+/* "? Help" dropdown in the header (#72). */
+.help-menu {
+  position: relative;
+}
+
+.help-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.help-menu-list button {
+  text-align: left;
+  border: none;
+  background: transparent;
+}
+
+.help-menu-list button:hover {
+  background: var(--accent-bg);
+}
+
+.help-dialog {
+  max-width: 40rem;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.help-dialog h3 {
+  margin: 0.9rem 0 0.3rem;
+  font-size: 1rem;
+}
+
+.help-dialog ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  line-height: 1.5;
+}
+
+.help-link {
+  font-weight: 700;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -3698,6 +3749,12 @@ aside .panel {
   .header-actions {
     flex-wrap: wrap;
     flex-shrink: 1;
+  }
+
+  /* The Help button can wrap to the left edge; open the menu rightwards. */
+  .help-menu-list {
+    left: 0;
+    right: auto;
   }
 
   .editor-row {
