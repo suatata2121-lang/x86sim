@@ -376,7 +376,19 @@ main {
 
 .editor-panel {
   flex: 2;
-  min-width: 320px;
+  min-width: min(100%, 320px);
+}
+
+/* The editor keeps at least 420px (#87): with the side menu (or the focus
+   mode task) next to it the work area needs that much more, and when the
+   window is narrower the side panel wraps below instead of squeezing it. */
+.editor-panel:has(.editor-col) {
+  min-width: min(100%, 420px);
+}
+
+.editor-panel:has(.mode-sidebar),
+.editor-panel:has(.focus-task) {
+  min-width: min(100%, calc(240px + 0.75rem + 420px));
 }
 
 aside {
@@ -493,6 +505,7 @@ aside {
 
 .editor-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.75rem;
   margin: 0.6rem 0 0;
@@ -506,8 +519,8 @@ aside {
 }
 
 .editor-col {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 420px;
+  min-width: min(100%, 420px);
 }
 
 /* One line under the editor after each Step: the instruction and what it changed (#73). */
@@ -572,6 +585,43 @@ aside {
   margin-bottom: 0.6rem;
   max-height: 340px;
   overflow-y: auto;
+}
+
+/* The task text (#87): as tall as it needs up to 60% of the window, and the
+   student can drag the bottom edge or Expand it; the height is remembered. */
+.task-panel-wrap {
+  margin-bottom: 0.6rem;
+}
+
+.learn-detail-panel.task-panel {
+  box-sizing: border-box;
+  margin-bottom: 0;
+  max-height: 60vh;
+  min-height: 120px;
+}
+
+.task-panel-toggle {
+  float: right;
+  position: sticky;
+  top: 0;
+  margin: 0 0 0.3rem 0.6rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.task-panel-handle {
+  height: 8px;
+  margin-top: 2px;
+  border-radius: 4px;
+  cursor: ns-resize;
+  touch-action: none;
+  background:
+    linear-gradient(var(--border), var(--border)) center / 40px 2px no-repeat;
+}
+
+.task-panel-handle:hover,
+.task-panel-handle:focus-visible {
+  background-color: var(--bg-button-hover);
 }
 
 /* The Hardware section hides the code editor/toolbar/output/aside entirely

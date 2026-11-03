@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { CURRICULUM, type Assignment, type Stage, type Task } from '../curriculum'
 import { INSTRUCTION_REFERENCE, type InstructionCategory, type InstructionDoc } from '../instructionReference'
 import { HARDWARE_REFERENCE, type HardwareCategory, type HardwareTopic } from '../hardwareReference'
@@ -651,12 +651,107 @@ export function LearnDetail({
 
   const activeAssignment = task.assignments.find((a) => a.id === activeAssignmentId) ?? null
   return (
-    <div className="mode-panel learn-detail-panel">
+    <ResizableTaskPanel>
       <h4 className="learn-stage-title">{task.title}</h4>
       <p className="example-description">{task.scenario}</p>
       <p className="example-description learn-concept">
         {activeAssignment ? activeAssignment.concept : 'Pick an assignment on the left to load it into the editor.'}
       </p>
+    </ResizableTaskPanel>
+  )
+}
+
+const TASK_PANEL_HEIGHT_KEY = 'x86sim-task-panel-height'
+const TASK_PANEL_MIN_HEIGHT = 120
+
+// 'expanded' shows the whole text; a number is a height the student dragged
+// to; null is the default, which Collapse returns to (as tall as the text,
+// up to 60% of the window). Long task notes (Module 12) didn't fit the old fixed 340px (#87).
+type TaskPanelSize = number | 'expanded' | null
+
+function loadTaskPanelSize(): TaskPanelSize {
+  try {
+    const raw = window.localStorage.getItem(TASK_PANEL_HEIGHT_KEY)
+    if (raw === 'expanded') return raw
+    const n = Number(raw)
+    return raw && n >= TASK_PANEL_MIN_HEIGHT ? n : null
+  } catch {
+    return null
+  }
+}
+
+function ResizableTaskPanel({ children }: { children: ReactNode }) {
+  const [size, setSize] = useState<TaskPanelSize>(loadTaskPanelSize)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  function save(next: TaskPanelSize) {
+    setSize(next)
+    try {
+      if (next === null) window.localStorage.removeItem(TASK_PANEL_HEIGHT_KEY)
+      else window.localStorage.setItem(TASK_PANEL_HEIGHT_KEY, String(next))
+    } catch {
+      // ignore (storage disabled)
+    }
+  }
+
+  function startDrag(e: ReactPointerEvent<HTMLDivElement>) {
+    const panel = panelRef.current
+    if (!panel) return
+    e.preventDefault()
+    const handle = e.currentTarget
+    handle.setPointerCapture(e.pointerId)
+    const startY = e.clientY
+    const startHeight = panel.getBoundingClientRect().height
+    let height = startHeight
+    const onMove = (ev: PointerEvent) => {
+      height = Math.max(TASK_PANEL_MIN_HEIGHT, Math.round(startHeight + ev.clientY - startY))
+      panel.style.height = `${height}px`
+      panel.style.maxHeight = 'none'
+    }
+    const onUp = () => {
+      handle.removeEventListener('pointermove', onMove)
+      handle.removeEventListener('pointerup', onUp)
+      handle.removeEventListener('pointercancel', onUp)
+      if (height !== startHeight) save(height)
+    }
+    handle.addEventListener('pointermove', onMove)
+    handle.addEventListener('pointerup', onUp)
+    handle.addEventListener('pointercancel', onUp)
+  }
+
+  // Arrow keys resize too, for keyboard users.
+  function onHandleKey(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+    e.preventDefault()
+    const current = panelRef.current?.getBoundingClientRect().height ?? TASK_PANEL_MIN_HEIGHT
+    save(Math.max(TASK_PANEL_MIN_HEIGHT, Math.round(current + (e.key === 'ArrowDown' ? 40 : -40))))
+  }
+
+  const expanded = size === 'expanded'
+  const style = typeof size === 'number' ? { height: size, maxHeight: 'none' } : expanded ? { maxHeight: 'none' } : undefined
+  return (
+    <div className="task-panel-wrap">
+      <div ref={panelRef} className="mode-panel learn-detail-panel task-panel" style={style}>
+        <button
+          className="task-panel-toggle"
+          onClick={() => save(expanded ? null : 'expanded')}
+          aria-expanded={expanded}
+        >
+          {expanded ? 'Collapse' : 'Expand'}
+        </button>
+        {children}
+      </div>
+      <div
+        className="task-panel-handle"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize the task panel"
+        tabIndex={0}
+        title="Drag to resize. Double-click to reset."
+        onPointerDown={startDrag}
+        onKeyDown={onHandleKey}
+        onDoubleClick={() => save(null)}
+      />
     </div>
   )
 }
