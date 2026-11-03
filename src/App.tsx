@@ -22,6 +22,7 @@ import { reviewDue, useModuleDoneDates } from './backend/reviews'
 import { effectiveDates, useInstructorFeedback, useSchedule } from './backend/schedule'
 import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
 import { QuizDialog } from './components/QuizDialog'
 import { ObserveView } from './components/ObserveView'
@@ -57,6 +58,8 @@ const COMPLETED_ASSIGNMENTS_KEY = 'x86sim-completed-assignments'
 const PATH_CARD_HIDDEN_KEY = 'x86sim-path-card-hidden'
 const FOCUS_MODE_KEY = 'x86sim-focus-mode'
 const NOTES_OPEN_KEY = 'x86sim-notes-open'
+// Only the Learn tab is restored on load; the other modes need an editor tab that isn't saved.
+const LEARN_OPEN_KEY = 'x86sim-learn-open'
 const ALL_ASSIGNMENTS: Assignment[] = CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments))
 const BLANK_SOURCE = '; Write your code here.\n; Need inspiration? Check the Examples or Learn tabs on the left.\n\n'
 
@@ -99,7 +102,13 @@ function loadCompletedAssignments(): Set<string> {
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>(() => [makeTab('Untitled', BLANK_SOURCE)])
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id)
-  const [mode, setMode] = useState<SourceMode>('new')
+  const [mode, setMode] = useState<SourceMode>(() => {
+    try {
+      return window.localStorage.getItem(LEARN_OPEN_KEY) === '1' ? 'learn' : 'new'
+    } catch {
+      return 'new'
+    }
+  })
   const [asideTab, setAsideTab] = useState<AsideTab>('registers')
   const [selectedExampleId, setSelectedExampleId] = useState(DEFAULT_EXAMPLE_ID)
   const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null)
@@ -259,6 +268,14 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     window.localStorage.setItem(THEME_STORAGE_KEY, theme)
   }, [theme])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LEARN_OPEN_KEY, mode === 'learn' ? '1' : '0')
+    } catch {
+      // ignore (e.g. private browsing with storage disabled)
+    }
+  }, [mode])
 
   // Progress made on another device (or before clearing the browser) comes
   // back from the server once the student signs in.
@@ -812,6 +829,8 @@ export default function App() {
   // whole code-writing UI while it's open and let the Hardware content use
   // the freed-up space instead.
   const hardwareMode = mode === 'learn' && learnNav.section === 'hardware'
+  // Picking another page clears a crashed Learn panel.
+  const learnPlaceKey = [learnNav.section, learnNav.taskId, learnNav.categoryId, learnNav.mnemonic, learnNav.hwTopicId, learnNav.numTopicId].join('/')
 
   // A learning-path module can also leave out tools its pages don't need
   // (Module 0 is reading only). The Numbering Systems overview counts as its
@@ -1188,28 +1207,32 @@ export default function App() {
             </div>}
             <div className="editor-col">
               {observeModule && observeExample && (
-                <ObserveView
-                  key={observeExample.id}
-                  title={observeExample.title}
-                  source={observeExample.source}
-                  summary={observeModule.observe?.watch}
-                  guide={observeModule.observe?.guide}
-                  next={auth.session ? { label: doneWatchingLabel(observeModule.id), onClick: () => finishObserve(observeModule.id) } : undefined}
-                  registers={observeModule.observe?.registers}
-                  callouts={observeModule.observe?.callouts?.[observeExample.id]}
-                  onDone={() => markInteractiveDone(`example-${observeExample.id}`)}
-                  onOpenInEditor={() => openExample(observeExample.id, 'registers')}
-                />
+                <ErrorBoundary resetKey={observeExample.id}>
+                  <ObserveView
+                    key={observeExample.id}
+                    title={observeExample.title}
+                    source={observeExample.source}
+                    summary={observeModule.observe?.watch}
+                    guide={observeModule.observe?.guide}
+                    next={auth.session ? { label: doneWatchingLabel(observeModule.id), onClick: () => finishObserve(observeModule.id) } : undefined}
+                    registers={observeModule.observe?.registers}
+                    callouts={observeModule.observe?.callouts?.[observeExample.id]}
+                    onDone={() => markInteractiveDone(`example-${observeExample.id}`)}
+                    onOpenInEditor={() => openExample(observeExample.id, 'registers')}
+                  />
+                </ErrorBoundary>
               )}
               {mode === 'learn' && !focus && (
-                <LearnDetail
-                  nav={learnNav}
-                  activeAssignmentId={activeAssignmentId}
-                  completedIds={completedAssignments}
-                  topicFooter={backendEnabled ? topicFooter : undefined}
-                  interactivesDone={interactivesDone}
-                  onInteractiveDone={markInteractiveDone}
-                />
+                <ErrorBoundary resetKey={learnPlaceKey}>
+                  <LearnDetail
+                    nav={learnNav}
+                    activeAssignmentId={activeAssignmentId}
+                    completedIds={completedAssignments}
+                    topicFooter={backendEnabled ? topicFooter : undefined}
+                    interactivesDone={interactivesDone}
+                    onInteractiveDone={markInteractiveDone}
+                  />
+                </ErrorBoundary>
               )}
               {watchNote && mode === 'examples' && activeTab.title === watchNote.title && (
                 <div className="panel watch-note">

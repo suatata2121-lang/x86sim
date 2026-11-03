@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { CURRICULUM, type Assignment, type Stage, type Task } from '../curriculum'
 import { INSTRUCTION_REFERENCE, type InstructionCategory, type InstructionDoc } from '../instructionReference'
 import { HARDWARE_REFERENCE, type HardwareCategory, type HardwareTopic } from '../hardwareReference'
@@ -51,16 +51,40 @@ export interface LearnNav {
   setNumTopicId: (id: string | null) => void
 }
 
+const LEARN_PLACE_KEY = 'x86sim-learn-place'
+
+type LearnPlace = Partial<Record<'section' | 'stageId' | 'taskId' | 'categoryId' | 'mnemonic' | 'hwCategoryId' | 'hwTopicId' | 'numCategoryId' | 'numTopicId', string | null>>
+
+// The open topic is remembered so a reload, or signing in again in a new tab,
+// lands on the same page instead of the start of the module (#86).
+function loadLearnPlace(): LearnPlace {
+  try {
+    const raw = window.localStorage.getItem(LEARN_PLACE_KEY)
+    return raw ? (JSON.parse(raw) as LearnPlace) : {}
+  } catch {
+    return {}
+  }
+}
+
 export function useLearnNav(): LearnNav {
-  const [section, setSection] = useState<LearnSection | null>(null)
-  const [stageId, setStageId] = useState<string | null>(null)
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [categoryId, setCategoryId] = useState<string | null>(null)
-  const [mnemonic, setMnemonic] = useState<string | null>(null)
-  const [hwCategoryId, setHwCategoryId] = useState<string | null>(null)
-  const [hwTopicId, setHwTopicId] = useState<string | null>(null)
-  const [numCategoryId, setNumCategoryId] = useState<string | null>(null)
-  const [numTopicId, setNumTopicId] = useState<string | null>(null)
+  const [saved] = useState(loadLearnPlace)
+  const [section, setSection] = useState<LearnSection | null>((saved.section as LearnSection | undefined) ?? null)
+  const [stageId, setStageId] = useState<string | null>(saved.stageId ?? null)
+  const [taskId, setTaskId] = useState<string | null>(saved.taskId ?? null)
+  const [categoryId, setCategoryId] = useState<string | null>(saved.categoryId ?? null)
+  const [mnemonic, setMnemonic] = useState<string | null>(saved.mnemonic ?? null)
+  const [hwCategoryId, setHwCategoryId] = useState<string | null>(saved.hwCategoryId ?? null)
+  const [hwTopicId, setHwTopicId] = useState<string | null>(saved.hwTopicId ?? null)
+  const [numCategoryId, setNumCategoryId] = useState<string | null>(saved.numCategoryId ?? null)
+  const [numTopicId, setNumTopicId] = useState<string | null>(saved.numTopicId ?? null)
+  useEffect(() => {
+    const place: LearnPlace = { section, stageId, taskId, categoryId, mnemonic, hwCategoryId, hwTopicId, numCategoryId, numTopicId }
+    try {
+      window.localStorage.setItem(LEARN_PLACE_KEY, JSON.stringify(place))
+    } catch {
+      // ignore (storage disabled)
+    }
+  }, [section, stageId, taskId, categoryId, mnemonic, hwCategoryId, hwTopicId, numCategoryId, numTopicId])
   return {
     section, setSection, stageId, setStageId, taskId, setTaskId, categoryId, setCategoryId, mnemonic, setMnemonic,
     hwCategoryId, setHwCategoryId, hwTopicId, setHwTopicId,
