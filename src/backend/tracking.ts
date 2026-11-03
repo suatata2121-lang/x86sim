@@ -72,35 +72,45 @@ export function trackActivity(kind: ActivityKind, assignmentId: string | null, d
   queue.push({ user_id: currentUserId, session_id: currentSessionId, kind, assignment_id: assignmentId, detail })
 }
 
-export function recordAttempt(attempt: {
+/**
+ * Saves one Run Tests result. Resolves false when the row could not be
+ * written, so the student can be told the pass doesn't count yet (#85);
+ * true when it was saved or there is no account to save it to.
+ */
+export async function recordAttempt(attempt: {
   assignmentId: string
   passedCount: number
   totalCount: number
   assembled: boolean
   source: string
-}) {
-  if (!supabase || !currentUserId) return
-  void supabase
-    .from('assignment_attempts')
-    .insert({
-      user_id: currentUserId,
-      assignment_id: attempt.assignmentId,
-      passed_count: attempt.passedCount,
-      total_count: attempt.totalCount,
-      assembled: attempt.assembled,
-      source: attempt.source.slice(0, 50_000),
-    })
-    .then(() => undefined)
+}): Promise<boolean> {
+  if (!supabase || !currentUserId) return true
+  try {
+    const { error } = await supabase
+      .from('assignment_attempts')
+      .insert({
+        user_id: currentUserId,
+        assignment_id: attempt.assignmentId,
+        passed_count: attempt.passedCount,
+        total_count: attempt.totalCount,
+        assembled: attempt.assembled,
+        source: attempt.source.slice(0, 50_000),
+      })
+    return !error
+  } catch {
+    return false
+  }
 }
 
-/** Assignment ids the student has passed, from any device. */
-export async function fetchCompletedAssignments(userId: string): Promise<string[]> {
+/** Assignment ids the student has passed, from any device; null if they couldn't be read. */
+export async function fetchCompletedAssignments(userId: string): Promise<string[] | null> {
   if (!supabase) return []
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('assignment_attempts')
     .select('assignment_id')
     .eq('user_id', userId)
     .eq('passed', true)
+  if (error) return null
   return [...new Set((data ?? []).map((r: { assignment_id: string }) => r.assignment_id))]
 }
 
