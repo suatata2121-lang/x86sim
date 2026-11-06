@@ -64,11 +64,6 @@ export function BiuEuView({ scenarios }: { scenarios: PipelineScenario[] }) {
   const prog = PIPELINE_PROGRAMS[scenario]
 
   useEffect(() => {
-    setState(initialState())
-    setIsPlaying(false)
-  }, [scenario])
-
-  useEffect(() => {
     if (!isPlaying) return
     const id = window.setInterval(() => {
       setState((s) => tick(prog, s))
@@ -84,6 +79,15 @@ export function BiuEuView({ scenarios }: { scenarios: PipelineScenario[] }) {
     const el = timelineRef.current
     if (el) el.scrollLeft = el.scrollWidth
   }, [state.clock])
+
+  // The state is reset in the same render as the switch: resetting it in an
+  // effect left one render with the old program's instruction index, which
+  // crashed the page going back to a shorter program (memory -> jump -> memory, #86).
+  function selectScenario(id: PipelineScenario) {
+    setScenario(id)
+    setIsPlaying(false)
+    setState(initialState())
+  }
 
   function stepClock() {
     setState((s) => tick(prog, s))
@@ -114,7 +118,7 @@ export function BiuEuView({ scenarios }: { scenarios: PipelineScenario[] }) {
       {scenarios.length > 1 && (
         <div className="mode-tabs pipe-scenarios">
           {scenarios.map((id) => (
-            <button key={id} className={scenario === id ? 'mode-tab active' : 'mode-tab'} onClick={() => setScenario(id)}>
+            <button key={id} className={scenario === id ? 'mode-tab active' : 'mode-tab'} onClick={() => selectScenario(id)}>
               {PIPELINE_PROGRAMS[id].title}
             </button>
           ))}
