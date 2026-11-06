@@ -605,6 +605,50 @@ as $$
   );
 $$;
 
+-- What still blocks the signed-in student's quiz, one row per item, so a
+-- refused quiz can say what is missing (#85). Same rules as quiz_ready:
+-- kind 'quiz' is the earlier module whose quiz must be passed first; the
+-- others are ids from quiz_settings.required_*.
+create or replace function public.quiz_missing(p_module text)
+returns table (kind text, item text)
+language sql
+stable
+security definer set search_path = public
+as $$
+  select 'quiz', prev.module_id
+    from public.module_order mine
+    join lateral (
+      select o.module_id from public.module_order o
+        join public.quiz_settings q on q.module_id = o.module_id
+       where o.position < mine.position
+       order by o.position desc limit 1
+    ) prev on true
+   where mine.module_id = p_module
+     and not public.is_admin()
+     and not exists (select 1 from public.quiz_attempts a
+                      where a.user_id = auth.uid() and a.module_id = prev.module_id and a.passed)
+     and not (prev.module_id = 'm0'
+              and exists (select 1 from public.profiles p where p.id = auth.uid() and p.placement_credit))
+  union all
+  select 'concept', c
+    from public.quiz_settings s, unnest(s.required_concepts) c
+   where s.module_id = p_module
+     and not exists (select 1 from public.concept_reads r
+                      where r.user_id = auth.uid() and r.module_id = p_module and r.concept_id = c)
+  union all
+  select 'interactive', i
+    from public.quiz_settings s, unnest(s.required_interactives) i
+   where s.module_id = p_module
+     and not exists (select 1 from public.interactive_runs r
+                      where r.user_id = auth.uid() and r.module_id = p_module and r.item_id = i)
+  union all
+  select 'assignment', a
+    from public.quiz_settings s, unnest(s.required_assignments) a
+   where s.module_id = p_module
+     and not exists (select 1 from public.assignment_attempts t
+                      where t.user_id = auth.uid() and t.assignment_id = a and t.passed);
+$$;
+
 -- One attempt's questions, answers left out: at least min_per_topic from
 -- every topic, the rest at random, questions and options in random order.
 create or replace function public.quiz_draw(p_module text)
@@ -737,6 +781,8 @@ grant execute on function public.quiz_draw(text) to authenticated;
 grant execute on function public.quiz_submit(text, jsonb) to authenticated;
 revoke all on function public.quiz_ready(text) from public, anon;
 grant execute on function public.quiz_ready(text) to authenticated;
+revoke all on function public.quiz_missing(text) from public, anon;
+grant execute on function public.quiz_missing(text) to authenticated;
 
 -- ------------------------------------------------------------- my notes --
 -- A student's own notes, one per learning-path module (#71). Private on

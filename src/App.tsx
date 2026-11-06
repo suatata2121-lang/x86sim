@@ -32,7 +32,7 @@ import { HARDWARE_REFERENCE } from './hardwareReference'
 import { NUMBERING_REFERENCE } from './numberingSystems'
 import {
   LEARNING_PATH, STEPS, currentModule, interactiveParts, isModuleDone, moduleForPage, nextStep, predictQuestions,
-  quizBlockers, unreadConcepts, type AsidePanel, type ConceptRef, type PathProgress,
+  quizBlockers, unreadConcepts, type AsidePanel, type ConceptRef, type LearningModule, type PathProgress,
 } from './learningPath'
 import { PredictDialog } from './components/PredictDialog'
 import { ReflectDialog } from './components/ReflectDialog'
@@ -99,6 +99,22 @@ function loadCompletedAssignments(): Set<string> {
   }
 }
 
+// quiz_missing rows as the checklist names them. Interactive parts
+// (move-it-1, ...) fold into their checklist row.
+function missingLabels(module: LearningModule, rows: { kind: string; item: string }[]): string[] {
+  const labels = rows.map(({ kind, item }) => {
+    if (kind === 'quiz') {
+      const i = LEARNING_PATH.findIndex((m) => m.id === item)
+      return i >= 0 ? `Pass the Module ${i} quiz (${LEARNING_PATH[i].title})` : `Pass the ${item} quiz`
+    }
+    if (kind === 'concept') return `Read: ${conceptTitle(module.concepts.find((c) => c.id === item) ?? { section: 'hardware', id: item })}`
+    if (kind === 'assignment') return `Pass: ${ALL_ASSIGNMENTS.find((a) => a.id === item)?.title ?? item} (press Run Tests again if you already passed it)`
+    const row = module.interactives?.find((x) => x.id === item || x.parts?.includes(item))
+    return row ? row.label.replace(/\s*\(\{n\}\/\d+\)/, '') : item
+  })
+  return [...new Set(labels)]
+}
+
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>(() => [makeTab('Untitled', BLANK_SOURCE)])
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0].id)
@@ -112,7 +128,14 @@ export default function App() {
   const [asideTab, setAsideTab] = useState<AsideTab>('registers')
   const [selectedExampleId, setSelectedExampleId] = useState(DEFAULT_EXAMPLE_ID)
   const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null)
-  const [completedAssignments, setCompletedAssignments] = useState<Set<string>>(loadCompletedAssignments)
+  // Tasks passed in this browser. For a signed-in student only the passes
+  // saved on the server count (quiz_ready checks those), so a pass made
+  // signed out or whose save failed can't show as done (#85).
+  const [localCompleted, setLocalCompleted] = useState<Set<string>>(loadCompletedAssignments)
+  // null until loaded, or when it couldn't be read: then the local set stands in.
+  const [serverCompleted, setServerCompleted] = useState<Set<string> | null>(null)
+  // The Run Tests result whose attempt could not be saved.
+  const [unsavedReport, setUnsavedReport] = useState<GradeReport | null>(null)
   const learnNav = useLearnNav()
   const [gradeReport, setGradeReport] = useState<GradeReport | null>(null)
   const [errors, setErrors] = useState<AssembleError[]>([])
@@ -139,6 +162,12 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false)
   const auth = useAuth()
   const userId = auth.session?.user.id ?? null
+  const completedAssignments = userId && serverCompleted ? serverCompleted : localCompleted
+  // Passed here but missing on the server: the checklist says to run the tests again.
+  const unsavedAssignments = useMemo(
+    () => new Set(userId && serverCompleted ? [...localCompleted].filter((id) => !serverCompleted.has(id)) : []),
+    [userId, serverCompleted, localCompleted],
+  )
   const myFeedback = useMyFeedback(backendEnabled ? userId : null)
   // A short notice when a reply or status change arrives (#64); each one is
   // announced once per visit, the badge stays until the feedback is opened.
@@ -280,11 +309,13 @@ export default function App() {
   // Progress made on another device (or before clearing the browser) comes
   // back from the server once the student signs in.
   useEffect(() => {
+    setServerCompleted(null)
     if (!userId) return
     let cancelled = false
     fetchCompletedAssignments(userId).then((ids) => {
-      if (cancelled || ids.length === 0) return
-      setCompletedAssignments((prev) => new Set([...prev, ...ids]))
+      if (cancelled || ids === null) return
+      setServerCompleted(new Set(ids))
+      setLocalCompleted((prev) => (ids.every((id) => prev.has(id)) ? prev : new Set([...prev, ...ids])))
     })
     return () => {
       cancelled = true
@@ -303,11 +334,11 @@ export default function App() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(COMPLETED_ASSIGNMENTS_KEY, JSON.stringify([...completedAssignments]))
+      window.localStorage.setItem(COMPLETED_ASSIGNMENTS_KEY, JSON.stringify([...localCompleted]))
     } catch {
       // ignore (e.g. private browsing with storage disabled)
     }
-  }, [completedAssignments])
+  }, [localCompleted])
 
   // Records one undo point before an action (Step, one Animate tick, or a
   // whole Run) mutates the Cpu, so Step Back can later rewind past it. Capped
@@ -768,16 +799,19 @@ export default function App() {
     setGradeReport(report)
     if (!report.assembled || report.passedCount < report.totalCount) hintLadder.recordFailedRun()
     else if (assignment.challengeCycles && hintLadder.fails <= 1) challenges.markEligible(assignment.id)
-    recordAttempt({
+    const passed = report.assembled && report.totalCount > 0 && report.passedCount === report.totalCount
+    setUnsavedReport(null)
+    void recordAttempt({
       assignmentId: assignment.id,
       passedCount: report.passedCount,
       totalCount: report.totalCount,
       assembled: report.assembled,
       source,
+    }).then((saved) => {
+      if (!saved) setUnsavedReport(report)
+      else if (passed) setServerCompleted((prev) => (prev && !prev.has(assignment.id) ? new Set(prev).add(assignment.id) : prev))
     })
-    if (report.assembled && report.totalCount > 0 && report.passedCount === report.totalCount) {
-      setCompletedAssignments((prev) => (prev.has(assignment.id) ? prev : new Set(prev).add(assignment.id)))
-    }
+    if (passed) setLocalCompleted((prev) => (prev.has(assignment.id) ? prev : new Set(prev).add(assignment.id)))
   }
 
   function handleNewTab() {
@@ -932,7 +966,17 @@ export default function App() {
           <QuizDialog
             quiz={quiz}
             topicTitle={(topic) => conceptTitle(module.concepts.find((c) => c.id === topic) ?? { section: 'numbering', id: topic })}
-            draw={() => moduleProgress.drawQuiz(module.id)}
+            draw={async () => {
+              try {
+                return await moduleProgress.drawQuiz(module.id)
+              } catch (err) {
+                // The server's checklist differs from the card's (e.g. a task passed
+                // but never saved): name what it is missing (#85).
+                if (!(err instanceof Error) || !err.message.includes('Finish every item')) throw err
+                const missing = missingLabels(module, await moduleProgress.quizMissing(module.id))
+                throw new Error(missing.length ? `Finish every item on the checklist first. Still missing: ${missing.join('; ')}.` : err.message)
+              }
+            }}
             submit={async (answers) => {
               const r = await moduleProgress.submitQuiz(module.id, answers)
               if (r.passed) moduleProgress.setStep(module.id, 'done')
@@ -1115,6 +1159,7 @@ export default function App() {
               onExpand={() => setObserveCardOpen(true)}
               onCollapse={observe ? () => setObserveCardOpen(false) : undefined}
               unlockAll={auth.isAdmin}
+              unsaved={unsavedAssignments}
             />
           )}
           {backendEnabled && auth.session && moduleProgress.loaded && !observe && !focus && reviewCard && (
@@ -1361,6 +1406,9 @@ export default function App() {
                 )}
               </div>
               {gradeReport && <GraderView report={gradeReport} />}
+              {gradeReport && gradeReport === unsavedReport && (
+                <p className="feedback-error">Your result could not be saved. Check your connection and press Run Tests again.</p>
+              )}
               {(() => {
                 // The challenge appears once the assignment is passed within two runs (or was completed before).
                 const a = ALL_ASSIGNMENTS.find((x) => x.id === activeAssignmentId)

@@ -2711,6 +2711,11 @@ aside .panel {
   font-size: 0.8rem;
 }
 
+.path-unsaved {
+  color: var(--error-text);
+  font-size: 0.8rem;
+}
+
 .path-note {
   margin: 0 0 0.6rem;
   color: var(--text-dim);

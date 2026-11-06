@@ -69,6 +69,8 @@ interface Props {
   onCollapse?: () => void
   /** Admins can open every module to check content, whatever their own progress. */
   unlockAll?: boolean
+  /** Tasks passed in this browser that the server has no passed attempt for (#85). */
+  unsaved?: Set<string>
 }
 
 // The "Continue" home for signed-in students (issue #9): the module they are
@@ -79,7 +81,7 @@ interface Props {
 export function LearningPathCard({
   rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onOpenReflect,
   onStepOpened, onHide,
-  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse, unlockAll = false,
+  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse, unlockAll = false, unsaved,
 }: Props) {
   const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
@@ -133,6 +135,18 @@ export function LearningPathCard({
       const ref = m.concepts.find((c) => c.id === r.item.topic)
       if (ref) openStep(m, 'concept', m.concepts.indexOf(ref))
     }
+  }
+
+  // A pass the server never got (made signed out, or its save failed) doesn't
+  // count for the quiz; say so next to the row instead of a silent ○.
+  function unsavedNotes(m: LearningModule) {
+    return m.assignments.filter((id) => !completed.has(id) && unsaved?.has(id)).map((id) => (
+      <span key={id} className="path-unsaved">
+        {' '}{TASK_NAMES.get(id) ?? id}: Passed on this computer but not saved to your account.{' '}
+        <button className="link-button" onClick={() => openStep(m, 'task', m.assignments.indexOf(id))}>Open the task</button>
+        {' '}and press Run Tests again.
+      </span>
+    ))
   }
 
   function advance(m: LearningModule, step: StepId) {
@@ -285,6 +299,7 @@ export function LearningPathCard({
                 <span className="path-check" aria-hidden="true">{r.done ? '✓' : locked ? '🔒' : '○'}</span>
                 <button className="link-button" disabled={locked} onClick={() => openRow(module, r)}>{checklistRowLabel(module, r)}</button>
                 {!r.done && r.kind === 'read' && <span className="path-unread"> · not read</span>}
+                {!r.done && r.kind === 'tasks' && unsavedNotes(module)}
               </li>
             )
           })}
@@ -304,6 +319,9 @@ export function LearningPathCard({
             <li key={id}>
               <button className="link-button" onClick={() => openStep(module, 'task', i)}>{ASSIGNMENT_TITLES.get(id) ?? id}</button>
               {completed.has(id) && ' ✓'}
+              {!completed.has(id) && unsaved?.has(id) && (
+                <span className="path-unsaved"> Passed on this computer but not saved to your account. Open the task and press Run Tests again.</span>
+              )}
             </li>
           ))}
         </ul>

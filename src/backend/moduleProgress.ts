@@ -138,6 +138,14 @@ export function useModuleProgress(userId: string | null) {
     return (data ?? []) as DrawnQuestion[]
   }, [])
 
+  // Why quiz_draw refused: the checklist items the server still misses (#85).
+  const quizMissing = useCallback(async (moduleId: string): Promise<{ kind: string; item: string }[]> => {
+    if (!supabase) return []
+    const { data, error } = await supabase.rpc('quiz_missing', { p_module: moduleId })
+    if (error) return []
+    return (data ?? []) as { kind: string; item: string }[]
+  }, [])
+
   const submitQuiz = useCallback(async (moduleId: string, answers: { question_id: string; chosen: string }[]): Promise<QuizResult> => {
     if (!supabase) throw new Error('Accounts are not available')
     const { data, error } = await supabase.rpc('quiz_submit', { p_module: moduleId, p_answers: answers })
@@ -150,6 +158,6 @@ export function useModuleProgress(userId: string | null) {
 
   return {
     rows, reads, quizzesPassed, interactives, predicted, wrongPredicted, reviewCounts, loaded,
-    setStep, markRead, markInteractive, recordPrediction, saveReflection, drawQuiz, submitQuiz,
+    setStep, markRead, markInteractive, recordPrediction, saveReflection, drawQuiz, quizMissing, submitQuiz,
   }
 }
