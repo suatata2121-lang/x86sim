@@ -2,6 +2,7 @@
 // I/O-mode control-word builder and the BSR builder. They only decode words
 // (core/ppi8255.ts); nothing here runs the Cpu.
 import { useEffect, useState } from 'react'
+import { useCountedParts } from './countedParts'
 import { decodeBsrWord, decodeControlWord } from '../core/ppi8255'
 
 function hex2(v: number) {
@@ -96,6 +97,7 @@ export function ControlWordBuilder({ done, onDone }: { done?: Set<string>; onDon
   const [text, setText] = useState('80')
   // Words built here, so the count only grows with words the student made.
   const [built, setBuilt] = useState<Set<number>>(new Set())
+  const { count, record } = useCountedParts(CONTROL_WORD_PARTS, done, onDone)
 
   function choose(next: number, nextText = next.toString(16).toUpperCase().padStart(2, '0')) {
     setWord(next)
@@ -105,14 +107,12 @@ export function ControlWordBuilder({ done, onDone }: { done?: Set<string>; onDon
 
   useEffect(() => {
     if (built.size === 0) return
-    onDone?.(CONTROL_WORD_PARTS[Math.min(built.size, CONTROL_WORD_PARTS.length) - 1])
+    record()
     // onDone is a fresh closure every render; only a new word should record.
   }, [built.size])
 
   const typed = /^[0-9a-f]{1,2}h?$/i.test(text.trim()) ? parseInt(text.trim().replace(/h$/i, ''), 16) : null
   const c = decodeControlWord(word)
-  const recorded = CONTROL_WORD_PARTS.filter((p) => done?.has(p)).length
-  const count = Math.max(recorded, Math.min(built.size, CONTROL_WORD_PARTS.length))
 
   return (
     <div className="panel ppi-builder">
