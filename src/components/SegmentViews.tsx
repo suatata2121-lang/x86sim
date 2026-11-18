@@ -2,7 +2,8 @@
 // (issue #48). The simulator's memory is flat (see "Segmented Addressing vs
 // This Simulator's Flat Model"), so these compute real-8086 addresses on
 // their own instead of running the Cpu.
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useCountedParts } from './countedParts'
 
 const hex = (v: number, digits: number) => v.toString(16).toUpperCase().padStart(digits, '0') + 'h'
 
@@ -216,20 +217,16 @@ export function SegmentPractice({ done, onDone }: { done?: Set<string>; onDone?:
   const [q, setQ] = useState(() => makeQuestion(KINDS[0]))
   const [text, setText] = useState('')
   const [verdict, setVerdict] = useState<'right' | 'wrong' | null>(null)
-  const [correct, setCorrect] = useState(0)
-  const recorded = SEGMENT_PRACTICE_PARTS.filter((p) => done?.has(p)).length
-  const shown = Math.max(recorded, correct)
-
-  useEffect(() => {
-    if (correct > 0 && correct <= SEGMENT_PRACTICE_PARTS.length) onDone?.(SEGMENT_PRACTICE_PARTS[correct - 1])
-    // onDone is a fresh closure every render; only a new right answer should record.
-  }, [correct])
+  const { count, complete, record } = useCountedParts(SEGMENT_PRACTICE_PARTS, done, onDone)
+  // Once all five are in, further questions are optional.
+  const [keepGoing, setKeepGoing] = useState(false)
+  const resting = complete && !keepGoing && verdict !== 'right'
 
   function check() {
     const v = parseHex(text, q.digits)
     const right = v === q.answer
     setVerdict(right ? 'right' : 'wrong')
-    if (right) setCorrect((n) => n + 1)
+    if (right) record()
   }
 
   function next() {
@@ -244,15 +241,23 @@ export function SegmentPractice({ done, onDone }: { done?: Set<string>; onDone?:
   return (
     <div className="panel">
       <h3>Segment Practice</h3>
+      {resting ? (
+        <>
+          <p className="mb-feedback-right">All five done ✓</p>
+          <div className="mb-inputs"><button onClick={() => { setKeepGoing(true); next() }}>Keep practising</button></div>
+        </>
+      ) : (<>
       <p className="example-description">{q.prompt}</p>
       <div className="mb-inputs">
         <HexInput label="Answer (hex)" value={text} onChange={(v) => { setText(v); if (verdict === 'wrong') setVerdict(null) }} digits={q.digits} />
-        {verdict === 'right'
+        {verdict === 'right' && complete && !keepGoing
+          ? <button onClick={() => { setKeepGoing(true); next() }}>Keep practising</button>
+          : verdict === 'right'
           ? <button className="primary" onClick={next}>Next question</button>
           : <button onClick={check} disabled={!text.trim()}>Check</button>}
         {verdict === 'wrong' && <button onClick={next}>Skip</button>}
       </div>
-      {verdict === 'right' && <p className="mb-feedback-right">Correct: {q.working}.</p>}
+      {verdict === 'right' && <p className="mb-feedback-right">Correct: {q.working}.{complete && !keepGoing ? ' All five done ✓' : ''}</p>}
       {verdict === 'wrong' && (
         <p className="moveit-error">
           Not quite.{' '}
@@ -263,7 +268,8 @@ export function SegmentPractice({ done, onDone }: { done?: Set<string>; onDone?:
               : 'Shift the segment left by one hex digit (× 10h) before adding.'}
         </p>
       )}
-      <ul className="mb-cases"><li className={shown >= 5 ? 'done' : ''}>Right answers: {Math.min(shown, 5)}/5</li></ul>
+      </>)}
+      <ul className="mb-cases"><li className={complete ? 'done' : ''}>Right answers: {count}/5</li></ul>
     </div>
   )
 }

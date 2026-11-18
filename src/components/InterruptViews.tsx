@@ -4,6 +4,7 @@
 // simulator does not execute student ISRs (a separate decision, #53).
 import { useEffect, useState } from 'react'
 import { Box } from './Ppi8255Views'
+import { useCountedParts } from './countedParts'
 
 const hex = (v: number, digits: number) => v.toString(16).toUpperCase().padStart(digits, '0') + 'h'
 const hex2 = (v: number) => v.toString(16).toUpperCase().padStart(2, '0')
@@ -82,6 +83,7 @@ export function IvtCalculator({ done, onDone }: { done?: Set<string>; onDone?: (
   const [ip, setIp] = useState('1000')
   const [cs, setCs] = useState('2000')
   const [tried, setTried] = useState<Set<number>>(new Set())
+  const { count, record } = useCountedParts(IVT_PARTS, done, onDone)
 
   const t = nText.trim()
   const n = /^[0-9a-f]+h$/i.test(t) ? parseInt(t.slice(0, -1), 16) : /^\d+$/.test(t) ? parseInt(t, 10) : NaN
@@ -94,11 +96,10 @@ export function IvtCalculator({ done, onDone }: { done?: Set<string>; onDone?: (
     const next = new Set(tried).add(n)
     setTried(next)
     // The first type shown counts too: the student has already read its result.
-    onDone?.(IVT_PARTS[Math.min(next.size, IVT_PARTS.length) - 1])
+    record()
     // onDone is a fresh closure every render; only a new type should record.
   }, [n, valid])
 
-  const count = Math.max(IVT_PARTS.filter((p) => done?.has(p)).length, Math.min(tried.size, 3))
   const addr = valid ? n * 4 : 0
   const physical = ipV !== null && csV !== null ? ((csV * 16 + ipV) & 0xfffff) : null
 
