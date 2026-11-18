@@ -28,6 +28,9 @@ export function useModuleProgress(userId: string | null) {
   // review cards each module has had.
   const [wrongPredicted, setWrongPredicted] = useState<Map<string, Set<string>>>(new Map())
   const [reviewCounts, setReviewCounts] = useState<Map<string, number>>(new Map())
+  // Modules whose Reflect step is behind the student (#98): a reflection on
+  // the server, or saved/skipped in this visit. "Next step" never reopens it.
+  const [reflected, setReflected] = useState<Set<string>>(new Set())
   // The same set, readable synchronously, so a repeat completion writes nothing.
   const interactivesRef = useRef(interactives)
   interactivesRef.current = interactives
@@ -41,6 +44,7 @@ export function useModuleProgress(userId: string | null) {
     setPredicted(new Map())
     setWrongPredicted(new Map())
     setReviewCounts(new Map())
+    setReflected(new Set())
     setLoaded(false)
     if (!supabase || !userId) return
     let cancelled = false
@@ -50,7 +54,8 @@ export function useModuleProgress(userId: string | null) {
       supabase.from('quiz_attempts').select('module_id').eq('user_id', userId).eq('passed', true),
       supabase.from('interactive_runs').select('module_id, item_id').eq('user_id', userId),
       supabase.from('predictions').select('module_id, question_id, correct, source').eq('user_id', userId),
-    ]).then(([progress, conceptReads, passes, runs, predictions]) => {
+      supabase.from('reflections').select('module_id').eq('user_id', userId),
+    ]).then(([progress, conceptReads, passes, runs, predictions, reflections]) => {
       if (cancelled) return
       setRows(new Map(((progress.data ?? []) as ModuleProgressRow[]).map((r) => [r.module_id, r])))
       setReads(groupByModule(((conceptReads.data ?? []) as { module_id: string; concept_id: string }[])
@@ -66,6 +71,7 @@ export function useModuleProgress(userId: string | null) {
       const counts = new Map<string, number>()
       for (const r of preds.filter((x) => x.source === 'review')) counts.set(r.module_id, (counts.get(r.module_id) ?? 0) + 1)
       setReviewCounts(counts)
+      setReflected(new Set(((reflections.data ?? []) as { module_id: string }[]).map((r) => r.module_id)))
       setLoaded(true)
     })
     return () => {
@@ -123,11 +129,16 @@ export function useModuleProgress(userId: string | null) {
       .then(() => undefined)
   }, [userId])
 
+  const markReflected = useCallback((moduleId: string) => {
+    setReflected((prev) => (prev.has(moduleId) ? prev : new Set(prev).add(moduleId)))
+  }, [])
+
   // The optional one-sentence reflection at the end of a module (#16).
   const saveReflection = useCallback(async (moduleId: string, body: string) => {
+    markReflected(moduleId)
     if (!supabase || !userId) return
     await supabase.from('reflections').insert({ user_id: userId, module_id: moduleId, body: body.slice(0, 500) })
-  }, [userId])
+  }, [userId, markReflected])
 
   // Questions and grading are server-side (quiz_draw / quiz_submit in
   // schema.sql) so the answer key never reaches the browser.
@@ -157,7 +168,7 @@ export function useModuleProgress(userId: string | null) {
   }, [])
 
   return {
-    rows, reads, quizzesPassed, interactives, predicted, wrongPredicted, reviewCounts, loaded,
-    setStep, markRead, markInteractive, recordPrediction, saveReflection, drawQuiz, quizMissing, submitQuiz,
+    rows, reads, quizzesPassed, interactives, predicted, wrongPredicted, reviewCounts, reflected, loaded,
+    setStep, markRead, markInteractive, recordPrediction, markReflected, saveReflection, drawQuiz, quizMissing, submitQuiz,
   }
 }
