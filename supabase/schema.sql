@@ -775,6 +775,50 @@ begin
 end;
 $$;
 
+-- The student's latest passed attempt, shown again from a finished module
+-- (#99): its questions with the right answers and explanations. Only a pass
+-- is returned, so this tells nothing that quiz_submit didn't already show.
+create or replace function public.quiz_review(p_module text)
+returns jsonb
+language plpgsql
+stable
+security definer set search_path = public
+as $$
+declare
+  v_attempt public.quiz_attempts;
+  v_questions jsonb;
+  v_answers jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Sign in to see your quiz';
+  end if;
+  select * into v_attempt from public.quiz_attempts
+   where user_id = auth.uid() and module_id = p_module and passed
+   order by created_at desc limit 1;
+  if not found then
+    return null;
+  end if;
+
+  select jsonb_agg(jsonb_build_object('id', q.id, 'topic', q.topic_id, 'question', q.question,
+                                      'code', q.code, 'options', q.options) order by a.ord),
+         jsonb_agg(jsonb_build_object('question_id', q.id, 'chosen', a.x ->> 'chosen',
+                                      'correct', (a.x ->> 'correct')::boolean,
+                                      'answer', q.options ->> q.correct_index,
+                                      'explanation', q.explanation) order by a.ord)
+    into v_questions, v_answers
+    from jsonb_array_elements(v_attempt.answers) with ordinality as a(x, ord)
+    join public.quiz_questions q on q.id = a.x ->> 'question_id';
+
+  return jsonb_build_object(
+    'questions', coalesce(v_questions, '[]'::jsonb),
+    'result', jsonb_build_object('score', v_attempt.score, 'total', v_attempt.total, 'passed', true,
+                                 'answers', coalesce(v_answers, '[]'::jsonb))
+  );
+end;
+$$;
+
+revoke all on function public.quiz_review(text) from public, anon;
+grant execute on function public.quiz_review(text) to authenticated;
 revoke all on function public.quiz_draw(text) from public, anon;
 revoke all on function public.quiz_submit(text, jsonb) from public, anon;
 grant execute on function public.quiz_draw(text) to authenticated;

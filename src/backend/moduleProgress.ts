@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './client'
 import { trackActivity } from './tracking'
 import type { ModuleProgressRow, StoredStep } from '../learningPath'
-import type { DrawnQuestion, QuizResult } from '../quizzes'
+import type { DrawnQuestion, QuizResult, QuizReview } from '../quizzes'
 
 // The signed-in student's position in each learning-path module, kept in
 // module_progress so it follows them across devices, plus the topics they
@@ -167,7 +167,16 @@ export function useModuleProgress(userId: string | null) {
     return result
   }, [])
 
+  // The latest passed attempt with its answers, for a finished module (#99).
+  const reviewQuiz = useCallback(async (moduleId: string): Promise<QuizReview | null> => {
+    if (!supabase) throw new Error('Accounts are not available')
+    const { data, error } = await supabase.rpc('quiz_review', { p_module: moduleId })
+    if (error) throw new Error(error.message)
+    return (data ?? null) as QuizReview | null
+  }, [])
+
   return {
+    reviewQuiz,
     rows, reads, quizzesPassed, interactives, predicted, wrongPredicted, reviewCounts, reflected, loaded,
     setStep, markRead, markInteractive, recordPrediction, markReflected, saveReflection, drawQuiz, quizMissing, submitQuiz,
   }

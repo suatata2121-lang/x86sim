@@ -2643,16 +2643,6 @@ aside .panel {
   font-size: 0.75rem;
 }
 
-.path-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
-  margin: 0 0 0.6rem;
-  padding: 0;
-  list-style: none;
-  font-size: 0.9rem;
-}
-
 .path-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3606,6 +3596,11 @@ aside .panel {
 
 .watch-note h3 {
   margin: 0;
+}
+
+.path-review-title {
+  margin: 0.4rem 0 0;
+  font-size: 0.95rem;
 }
 
 .path-checklist {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { EXAMPLES } from '../examples'
 import { CURRICULUM } from '../curriculum'
 import { HARDWARE_REFERENCE } from '../hardwareReference'
@@ -7,7 +7,7 @@ import { INSTRUCTION_REFERENCE } from '../instructionReference'
 import {
   LEARNING_PATH, STEPS, activeSteps, checklist, currentModule, isModuleDone, isUnlocked, moduleStatus, nextStep, previousModule,
   quizBlockers, resumeStep, shownSteps, unansweredPredictions, unreadConcepts, type ChecklistRow,
-  type AsidePanel, type ConceptRef, type LearningModule, type ModuleProgressRow, type PathProgress, type StepId,
+  type AsidePanel, type ConceptRef, type Interactive, type LearningModule, type ModuleProgressRow, type PathProgress, type StepId,
   type StoredStep,
 } from '../learningPath'
 import { findQuiz } from '../quizzes'
@@ -41,6 +41,16 @@ export function checklistRowLabel(m: LearningModule, r: ChecklistRow): string {
 }
 
 const exampleTitle = (id: string) => EXAMPLES.find((e) => e.id === id)?.title ?? id
+
+/** One row of the module's list on the card. */
+interface ListItem {
+  key: string
+  label: string
+  done: boolean
+  locked?: boolean
+  open: () => void
+  note?: ReactNode
+}
 
 const STATUS_LABELS = { done: 'done', 'in-progress': 'in progress', 'not-started': 'not started' }
 
@@ -96,9 +106,11 @@ export function LearningPathCard({
   const unlocked = (m: LearningModule) => unlockAll || isUnlocked(m, progress, rows)
   const doneCount = LEARNING_PATH.filter((m) => isModuleDone(m, progress, rows.get(m.id)?.step)).length
 
-  function openStep(m: LearningModule, step: StepId, index?: number) {
+  // `review` is a click on the module's list: going back to an earlier item
+  // must not move the student's step back with it (#99).
+  function openStep(m: LearningModule, step: StepId, index?: number, review = false) {
     // Never move a finished module back from 'done' just by revisiting it.
-    if (!isModuleDone(m, progress, rows.get(m.id)?.step)) onSetStep(m.id, step)
+    if (!isModuleDone(m, progress, rows.get(m.id)?.step) && !(review && isBehind(m, step))) onSetStep(m.id, step)
     onStepOpened(m.id, step)
     if (step === 'concept') onOpenConcept(m.concepts[index ?? Math.max(0, m.concepts.indexOf(unreadConcepts(m, progress)[0]))])
     else if (step === 'observe' && m.observe) onOpenExample(m.observe.examples[index ?? 0], m.observe.panel, m.observe.watch, m.id)
@@ -109,6 +121,11 @@ export function LearningPathCard({
       const id = index !== undefined ? m.assignments[index] : m.assignments.find((a) => !completed.has(a)) ?? m.assignments[0]
       onOpenAssignment(id)
     }
+  }
+
+  function isBehind(m: LearningModule, step: StepId) {
+    const steps = activeSteps(m)
+    return steps.indexOf(step) < steps.indexOf(resumeStep(m, rows.get(m.id), progress))
   }
 
   function pickModule(m: LearningModule) {
@@ -126,29 +143,14 @@ export function LearningPathCard({
     return previous ? `Finish ${previous.title} to open this module.` : ''
   }
 
-  function openRow(m: LearningModule, r: ChecklistRow) {
-    if (r.kind === 'read') openStep(m, 'concept', m.concepts.indexOf(r.concept))
-    else if (r.kind === 'tasks') openStep(m, 'task')
-    else if (r.kind === 'quiz') openStep(m, 'quiz')
-    else if (r.item.example) {
-      onSetStep(m.id, 'observe')
-      onOpenExample(r.item.example, m.observe?.panel ?? 'registers', m.observe?.watch, m.id)
+  function openInteractive(m: LearningModule, item: Interactive) {
+    if (item.example) {
+      if (!isModuleDone(m, progress, rows.get(m.id)?.step) && !isBehind(m, 'observe')) onSetStep(m.id, 'observe')
+      onOpenExample(item.example, m.observe?.panel ?? 'registers', m.observe?.watch, m.id)
     } else {
-      const ref = m.concepts.find((c) => c.id === r.item.topic)
-      if (ref) openStep(m, 'concept', m.concepts.indexOf(ref))
+      const ref = m.concepts.find((c) => c.id === item.topic)
+      if (ref) openStep(m, 'concept', m.concepts.indexOf(ref), true)
     }
-  }
-
-  // A pass the server never got (made signed out, or its save failed) doesn't
-  // count for the quiz; say so next to the row instead of a silent ○.
-  function unsavedNotes(m: LearningModule) {
-    return m.assignments.filter((id) => !completed.has(id) && unsaved?.has(id)).map((id) => (
-      <span key={id} className="path-unsaved">
-        {' '}{TASK_NAMES.get(id) ?? id}: Passed on this computer but not saved to your account.{' '}
-        <button className="link-button" onClick={() => openStep(m, 'task', m.assignments.indexOf(id))}>Open the task</button>
-        {' '}and press Run Tests again.
-      </span>
-    ))
   }
 
   // The step "Next step" goes to: Reflect is passed over once written (#98).
@@ -252,8 +254,6 @@ export function LearningPathCard({
   const step = resumeStep(module, row, progress)
   const steps = activeSteps(module)
   const isLastStep = steps[steps.length - 1] === step
-  // Quiz modules: the rest of the checklist has to be done before the quiz opens.
-  const rowsToDo = module.quiz ? checklist(module, progress) : []
   const blockers = module.quiz ? quizBlockers(module, progress) : 0
   const readsLeft = module.quiz ? unreadConcepts(module, progress).length : 0
   const lockedNote = `${(module.quiz && findQuiz(module.quiz)?.lockedNote) ?? ''} ${blockers} left.`
@@ -266,6 +266,53 @@ export function LearningPathCard({
   const missingTasks = !moduleDone && !module.quiz && reflected?.has(module.id)
     ? module.assignments.filter((id) => !completed.has(id))
     : []
+
+  // Every module lists the same things in the same order (#99): pages,
+  // examples, interactives, each task on its own row, then the quiz. Pages
+  // and examples are only recorded in quiz modules (Mark as read); elsewhere
+  // they count as done once the student is past that step.
+  const pastStep = (s: StepId) => moduleDone || steps.indexOf(s) < steps.indexOf(step)
+  const read = progress.reads.get(module.id)
+  const quizPassed = progress.quizzesPassed.has(module.id)
+  const items: ListItem[] = [
+    ...module.concepts.map((c, i): ListItem => {
+      const done = module.quiz ? !!read?.has(c.id) : pastStep('concept')
+      return {
+        key: `read-${c.section}-${c.id}`,
+        label: `Read: ${conceptTitle(c)}`,
+        done,
+        open: () => openStep(module, 'concept', i, true),
+        note: module.quiz && !done ? <span className="path-unread"> · not read</span> : null,
+      }
+    }),
+    ...(steps.includes('observe') ? module.observe?.examples ?? [] : []).map((id, i): ListItem => ({
+      key: `example-${id}`,
+      label: `Watch: ${exampleTitle(id)}`,
+      done: pastStep('observe'),
+      open: () => openStep(module, 'observe', i, true),
+    })),
+    ...checklist(module, progress).flatMap((r): ListItem[] => r.kind === 'interactive'
+      ? [{ key: `interactive-${r.item.id}`, label: checklistRowLabel(module, r), done: r.done, open: () => openInteractive(module, r.item) }]
+      : []),
+    ...module.assignments.map((id, i): ListItem => ({
+      key: `task-${id}`,
+      label: ASSIGNMENT_TITLES.get(id) ?? id,
+      done: completed.has(id),
+      open: () => openStep(module, 'task', i, true),
+      note: !completed.has(id) && unsaved?.has(id)
+        ? <span className="path-unsaved"> Passed on this computer but not saved to your account. Open the task and press Run Tests again.</span>
+        : null,
+    })),
+    ...(module.quiz
+      ? [{
+          key: 'quiz',
+          label: quizPassed ? 'Quiz: see your answers' : 'Quiz',
+          done: quizPassed,
+          locked: !quizPassed && blockers > 0,
+          open: () => openStep(module, 'quiz', undefined, true),
+        }]
+      : []),
+  ]
 
   return (
     <div className="panel path-card">
@@ -285,7 +332,7 @@ export function LearningPathCard({
 
       <ol className="path-steps">
         {shownSteps(module).map((s) => {
-          const quizLocked = s.id === 'quiz' && blockers > 0
+          const quizLocked = s.id === 'quiz' && blockers > 0 && !progress.quizzesPassed.has(module.id)
           const available = steps.includes(s.id) && !quizLocked
           const passed = moduleDone || steps.indexOf(s.id) < steps.indexOf(step)
           return (
@@ -307,42 +354,16 @@ export function LearningPathCard({
         })}
       </ol>
 
-      {module.quiz && (
-        <ul className="path-checklist">
-          {rowsToDo.map((r, i) => {
-            const locked = r.kind === 'quiz' && blockers > 0
-            return (
-              <li key={i} className={r.done ? 'done' : undefined}>
-                <span className="path-check" aria-hidden="true">{r.done ? '✓' : locked ? '🔒' : '○'}</span>
-                <button className="link-button" disabled={locked} onClick={() => openRow(module, r)}>{checklistRowLabel(module, r)}</button>
-                {!r.done && r.kind === 'read' && <span className="path-unread"> · not read</span>}
-                {!r.done && r.kind === 'tasks' && unsavedNotes(module)}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {!moduleDone && !module.quiz && (
-        <ul className="path-items">
-          {step === 'concept' && module.concepts.map((c, i) => (
-            <li key={c.id}>
-              <button className="link-button" onClick={() => openStep(module, 'concept', i)}>{conceptTitle(c)}</button>
-            </li>
-          ))}
-          {step === 'observe' && module.observe?.examples.map((id, i) => (
-            <li key={id}><button className="link-button" onClick={() => openStep(module, 'observe', i)}>{exampleTitle(id)}</button></li>
-          ))}
-          {step === 'task' && module.assignments.map((id, i) => (
-            <li key={id}>
-              <button className="link-button" onClick={() => openStep(module, 'task', i)}>{ASSIGNMENT_TITLES.get(id) ?? id}</button>
-              {completed.has(id) && ' ✓'}
-              {!completed.has(id) && unsaved?.has(id) && (
-                <span className="path-unsaved"> Passed on this computer but not saved to your account. Open the task and press Run Tests again.</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {moduleDone && <h4 className="path-review-title">Review this module</h4>}
+      <ul className="path-checklist">
+        {items.map((r) => (
+          <li key={r.key} className={r.done ? 'done' : undefined}>
+            <span className="path-check" aria-hidden="true">{r.done ? '✓' : r.locked ? '🔒' : '○'}</span>
+            <button className="link-button" disabled={r.locked} title={r.locked ? lockedNote : undefined} onClick={r.open}>{r.label}</button>
+            {r.note}
+          </li>
+        ))}
+      </ul>
       {missingTasks.map((id) => (
         <p key={id} className="path-note">
           <button className="link-button" onClick={() => openStep(module, 'task', module.assignments.indexOf(id))}>

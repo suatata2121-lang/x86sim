@@ -222,6 +222,8 @@ export default function App() {
   const [observe, setObserve] = useState<{ moduleId: string; exampleId: string } | null>(null)
   const [observeCardOpen, setObserveCardOpen] = useState(false)
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
+  // The open quiz shows the passed attempt's answers instead of drawing (#99).
+  const [quizReview, setQuizReview] = useState(false)
   const [predictModuleId, setPredictModuleId] = useState<string | null>(null)
   const [reflectModuleId, setReflectModuleId] = useState<string | null>(null)
   // Review cards (#15): a finished module's question comes back after 14 and
@@ -591,7 +593,12 @@ export default function App() {
   // again, and quiz_draw checks once more on the server.
   function openQuiz(moduleId: string) {
     const m = LEARNING_PATH.find((x) => x.id === moduleId)
-    if (m?.quiz && quizBlockers(m, pathProgress) === 0) setQuizModuleId(moduleId)
+    if (!m?.quiz) return
+    // A passed quiz opens on that attempt's answers rather than a new draw (#99).
+    const passed = moduleProgress.quizzesPassed.has(moduleId)
+    if (!passed && quizBlockers(m, pathProgress) > 0) return
+    setQuizReview(passed)
+    setQuizModuleId(moduleId)
   }
 
   // An interactive item finished (a stepper reached its end, a demo halted,
@@ -625,6 +632,7 @@ export default function App() {
         requestAnimationFrame(() => document.querySelector('.learn-detail-panel')?.scrollIntoView({ block: 'start' }))
       } else if (quizReady) {
         moduleProgress.setStep(m!.id, 'quiz')
+        setQuizReview(false)
         setQuizModuleId(m!.id)
       }
     }
@@ -1003,6 +1011,7 @@ export default function App() {
             }}
             storageKey={userId ? `quiz-attempt:${module.id}:${userId}` : undefined}
             next={nextModule && { label: `Next module: ${nextModule.title} →`, onClick: () => setQuizModuleId(null) }}
+            review={quizReview ? () => moduleProgress.reviewQuiz(module.id) : undefined}
           />
         )
       })()}
