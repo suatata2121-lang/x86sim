@@ -12,14 +12,15 @@ export function ReviewCard({ title, question, answered, onAnswer, onDone }: {
   onDone: () => void
 }) {
   return (
-    <div className="panel review-card">
-      <div className="path-header">
+    // Folded, so the Continue card's next step stays the one thing in view (#102).
+    <details className="panel review-card">
+      <summary className="path-header">
         <h3>Quick review: {title}</h3>
-      </div>
+      </summary>
       <ol className="predict-questions">
         <QuestionCard n={1} q={question} once onAnswer={onAnswer} />
       </ol>
       {answered && <button className="primary" onClick={onDone}>Done</button>}
-    </div>
+    </details>
   )
 }

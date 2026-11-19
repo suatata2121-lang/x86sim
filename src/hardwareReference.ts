@@ -259,7 +259,7 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         },
         notes: [
           'This simulator\'s ADD/SUB/CMP/INC/DEC/NEG never actually update OF -- see the Instruction Reference ' +
-            'entries for JG/JL/JGE/JLE for why that matters for signed comparisons.',
+            'entries for [[reference:conditional-jumps/JG|JG/JL/JGE/JLE]] for why that matters for signed comparisons.',
           'PF (parity of the low result byte), AF (carry out of the low nibble, used by the BCD-adjust ' +
             'instructions), and IF (the interrupt-enable flag, set by STI and cleared by CLI) are modeled here too. ' +
             'The one bit this simulator still leaves out is TF (the single-step trap flag), so it always reads 0; ' +
@@ -282,7 +282,7 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'the CPU, and the CPU works through fetch → decode → execute one step after another.',
           'A Harvard machine keeps instructions and data in separate memories, each with its own bus. It can fetch ' +
             'the next instruction and read or write data at the same time.',
-          'Look back at the Fetch-Decode-Execute topic: the fetch and the data access of MOV AX, [BX] use the same ' +
+          'Look back at the [[hardware:fetch-decode-execute|Fetch-Decode-Execute]] topic: the fetch and the data access of MOV AX, [BX] use the same ' +
             'bus, one after the other. On a Harvard machine they could overlap.',
           {
             kind: 'table',
@@ -558,7 +558,7 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         ],
         notes: [
           'The control-line names here follow the Microprocessors course slides. The 8086 pin list also contains ' +
-            'RESET, NMI, INTR, TEST̅, and HOLD/HLDA (minimum mode) or RQ/GT̅ (maximum mode), covered in the next topics.',
+            'RESET, NMI, INTR, TEST̅, and HOLD/HLDA (minimum mode) or RQ/GT̅ (maximum mode), covered in the [[hardware:bus-request-grant|next topics]].',
         ],
       },
       {
@@ -663,7 +663,7 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         ],
         staticDiagram: 'segmented-addressing',
         notes: [
-          'See the Directives & Program Structure category in Instruction Reference for exactly which MASM/TASM ' +
+          'See the [[reference:directives|Directives & Program Structure]] category in Instruction Reference for exactly which MASM/TASM ' +
             'segment boilerplate is accepted.',
         ],
       },
@@ -1048,7 +1048,7 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
           'This simulator models only the one interrupt real DOS programs use constantly: INT 21h. Instead of a ' +
             'full 256-entry vector table, Cpu.handleInterrupt just switches on the value in AH -- 01h reads a ' +
             'key, 02h prints a character, 09h prints a $-terminated string, 0Ah reads a line, and 4Ch halts the ' +
-            'program. See the I/O & Interrupts category in Instruction Reference for the full table.',
+            'program. See the [[reference:io-interrupts|I/O & Interrupts]] category in Instruction Reference for the full table.',
           'A real hardware interrupt (a key pressed, a timer tick from the 8253/8254 below) isn\'t requested by ' +
             'the running program at all -- it arrives asynchronously from outside, is prioritized by the 8259 ' +
             'PIC, and interrupts whatever the CPU happened to be doing. This simulator has no asynchronous ' +

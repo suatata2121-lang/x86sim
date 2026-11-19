@@ -428,6 +428,47 @@ export function LearnSidebar({
 }
 
 // ---------------------------------------------------------------------------
+// Links inside Learn text (#102): "[[hardware:flags-register|Flags Register]]"
+// in a paragraph or note opens that page. Reference ids are a category, or
+// "category/MNEMONIC" for one instruction.
+// ---------------------------------------------------------------------------
+
+const LINK_RE = /\[\[(hardware|numbering|reference):([^|\]]+)\|([^\]]+)\]\]/g
+
+export function openLearnRef(nav: LearnNav, section: string, id: string) {
+  if (section === 'hardware') {
+    nav.setSection('hardware')
+    nav.setHwCategoryId(HARDWARE_REFERENCE.find((c) => c.topics.some((t) => t.id === id))?.id ?? null)
+    nav.setHwTopicId(id)
+  } else if (section === 'numbering') {
+    nav.setSection('numbering')
+    nav.setNumCategoryId(NUMBERING_REFERENCE.find((c) => c.topics.some((t) => t.id === id))?.id ?? null)
+    nav.setNumTopicId(id)
+  } else {
+    const [categoryId, mnemonic] = id.split('/')
+    nav.setSection('reference')
+    nav.setCategoryId(categoryId)
+    nav.setMnemonic(mnemonic ?? null)
+  }
+  requestAnimationFrame(() => document.querySelector('.learn-detail-panel')?.scrollIntoView({ block: 'start' }))
+}
+
+function LinkedText({ text, nav }: { text: string; nav: LearnNav }) {
+  const parts: ReactNode[] = []
+  let last = 0
+  for (const m of text.matchAll(LINK_RE)) {
+    const at = m.index ?? 0
+    parts.push(text.slice(last, at))
+    parts.push(
+      <button key={at} className="link-button learn-inline-link" onClick={() => openLearnRef(nav, m[1], m[2])}>{m[3]}</button>,
+    )
+    last = at + m[0].length
+  }
+  parts.push(text.slice(last))
+  return <>{parts}</>
+}
+
+// ---------------------------------------------------------------------------
 // Detail: shown above the code editor (wide column). Explanations only --
 // no clickable navigation, just the text/example for whatever is selected.
 // ---------------------------------------------------------------------------
@@ -502,11 +543,11 @@ export function LearnDetail({
             ? <NumberVisual key={idx} visual={p} />
             : p.includes('\n')
               ? <pre key={idx} className="instr-example">{p}</pre>
-              : <p key={idx} className="example-description">{p}</p>
+              : <p key={idx} className="example-description"><LinkedText text={p} nav={nav} /></p>
         )}
         {numTopic.notes && (
           <ul className="instr-notes">
-            {numTopic.notes.map((n, idx) => <li key={idx}>{n}</li>)}
+            {numTopic.notes.map((n, idx) => <li key={idx}><LinkedText text={n} nav={nav} /></li>)}
           </ul>
         )}
         {topicFooter?.({ section: 'numbering', id: numTopic.id })}
@@ -541,7 +582,7 @@ export function LearnDetail({
         <p className="example-description">{hwTopic.summary}</p>
         {hwTopic.content.map((p, idx) =>
           typeof p === 'string'
-            ? <p key={idx} className="example-description">{p}</p>
+            ? <p key={idx} className="example-description"><LinkedText text={p} nav={nav} /></p>
             : <NumberVisual key={idx} visual={p} />
         )}
         {hwTopic.demo && (
@@ -584,7 +625,7 @@ export function LearnDetail({
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">
-            {hwTopic.notes.map((n, idx) => <li key={idx}>{n}</li>)}
+            {hwTopic.notes.map((n, idx) => <li key={idx}><LinkedText text={n} nav={nav} /></li>)}
           </ul>
         )}
         {topicFooter?.({ section: 'hardware', id: hwTopic.id })}
@@ -624,7 +665,7 @@ export function LearnDetail({
         <p className="instr-example-note">{instruction.exampleNote}</p>
         {instruction.notes && (
           <ul className="instr-notes">
-            {instruction.notes.map((n, idx) => <li key={idx}>{n}</li>)}
+            {instruction.notes.map((n, idx) => <li key={idx}><LinkedText text={n} nav={nav} /></li>)}
           </ul>
         )}
       </div>

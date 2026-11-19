@@ -1104,7 +1104,18 @@ export default function App() {
               openNotes(module.id)
             }}
             storageKey={userId ? `quiz-attempt:${module.id}:${userId}` : undefined}
-            next={nextModule && { label: `Next module: ${nextModule.title} →`, onClick: () => setQuizModuleId(null) }}
+            // One click to the next module's first page; no timer, so the
+            // right answers above can be read first (#102).
+            next={nextModule && {
+              label: `Start Module ${LEARNING_PATH.indexOf(nextModule)}`,
+              onClick: () => {
+                setQuizModuleId(null)
+                // Started already: keep its step. New: it starts on Concept.
+                if (!moduleProgress.rows.has(nextModule.id)) moduleProgress.setStep(nextModule.id, 'concept')
+                if (nextModule.concepts[0]) openConcept(nextModule.concepts[0])
+                flashTarget('.learn-detail-panel')
+              },
+            }}
             review={quizReview ? () => moduleProgress.reviewQuiz(module.id) : undefined}
           />
         )
