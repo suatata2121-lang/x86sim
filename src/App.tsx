@@ -24,6 +24,8 @@ import { AdminView } from './components/AdminView'
 import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
+import { flashTarget, useClickLock } from './components/navFeedback'
+import { ModuleItemList, itemKey, moduleItems, type PathActions } from './components/ModuleItems'
 import { QuizDialog } from './components/QuizDialog'
 import { ObserveView } from './components/ObserveView'
 import { EXAMPLES } from './examples'
@@ -79,7 +81,27 @@ interface Tab {
   title: string
   source: string
   breakpoints: Set<number>
+  /** Set on a task's tab: a task has one tab, and its code is kept as a draft (#102). */
+  assignmentId?: string
 }
+
+// Open task tabs at most; the oldest closes first. Its code stays as a draft.
+const MAX_TASK_TABS = 3
+const DRAFTS_KEY = 'x86sim-task-drafts'
+
+// Per user, since lab computers are shared. Storage can be missing or throw;
+// then a reopened task starts from its starter code, as before.
+function loadDrafts(key: string): Record<string, string> {
+  try {
+    const raw = window.localStorage.getItem(key)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {}
+  } catch {
+    return {}
+  }
+}
+
+const moduleOfTask = (assignmentId: string) => LEARNING_PATH.find((m) => m.assignments.includes(assignmentId))?.id ?? null
 
 let nextTabId = 1
 function newTabId() {
@@ -224,6 +246,8 @@ export default function App() {
   const [quizModuleId, setQuizModuleId] = useState<string | null>(null)
   // The open quiz shows the passed attempt's answers instead of drawing (#99).
   const [quizReview, setQuizReview] = useState(false)
+  // "Next" buttons outside the card: one click at a time (#102).
+  const [navLocked, lockNav] = useClickLock()
   const [predictModuleId, setPredictModuleId] = useState<string | null>(null)
   const [reflectModuleId, setReflectModuleId] = useState<string | null>(null)
   // Review cards (#15): a finished module's question comes back after 14 and
@@ -333,6 +357,20 @@ export default function App() {
       if (animTimerRef.current !== null) window.clearInterval(animTimerRef.current)
     }
   }, [])
+
+  // Task code, saved as it is typed, so a task's tab can close (#102).
+  const draftsKey = `${DRAFTS_KEY}:${userId ?? 'guest'}`
+  useEffect(() => {
+    const taskTabs = tabs.filter((t) => t.assignmentId)
+    if (!taskTabs.length) return
+    const drafts = loadDrafts(draftsKey)
+    for (const t of taskTabs) drafts[t.assignmentId as string] = t.source
+    try {
+      window.localStorage.setItem(draftsKey, JSON.stringify(drafts))
+    } catch {
+      // Not saved; the code is still in its open tab.
+    }
+  }, [tabs, draftsKey])
 
   useEffect(() => {
     try {
@@ -528,13 +566,41 @@ export default function App() {
     resetExecutionState()
   }
 
+  // A task opens in its own single tab (#102): again in the same tab if it
+  // is open, otherwise with its saved draft. Tasks of another module close,
+  // and at most MAX_TASK_TABS stay open; their code is kept as drafts.
   function handleSelectAssignment(assignment: Assignment) {
+    const existing = tabs.find((t) => t.assignmentId === assignment.id)
+    if (existing) {
+      setActiveAssignmentId(assignment.id)
+      if (existing.id !== activeTabId) handleSwitchTab(existing.id)
+      return
+    }
     trackActivity('open_assignment', assignment.id)
     stopAnimation()
-    const tab = makeTab(assignment.title, assignment.starterSource)
-    setTabs((prev) => [...prev, tab])
+    const tab: Tab = {
+      ...makeTab(assignment.title, loadDrafts(draftsKey)[assignment.id] ?? assignment.starterSource),
+      assignmentId: assignment.id,
+    }
+    const module = moduleOfTask(assignment.id)
+    let kept = tabs.filter((t) => !t.assignmentId || moduleOfTask(t.assignmentId) === module)
+    const taskTabs = kept.filter((t) => t.assignmentId)
+    const drop = new Set(taskTabs.slice(0, Math.max(0, taskTabs.length - (MAX_TASK_TABS - 1))).map((t) => t.id))
+    kept = kept.filter((t) => !drop.has(t.id))
+    setTabs([...kept, tab])
     setActiveTabId(tab.id)
     setActiveAssignmentId(assignment.id)
+    resetExecutionState()
+  }
+
+  // Every tab closes but one blank one; task code stays as drafts (#102).
+  function handleCloseAllTabs() {
+    setObserve(null)
+    stopAnimation()
+    const tab = makeTab('Untitled', BLANK_SOURCE)
+    setTabs([tab])
+    setActiveTabId(tab.id)
+    setActiveAssignmentId(null)
     resetExecutionState()
   }
 
@@ -629,7 +695,7 @@ export default function App() {
     function goOn() {
       if (nextUnread) {
         openConcept(nextUnread)
-        requestAnimationFrame(() => document.querySelector('.learn-detail-panel')?.scrollIntoView({ block: 'start' }))
+        flashTarget('.learn-detail-panel')
       } else if (quizReady) {
         moduleProgress.setStep(m!.id, 'quiz')
         setQuizReview(false)
@@ -643,16 +709,17 @@ export default function App() {
           <>
             <span className="read-done">✓ Marked as read</span>
             {nextUnread
-              ? <button className="link-button" onClick={goOn}>Next unread topic: {conceptTitle(nextUnread)} →</button>
-              : quizReady && <button className="link-button" onClick={goOn}>Take the quiz →</button>}
+              ? <button className="link-button" disabled={navLocked} onClick={() => lockNav(goOn)}>Next unread topic: {conceptTitle(nextUnread)} →</button>
+              : quizReady && <button className="link-button" disabled={navLocked} onClick={() => lockNav(goOn)}>Take the quiz →</button>}
           </>
         ) : (
           <button
             className="primary"
-            onClick={() => {
+            disabled={navLocked}
+            onClick={() => lockNav(() => {
               moduleProgress.markRead(m.id, ref.id)
               goOn()
-            }}
+            })}
           >
             {nextUnread ? 'Mark as read → next topic' : quizReady ? 'Mark as read → take the quiz' : 'Mark as read'}
           </button>
@@ -711,8 +778,10 @@ export default function App() {
     const next = nextStep(m, 'observe')
     moduleProgress.setStep(m.id, next)
     if (next === 'predict') setPredictModuleId(m.id)
-    else if (next === 'task') openAssignment(m.assignments.find((a) => !completedAssignments.has(a)) ?? m.assignments[0])
-    else if (next === 'quiz') openQuiz(m.id)
+    else if (next === 'task') {
+      openAssignment(m.assignments.find((a) => !completedAssignments.has(a)) ?? m.assignments[0])
+      flashTarget()
+    } else if (next === 'quiz') openQuiz(m.id)
     else if (next === 'reflect') openReflect(m.id)
   }
 
@@ -846,6 +915,9 @@ export default function App() {
     if (id === activeTabId) return
     stopAnimation()
     setActiveTabId(id)
+    // A task's tab grades against that task.
+    const assignmentId = tabs.find((t) => t.id === id)?.assignmentId
+    if (assignmentId) setActiveAssignmentId(assignmentId)
     resetExecutionState()
   }
 
@@ -898,6 +970,28 @@ export default function App() {
   // The module a note belongs to: the open Learn page's, else the student's current one.
   const hereModule = (pageRef && moduleForPage(pageRef, studentModule)) || studentModule || LEARNING_PATH[0]
   const shownNotesModuleId = notesModuleId ?? hereModule.id
+
+  // The Learn sidebar's module (#102): the open task's, else the open page's,
+  // else the one the student is on; and which of its items is open now.
+  const pathActions: PathActions = {
+    rows: moduleProgress.rows,
+    progress: pathProgress,
+    onSetStep: moduleProgress.setStep,
+    onOpenConcept: openConcept,
+    onOpenExample: openObserveStep,
+    onOpenAssignment: openAssignment,
+    onOpenQuiz: openQuiz,
+    onOpenPredict: setPredictModuleId,
+    onOpenReflect: setReflectModuleId,
+    onStepOpened: (moduleId, step) => trackActivity('path_step', null, { module: moduleId, step }),
+    unsaved: unsavedAssignments,
+    reflected: moduleProgress.reflected,
+  }
+  const onTask = learnNav.section === 'curriculum' && activeAssignmentId
+  const sideModule = !(backendEnabled && auth.session && moduleProgress.loaded) ? null
+    : (onTask && LEARNING_PATH.find((m) => m.assignments.includes(activeAssignmentId))) ||
+      (pageRef && moduleForPage(pageRef, studentModule)) || studentModule
+  const sideHereKey = onTask ? itemKey.task(activeAssignmentId) : pageRef ? itemKey.page(pageRef) : null
 
   function addQuoteToNotes(text: string) {
     const topic = pageRef ? conceptTitle(pageRef) : 'Learn'
@@ -1216,6 +1310,11 @@ export default function App() {
                 </div>
               ))}
               <button className="tab-new" onClick={handleNewTab} title="New tab">+</button>
+              {tabs.length > 1 && (
+                <button className="tab-new tab-close-all" onClick={handleCloseAllTabs} title="Task code is kept and comes back when you open the task">
+                  Close all tabs
+                </button>
+              )}
             </div>
           )}
           <div className="editor-row">
@@ -1266,6 +1365,14 @@ export default function App() {
                   activeAssignmentId={activeAssignmentId}
                   completedIds={completedAssignments}
                   onSelectAssignment={handleSelectAssignment}
+                  moduleNav={sideModule && (
+                    <nav className="learn-module-nav" aria-label={`Module ${LEARNING_PATH.indexOf(sideModule)}`}>
+                      <h4 className="learn-stage-title">
+                        <span className="path-module-no">Module {LEARNING_PATH.indexOf(sideModule)}</span> {sideModule.title}
+                      </h4>
+                      <ModuleItemList items={moduleItems(pathActions, sideModule)} hereKey={sideHereKey} />
+                    </nav>
+                  )}
                 />
               )}
             </div>}
@@ -1278,7 +1385,7 @@ export default function App() {
                     source={observeExample.source}
                     summary={observeModule.observe?.watch}
                     guide={observeModule.observe?.guide}
-                    next={auth.session ? { label: doneWatchingLabel(observeModule.id), onClick: () => finishObserve(observeModule.id) } : undefined}
+                    next={auth.session ? { label: doneWatchingLabel(observeModule.id), onClick: () => lockNav(() => finishObserve(observeModule.id)) } : undefined}
                     registers={observeModule.observe?.registers}
                     callouts={observeModule.observe?.callouts?.[observeExample.id]}
                     onDone={() => markInteractiveDone(`example-${observeExample.id}`)}

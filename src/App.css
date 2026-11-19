@@ -5106,3 +5106,59 @@ aside .panel {
 .view-error p {
   margin: 0;
 }
+
+/* ---- Navigation (#102): module list in the Learn sidebar, tags, Next feedback ---- */
+.learn-module-nav {
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.learn-module-nav .path-checklist {
+  font-size: 0.85rem;
+}
+
+.path-checklist li.here .link-button {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.path-checklist li.here .path-check {
+  color: var(--accent-text);
+}
+
+.path-tag {
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.path-tag.next {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.tab-close-all {
+  margin-left: auto;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.flash-target {
+  animation: flash-target 1.2s ease-out;
+}
+
+@keyframes flash-target {
+  0% { box-shadow: 0 0 0 3px var(--accent-border); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash-target { animation: none; }
+}
