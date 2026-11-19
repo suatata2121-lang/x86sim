@@ -71,6 +71,8 @@ interface Props {
   unlockAll?: boolean
   /** Tasks passed in this browser that the server has no passed attempt for (#85). */
   unsaved?: Set<string>
+  /** Modules whose Reflect step is already behind the student (#98). */
+  reflected?: Set<string>
 }
 
 // The "Continue" home for signed-in students (issue #9): the module they are
@@ -81,7 +83,7 @@ interface Props {
 export function LearningPathCard({
   rows, progress, onSetStep, onOpenConcept, onOpenExample, onOpenAssignment, onOpenQuiz, onOpenPredict, onOpenReflect,
   onStepOpened, onHide,
-  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse, unlockAll = false, unsaved,
+  dates, challengeCount = 0, feedback, collapsed, onExpand, onCollapse, unlockAll = false, unsaved, reflected,
 }: Props) {
   const { completed } = progress
   // A module picked from the bar that is already done stays on screen until
@@ -149,8 +151,17 @@ export function LearningPathCard({
     ))
   }
 
-  function advance(m: LearningModule, step: StepId) {
+  // The step "Next step" goes to: Reflect is passed over once written (#98).
+  // Past the last step a module with an open task comes back to Task, so
+  // from Task that can be the step itself.
+  function stepAfter(m: LearningModule, step: StepId): StoredStep {
     const next = nextStep(m, step)
+    return next === 'reflect' && reflected?.has(m.id) ? nextStep(m, 'reflect') : next
+  }
+
+  function advance(m: LearningModule, step: StepId) {
+    const next = stepAfter(m, step)
+    if (next === step) return
     if (next === 'done') {
       onSetStep(m.id, next)
       setViewedId(null)
@@ -249,6 +260,12 @@ export function LearningPathCard({
   // The step after this one is a quiz that isn't open yet, or Predict still has open questions.
   const predictLeft = step === 'predict' ? unansweredPredictions(module, progress).length : 0
   const nextLocked = (nextStep(module, step) === 'quiz' && blockers > 0) || predictLeft > 0
+  // Reflect is written but the module is still open: name each task the
+  // server has no passed attempt for, rather than sending the student round
+  // Task -> Reflect again (#98).
+  const missingTasks = !moduleDone && !module.quiz && reflected?.has(module.id)
+    ? module.assignments.filter((id) => !completed.has(id))
+    : []
 
   return (
     <div className="panel path-card">
@@ -326,6 +343,14 @@ export function LearningPathCard({
           ))}
         </ul>
       )}
+      {missingTasks.map((id) => (
+        <p key={id} className="path-note">
+          <button className="link-button" onClick={() => openStep(module, 'task', module.assignments.indexOf(id))}>
+            {TASK_NAMES.get(id) ?? id}
+          </button>{' '}
+          isn't saved as passed yet. Open it and press Run Tests.
+        </p>
+      ))}
       {!moduleDone && module.quiz && blockers > 0 && (
         <p className="path-note">
           {lockedNote}{readsLeft > 0 && <> Use <em>Mark as read</em> at the end of each page.</>}
@@ -342,7 +367,7 @@ export function LearningPathCard({
             <button className="primary" onClick={() => openStep(module, step)}>
               Continue: {STEPS.find((s) => s.id === step)?.label} ▶
             </button>
-            {step !== 'quiz' && (step !== 'task' || module.quiz || nextStep(module, 'task') === 'reflect') && (
+            {step !== 'quiz' && (step !== 'task' || module.quiz || nextStep(module, 'task') === 'reflect') && stepAfter(module, step) !== step && (
               <button
                 onClick={() => advance(module, step)}
                 disabled={nextLocked}

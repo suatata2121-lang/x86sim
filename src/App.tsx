@@ -705,7 +705,7 @@ export default function App() {
     if (next === 'predict') setPredictModuleId(m.id)
     else if (next === 'task') openAssignment(m.assignments.find((a) => !completedAssignments.has(a)) ?? m.assignments[0])
     else if (next === 'quiz') openQuiz(m.id)
-    else if (next === 'reflect') setReflectModuleId(m.id)
+    else if (next === 'reflect') openReflect(m.id)
   }
 
   function doneWatchingLabel(moduleId: string) {
@@ -747,10 +747,19 @@ export default function App() {
     if (credit && score !== null && score >= PLACEMENT_PASS) moduleProgress.setStep('m0', 'done')
   }
 
+  // Reflect reached by moving on: asked once per module, then passed over (#98).
+  function openReflect(moduleId: string) {
+    if (moduleProgress.reflected.has(moduleId)) finishReflect(moduleId)
+    else setReflectModuleId(moduleId)
+  }
+
   // Leaves Reflect (saved or skipped): a module with nothing graded closes
-  // here; otherwise its tasks or quiz decide when it is done.
+  // here; otherwise its tasks or quiz decide when it is done. A module still
+  // missing a task goes back to Task, and the card names what is missing
+  // instead of offering Reflect again (#98).
   function finishReflect(moduleId: string) {
     setReflectModuleId(null)
+    moduleProgress.markReflected(moduleId)
     const m = LEARNING_PATH.find((x) => x.id === moduleId)
     if (!m || isModuleDone(m, pathProgress, moduleProgress.rows.get(m.id)?.step)) return
     moduleProgress.setStep(m.id, nextStep(m, 'reflect'))
@@ -768,7 +777,7 @@ export default function App() {
     } else if (next === 'quiz') {
       openQuiz(m.id)
     } else if (next === 'reflect') {
-      setReflectModuleId(m.id)
+      openReflect(m.id)
     }
   }
 
@@ -1148,6 +1157,7 @@ export default function App() {
               onOpenQuiz={openQuiz}
               onOpenPredict={setPredictModuleId}
               onOpenReflect={setReflectModuleId}
+              reflected={moduleProgress.reflected}
               dates={(moduleId) => effectiveDates(scheduleRows, moduleId, userId, auth.profile?.class_group || null)}
               feedback={{ comments: instructorFeedback.unread, onDismiss: instructorFeedback.dismiss }}
               challengeCount={challenges.done.size}
