@@ -599,7 +599,7 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         example: 'CMP AX, 10\nJG GREATER   ; taken if AX > 10 (signed)',
         exampleNote: 'Uses a signed comparison -- for values that are always non-negative, JA is the safer choice (see notes).',
         notes: [
-          "This simulator's CMP never actually sets OF (see the ADD entry), so JG only behaves correctly when the " +
+          "This simulator's CMP never actually sets OF (see the [[reference:arithmetic/ADD|ADD entry]]), so JG only behaves correctly when the " +
             "true signed difference doesn't overflow -8000h..7FFFh (word) or -80h..7Fh (byte). For sensor readings " +
             'or other values that are never negative, prefer the unsigned JA/JAE/JB/JBE instead.',
         ],
@@ -710,7 +710,7 @@ export const INSTRUCTION_REFERENCE: InstructionCategory[] = [
         description: 'Jumps if OF=1 -- the result of the last operation was too large (or too negative) to fit as a signed value in the destination\'s width, even though it may look like a plausible unsigned number.',
         flags: 'reads OF',
         notes: [
-          "This simulator's ADD/SUB/CMP/INC/DEC/NEG never update OF (see the note on ADD), so JO/JNO are only " +
+          "This simulator's ADD/SUB/CMP/INC/DEC/NEG never update OF (see the [[reference:arithmetic/ADD|note on ADD]]), so JO/JNO are only " +
             'meaningfully exercised after MUL, IMUL, SHL, ROL, or RCL -- the instructions that do set it here.',
         ],
         example: 'MOV AL, 20\nMOV BL, 20\nIMUL BL\nJO TOO_BIG   ; taken: 20*20=400 does not fit back in AL alone',

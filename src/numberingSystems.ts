@@ -102,7 +102,7 @@ export const NUMBERING_REFERENCE: NumberingCategory[] = [
           { kind: 'positional', value: '10110010', base: 2 },
           'Binary and hex convert into each other without any arithmetic at all, because 16 = 2⁴: split the ' +
             'binary number into groups of 4 bits (nibbles) starting from the right, and look each nibble up in ' +
-            'the table from the previous topic. 10110010b splits into 1011 and 0010 -- B and 2 -- giving 0B2h ' +
+            'the table from the [[numbering:bases|previous topic]]. 10110010b splits into 1011 and 0010 -- B and 2 -- giving 0B2h ' +
             'directly, the same answer as above, with no division required. This is why hex is the practical ' +
             "way humans read a register or memory byte: each pair of hex digits is exactly one byte's two nibbles.",
           { kind: 'nibbles', binary: '10110010' },
@@ -126,7 +126,7 @@ export const NUMBERING_REFERENCE: NumberingCategory[] = [
           "This construction is not arbitrary -- it's chosen specifically so ordinary binary addition still " +
             "works without any special-casing for negative numbers. Add 5 and -5 as raw bytes: 5 + 251 = 256, " +
             "which doesn't fit in 8 bits and wraps around to 0 -- exactly the mathematically correct answer, " +
-            "and exactly why that wraparound sets CF (the Carry flag, see the Hardware section's flags-register " +
+            "and exactly why that wraparound sets CF (the Carry flag, see the Hardware section's [[hardware:flags-register|Flags Register]] " +
             "topic): the CPU doesn't know or care whether the programmer meant 5+251 (unsigned) or 5+(-5) " +
             '(signed) -- the same bit pattern and the same addition circuit serve both readings.',
           { kind: 'column', op: 'add', a: 5, b: 251, bits: 8, base: 2 },

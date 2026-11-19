@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  LEARNING_PATH, STEPS, activeSteps, currentModule, isModuleDone, isUnlocked, moduleStatus, nextStep, previousModule,
+  LEARNING_PATH, activeSteps, currentModule, isModuleDone, isUnlocked, moduleStatus, nextStep, previousModule,
   quizBlockers, resumeStep, shownSteps, unansweredPredictions, unreadConcepts,
   type AsidePanel, type ConceptRef, type LearningModule, type ModuleProgressRow, type PathProgress, type StepId,
   type StoredStep,
@@ -210,6 +210,20 @@ export function LearningPathCard({
     ? module.assignments.filter((id) => !completed.has(id))
     : []
 
+  // One big next step (#102): the first open item of the module, with the
+  // steps and the full list folded away below it.
+  const items = moduleItems(actions, module, lockedNote)
+  const upNext = moduleDone ? undefined : items.find((r) => !r.done && !r.locked)
+  const shown = module
+  function continueOn() {
+    if (!upNext) {
+      go(shown, step)
+      return
+    }
+    upNext.open()
+    if (/^(read|example|task|interactive)-/.test(upNext.key)) flashTarget()
+  }
+
   return (
     <div className="panel path-card">
       <div className="path-header">
@@ -226,32 +240,6 @@ export function LearningPathCard({
       {feedbackBox}
       <p className="example-description">{module.summary}</p>
 
-      <ol className="path-steps">
-        {shownSteps(module).map((s) => {
-          const quizLocked = s.id === 'quiz' && blockers > 0 && !progress.quizzesPassed.has(module.id)
-          const available = steps.includes(s.id) && !quizLocked
-          const passed = moduleDone || steps.indexOf(s.id) < steps.indexOf(step)
-          return (
-            <li key={s.id}>
-              <button
-                className={`path-step${s.id === step && !moduleDone ? ' active' : ''}${available && passed ? ' passed' : ''}`}
-                disabled={!available}
-                title={
-                  s.comingSoon ? 'Coming soon'
-                    : quizLocked ? lockedNote
-                      : !available ? 'This module has no assignment' : undefined
-                }
-                onClick={() => openStep(module, s.id)}
-              >
-                {s.label}{s.comingSoon && <span className="path-soon"> · soon</span>}
-              </button>
-            </li>
-          )
-        })}
-      </ol>
-
-      {moduleDone && <h4 className="path-review-title">Review this module</h4>}
-      <ModuleItemList items={moduleItems(actions, module, lockedNote)} />
       {missingTasks.map((id) => (
         <p key={id} className="path-note">
           <button className="link-button" onClick={() => openStep(module, 'task', module.assignments.indexOf(id))}>
@@ -266,6 +254,7 @@ export function LearningPathCard({
         </p>
       )}
 
+      {upNext && <p className="path-upnext"><span className="path-tag next">Up next</span> {upNext.label}</p>}
       <div className="path-actions">
         {moduleDone ? (
           current && current.id !== module.id
@@ -273,8 +262,8 @@ export function LearningPathCard({
             : null
         ) : (
           <>
-            <button className="primary" disabled={moving} onClick={() => move(() => go(module, step))}>
-              Continue: {STEPS.find((s) => s.id === step)?.label} ▶
+            <button className="primary path-continue" disabled={moving} onClick={() => move(continueOn)}>
+              Continue ▶
             </button>
             {step !== 'quiz' && (step !== 'task' || module.quiz || nextStep(module, 'task') === 'reflect') && stepAfter(module, step) !== step && (
               <button
@@ -296,6 +285,35 @@ export function LearningPathCard({
           {challengeCount > 0 && <span className="path-badge" title="Cycle challenges completed"> · 🏅 {challengeCount}</span>}
         </span>
       </div>
+
+      <details key={`${module.id}-${moduleDone}`} className="path-more" open={moduleDone}>
+        <summary>{moduleDone ? 'Review this module' : 'Everything in this module'}</summary>
+        <ol className="path-steps">
+          {shownSteps(module).map((s) => {
+            const quizLocked = s.id === 'quiz' && blockers > 0 && !progress.quizzesPassed.has(module.id)
+            const available = steps.includes(s.id) && !quizLocked
+            const passed = moduleDone || steps.indexOf(s.id) < steps.indexOf(step)
+            return (
+              <li key={s.id}>
+                <button
+                  className={`path-step${s.id === step && !moduleDone ? ' active' : ''}${available && passed ? ' passed' : ''}`}
+                  disabled={!available}
+                  title={
+                    s.comingSoon ? 'Coming soon'
+                      : quizLocked ? lockedNote
+                        : !available ? 'This module has no assignment' : undefined
+                  }
+                  onClick={() => openStep(module, s.id)}
+                >
+                  {s.label}{s.comingSoon && <span className="path-soon"> · soon</span>}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+
+        <ModuleItemList items={items} />
+      </details>
 
       {bar}
     </div>

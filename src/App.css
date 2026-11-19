@@ -3598,11 +3598,6 @@ aside .panel {
   margin: 0;
 }
 
-.path-review-title {
-  margin: 0.4rem 0 0;
-  font-size: 0.95rem;
-}
-
 .path-checklist {
   margin: 0.25rem 0 0.6rem;
   padding: 0;
@@ -5161,4 +5156,55 @@ aside .panel {
 
 @media (prefers-reduced-motion: reduce) {
   .flash-target { animation: none; }
+}
+
+/* ---- Simpler Continue card (#102) ---- */
+.path-upnext {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.path-upnext .path-tag {
+  margin: 0 0.4rem 0 0;
+}
+
+.path-continue {
+  padding: 0.55rem 1.4rem;
+  font-size: 1.05rem;
+}
+
+.path-more {
+  margin: 0.6rem 0 0.2rem;
+}
+
+.path-more > summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.path-more[open] > summary {
+  margin-bottom: 0.4rem;
+}
+
+.review-card > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.review-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-card > summary h3::before {
+  content: '▸ ';
+}
+
+.review-card[open] > summary h3::before {
+  content: '▾ ';
+}
+
+.learn-inline-link {
+  display: inline;
+  font-size: inherit;
 }
