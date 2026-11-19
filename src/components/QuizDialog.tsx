@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DrawnQuestion, Quiz, QuizResult } from '../quizzes'
+import type { DrawnQuestion, Quiz, QuizResult, QuizReview } from '../quizzes'
 
 interface Props {
   quiz: Quiz
@@ -20,6 +20,11 @@ interface Props {
   onReviewNotes?: () => void
   /** Offered after a pass, e.g. the next module. */
   next?: { label: string; onClick: () => void }
+  /**
+   * Opens on the student's passed attempt instead of a new draw (#99): a
+   * finished module shows its quiz again with the right answers.
+   */
+  review?: () => Promise<QuizReview | null>
 }
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -60,7 +65,7 @@ function saveAttempt(key: string | undefined, attempt: SavedAttempt | null) {
 // those only with a pass. An unsubmitted attempt is kept in sessionStorage and
 // resumed instead of redrawn (issue #33); it holds no right answers, so
 // resuming leaks nothing, and a new set is drawn only after a submit.
-export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, onReviewNotes, storageKey, next }: Props) {
+export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, onReviewNotes, storageKey, next, review }: Props) {
   const [questions, setQuestions] = useState<DrawnQuestion[] | null>(null)
   const [chosen, setChosen] = useState<Record<string, string>>({})
   const [result, setResult] = useState<QuizResult | null>(null)
@@ -91,6 +96,16 @@ export function QuizDialog({ quiz, topicTitle, draw, submit, onReview, onClose, 
   // parent passes a new draw function on every render, so it must not be an
   // effect dependency.
   useEffect(() => {
+    if (review) {
+      review()
+        .then((r) => {
+          if (!r || !r.questions.length) throw new Error('Your passed attempt could not be found.')
+          setQuestions(r.questions)
+          setResult(r.result)
+        })
+        .catch((err) => setError(message(err)))
+      return
+    }
     const saved = loadAttempt(storageKey)
     if (saved) {
       setQuestions(saved.questions)

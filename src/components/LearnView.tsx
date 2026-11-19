@@ -374,14 +374,18 @@ export function LearnSidebar({
   activeAssignmentId,
   completedIds,
   onSelectAssignment,
+  moduleNav,
 }: {
   nav: LearnNav
   activeAssignmentId: string | null
   completedIds: Set<string>
   onSelectAssignment: (assignment: Assignment) => void
+  /** The student's module and everything in it (#102), above the sections. */
+  moduleNav?: ReactNode
 }) {
   return (
     <div className="mode-panel learn-panel">
+      {moduleNav}
       <LearnAccordionSection
         title="Instruction Reference"
         accent={SECTION_ACCENTS.reference}

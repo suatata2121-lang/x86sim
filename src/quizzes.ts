@@ -100,3 +100,9 @@ export interface QuizResult {
   passed: boolean
   answers: (QuizAnswer & { answer?: string; explanation?: string })[]
 }
+
+/** quiz_review's reply: a passed attempt shown again with its answers (#99). */
+export interface QuizReview {
+  questions: DrawnQuestion[]
+  result: QuizResult
+}
