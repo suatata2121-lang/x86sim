@@ -18,6 +18,7 @@ import { Dma8257Diagram } from './Dma8257View'
 import { InterruptTimeline, IvtCalculator, IvtDiagram, Pic8259Diagram, PicPlayground } from './InterruptViews'
 import { ByteLayout, EaCalculator, EndianFigure, SegmentCalculator, SegmentMapDiagram, SegmentPractice } from './SegmentViews'
 import type { ConceptRef } from '../learningPath'
+import { taskPositionLabel } from './ModuleItems'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
   return { done: assignments.filter((a) => completedIds.has(a.id)).length, total: assignments.length }
@@ -701,9 +702,11 @@ export function LearnDetail({
   }
 
   const activeAssignment = task.assignments.find((a) => a.id === activeAssignmentId) ?? null
+  const position = activeAssignment && taskPositionLabel(activeAssignment.id)
   return (
     <ResizableTaskPanel>
       <h4 className="learn-stage-title">{task.title}</h4>
+      {position && <p className="task-position">{position}</p>}
       <p className="example-description">{task.scenario}</p>
       <p className="example-description learn-concept">
         {activeAssignment ? activeAssignment.concept : 'Pick an assignment on the left to load it into the editor.'}

@@ -25,7 +25,9 @@ import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
 import { flashTarget, useClickLock } from './components/navFeedback'
-import { ModuleItemList, itemKey, moduleItems, type PathActions } from './components/ModuleItems'
+import {
+  ASSIGNMENT_TITLES, ModuleItemList, TASK_NAMES, itemKey, moduleItems, taskPositionLabel, type PathActions,
+} from './components/ModuleItems'
 import { QuizDialog } from './components/QuizDialog'
 import { ObserveView } from './components/ObserveView'
 import { EXAMPLES } from './examples'
@@ -993,6 +995,55 @@ export default function App() {
       (pageRef && moduleForPage(pageRef, studentModule)) || studentModule
   const sideHereKey = onTask ? itemKey.task(activeAssignmentId) : pageRef ? itemKey.page(pageRef) : null
 
+  // After every test passes: a button to the module's next task, or once all
+  // of them are passed, to the module's next open item (#92), so the tasks
+  // can be done one after another without hunting for them.
+  function nextAfterPass(report: GradeReport) {
+    const id = activeAssignmentId
+    const passed = report.assembled && report.totalCount > 0 && report.passedCount === report.totalCount
+    const m = id && passed ? LEARNING_PATH.find((x) => x.assignments.includes(id)) : null
+    if (!m || !id) return null
+    const i = m.assignments.indexOf(id)
+    const nextId = [...m.assignments.slice(i + 1), ...m.assignments.slice(0, i)].find((x) => !completedAssignments.has(x))
+    if (nextId) {
+      return (
+        <div className="next-after-pass">
+          <button
+            className="primary"
+            disabled={navLocked}
+            onClick={() => lockNav(() => {
+              openAssignment(nextId)
+              flashTarget(focus ? '.focus-task' : '.editor-col')
+            })}
+          >
+            Passed. Next: {TASK_NAMES.get(nextId) ?? 'Task'} – {ASSIGNMENT_TITLES.get(nextId) ?? nextId} →
+          </button>
+        </div>
+      )
+    }
+    const item = auth.session && moduleProgress.loaded
+      ? moduleItems(pathActions, m).find((r) => !r.done && !r.locked && !r.key.startsWith('task-'))
+      : undefined
+    return (
+      <div className="next-after-pass">
+        {item ? (
+          <button
+            className="primary"
+            disabled={navLocked}
+            onClick={() => lockNav(() => {
+              item.open()
+              if (/^(read|example|interactive)-/.test(item.key)) flashTarget()
+            })}
+          >
+            All tasks of this module are done. Next: {item.label} →
+          </button>
+        ) : (
+          <p className="read-done">All tasks of this module are done.</p>
+        )}
+      </div>
+    )
+  }
+
   function addQuoteToNotes(text: string) {
     const topic = pageRef ? conceptTitle(pageRef) : 'Learn'
     const quote = [...text.split(/\r?\n/).filter((l) => l.trim()).map((l) => `> ${l.trim()}`), `> — ${topic}`].join('\n')
@@ -1260,7 +1311,11 @@ export default function App() {
       {adminOpen && auth.isAdmin ? <AdminView onClose={() => setAdminOpen(false)} /> : (
       <main>
         <section className="editor-panel">
-          {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && !focus && (
+          {/* Hidden, not unmounted, in focus mode: the card remembers which module
+              the student picked, and remounting it on Exit focus jumped back to
+              the current module (Module 0 for some) (#92). */}
+          {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && (
+            <div hidden={focus}>
             <LearningPathCard
               rows={moduleProgress.rows}
               progress={pathProgress}
@@ -1285,6 +1340,7 @@ export default function App() {
               unlockAll={auth.isAdmin}
               unsaved={unsavedAssignments}
             />
+            </div>
           )}
           {backendEnabled && auth.session && moduleProgress.loaded && !observe && !focus && reviewCard && (
             <ReviewCard
@@ -1334,6 +1390,7 @@ export default function App() {
               return a && (
                 <details className="panel focus-task" open>
                   <summary>{a.title}</summary>
+                  {taskPositionLabel(a.id) && <p className="task-position">{taskPositionLabel(a.id)}</p>}
                   <p className="example-description">{a.concept}</p>
                   <h4>The tests check</h4>
                   <ul>{a.testCases.map((t) => <li key={t.name}>{t.name}</li>)}</ul>
@@ -1542,6 +1599,7 @@ export default function App() {
                   <pre className="output">(no output yet)</pre>
                 )}
               </div>
+              {gradeReport && nextAfterPass(gradeReport)}
               {gradeReport && <GraderView report={gradeReport} />}
               {gradeReport && gradeReport === unsavedReport && (
                 <p className="feedback-error">Your result could not be saved. Check your connection and press Run Tests again.</p>

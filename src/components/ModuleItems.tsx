@@ -8,7 +8,7 @@ import { INSTRUCTION_REFERENCE } from '../instructionReference'
 import {
   activeSteps, checklist, isModuleDone, predictQuestions, quizBlockers, resumeStep, unansweredPredictions, unreadConcepts,
   type AsidePanel, type ChecklistRow, type ConceptRef, type Interactive, type LearningModule, type ModuleProgressRow,
-  type PathProgress, type StepId, type StoredStep,
+  type PathProgress, type StepId, type StoredStep, LEARNING_PATH,
 } from '../learningPath'
 
 export const ASSIGNMENT_TITLES = new Map(
@@ -19,6 +19,13 @@ export const ASSIGNMENT_TITLES = new Map(
 export const TASK_NAMES = new Map(
   CURRICULUM.flatMap((s) => s.tasks.flatMap((t) => t.assignments.map((a) => [a.id, t.title.split(' - ')[0]] as const))),
 )
+
+/** "Task 2 of 3 in Module 9", so a student sees how far through a module's tasks they are (#92). */
+export function taskPositionLabel(assignmentId: string): string | null {
+  const m = LEARNING_PATH.find((x) => x.assignments.includes(assignmentId))
+  if (!m) return null
+  return `Task ${m.assignments.indexOf(assignmentId) + 1} of ${m.assignments.length} in Module ${LEARNING_PATH.indexOf(m)}`
+}
 
 export function conceptTitle(ref: ConceptRef): string {
   if (ref.section === 'hardware') {

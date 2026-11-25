@@ -5254,3 +5254,14 @@ aside .panel {
   display: inline;
   font-size: inherit;
 }
+
+/* ---- Task flow (#92) ---- */
+.task-position {
+  margin: 0 0 0.3rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.next-after-pass {
+  margin: 0.6rem 0;
+}
