@@ -23,6 +23,12 @@ export interface Assignment {
    */
   hints: [string, string, string]
   /**
+   * A worked solution, one paragraph or code line per entry (**bold** and
+   * `code` are rendered), offered after every hint and several failed runs
+   * (#103). Written first for the tasks with the most failed attempts.
+   */
+  workedSolution?: string[]
+  /**
    * Optional cycle challenge (#15), offered to students who pass in their
    * first one or two runs: pass the same tests in this many cycles or fewer
    * (all test cases added up, as the results list shows them).
@@ -83,6 +89,13 @@ INT 21h
             sourceRules: {
               mustMatch: [{ pattern: String.raw`^\s*MOV\s+AX\s*,\s*0[0-9A-F]*h\b`, message: 'Load AX with a hex literal, such as 0F0h.' }],
             },
+            workedSolution: [
+              'Three MOVs, one per register. AX gets the hex literal (a leading 0 because F is a letter), BX the decimal one, and CX a copy of AX:',
+              '`MOV AX, 0F0h   ; 240 written in hex`',
+              '`MOV BX, 240    ; the same value in decimal`',
+              '`MOV CX, AX     ; copy: AX keeps its value`',
+              'They go where the TODO is, before `MOV AH, 4Ch`. That line changes AH only, so AL still holds F0h when the tests look.',
+            ],
             hints: [
               'MOV copies a value into a register. You need three MOVs: one for AX, one for BX, one from AX to CX.',
               'Open the **Arithmetic** example and Step through its first two lines.',
@@ -157,6 +170,12 @@ INT 21h
                 name: 'SNAPSHOT written to memory, BX read back',
                 expect: { memory: [{ label: 'SNAPSHOT', size: 'word', equals: 500 }], regs: { BX: 500 } },
               },
+            ],
+            workedSolution: [
+              'Square brackets around a label mean "the memory at this address". Writing to memory and reading it back are both MOVs:',
+              '`MOV [SNAPSHOT], AX   ; memory <- AX (SNAPSHOT is a DW, so a word is written)`',
+              '`MOV BX, [SNAPSHOT]   ; BX <- memory`',
+              'Without the brackets, `MOV BX, SNAPSHOT` would load the address of SNAPSHOT, not the value stored there.',
             ],
             hints: [
               'Writing to memory and reading it back are both MOVs; square brackets around a label mean "the memory at this address".',
@@ -300,6 +319,18 @@ INT 21h
             testCases: [{ name: 'Sum(5..50, 10 elements) = 275', explain: 'BX is not 275. Common causes: CX was not 10, SI did not start at 0, or AH was not cleared before adding AX to BX.', expect: { regs: { BX: 275 } } }],
             // 80% of a typical loop (495); LODSB + ADD BX, AX does it in 377.
             challengeCycles: 396,
+            workedSolution: [
+              'Set up a counter, an index and an accumulator, then add one element per pass:',
+              '`MOV CX, 10            ; 10 elements`',
+              '`MOV SI, 0             ; index of the first element`',
+              '`MOV BX, 0             ; the sum`',
+              '`NEXT: MOV AL, [READINGS+SI]   ; one byte`',
+              '`MOV AH, 0             ; widen AL to AX`',
+              '`ADD BX, AX`',
+              '`INC SI                ; next element`',
+              '`LOOP NEXT             ; CX - 1, repeat until 0`',
+              'READINGS is a DB array, so each element is one byte: read it into AL and clear AH before adding AX to the 16-bit sum. The total, 275, does not fit in a byte.',
+            ],
             hints: [
               'A loop needs a counter in CX, an index in SI that grows by 1, and an accumulator in BX.',
               '**Array Sum** is almost the same loop.',
@@ -352,6 +383,28 @@ AVERAGE ENDP
             ],
             // 80% of a typical solution (537) is out of reach; the best known (LODSB, DEC/JNZ, one PUSH) takes 553.
             challengeCycles: 560,
+            workedSolution: [
+              'Inside AVERAGE: save the caller\'s registers, sum the array as in Task 6, divide by 10, restore, return:',
+              '`PUSH AX                ; save the caller\'s AX and CX`',
+              '`PUSH CX`',
+              '`MOV CX, 10`',
+              '`MOV SI, 0`',
+              '`MOV BX, 0`',
+              '`SUM: MOV AL, [READINGS+SI]`',
+              '`MOV AH, 0`',
+              '`ADD BX, AX`',
+              '`INC SI`',
+              '`LOOP SUM`',
+              '`MOV AX, BX             ; DIV divides DX:AX`',
+              '`MOV DX, 0`',
+              '`MOV CX, 10`',
+              '`DIV CX                 ; AX = 275 / 10 = 27`',
+              '`MOV BX, AX             ; the result goes in BX`',
+              '`POP CX                 ; restore in reverse order`',
+              '`POP AX`',
+              '`RET`',
+              'The POPs come in the opposite order of the PUSHes: the stack gives back the last value first. The label inside the procedure needs its own name (here SUM).',
+            ],
             hints: [
               'Inside the procedure, PUSH every register you change (AX, CX) first and POP them in reverse order right before RET.',
               '**Subroutine (CALL/RET)** and **MASM-Style PUSH/POP**.',
@@ -875,6 +928,12 @@ INT 21h
                   ],
                 },
               },
+            ],
+            workedSolution: [
+              'A word store already writes its low byte first. So the low word (AX) goes to RESULT and the high word (DX) two bytes further:',
+              '`MOV WORD PTR [RESULT], AX     ; bytes 0-1: low byte of AX, then high byte`',
+              '`MOV WORD PTR [RESULT+2], DX   ; bytes 2-3: low byte of DX, then high byte`',
+              'WORD PTR is needed because RESULT is declared with DB (bytes). With 1234h:5678h the memory panel then shows 78 56 34 12 at RESULT.',
             ],
             hints: [
               'A word store already puts its low byte first. Store AX (the low word) at RESULT and DX (the high word) two bytes later.',

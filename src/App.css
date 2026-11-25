@@ -5319,3 +5319,15 @@ aside .panel {
   font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.8rem;
 }
+
+/* Worked solution under the hint ladder (#103). */
+.worked-solution {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--accent-border);
+  background: var(--accent-bg);
+  border-radius: 3px;
+}
+
+.worked-solution p {
+  margin: 0.25rem 0;
+}

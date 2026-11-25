@@ -14,7 +14,7 @@ import { HelpDialog } from './components/HelpDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { HintLadder } from './components/HintLadder'
 import { WhatChanged, describeStep, type StepChange } from './components/WhatChanged'
-import { useHintLadder } from './backend/hints'
+import { SOLUTION_AFTER_FAILS, useHintLadder } from './backend/hints'
 import { useChallenges } from './backend/challenges'
 import { ChallengePanel } from './components/ChallengePanel'
 import { ReviewCard } from './components/ReviewCard'
@@ -1650,9 +1650,13 @@ export default function App() {
               })()}
               {activeAssignmentId && hintLadder.available && (
                 <HintLadder
+                  key={activeAssignmentId}
                   hints={ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.hints ?? ['', '', '']}
                   level={hintLadder.level}
                   onReveal={hintLadder.revealNext}
+                  solution={ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.workedSolution}
+                  solutionReady={hintLadder.fails >= SOLUTION_AFTER_FAILS}
+                  onSolutionViewed={() => trackActivity('solution_viewed', activeAssignmentId)}
                 />
               )}
             </>
