@@ -4451,6 +4451,27 @@ aside .panel {
   flex: 1;
 }
 
+/* Password input with its Show / Hide toggle on the same line. */
+.password-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.password-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.password-toggle {
+  flex: none;
+  font-size: 0.85rem;
+}
+
+.field-error {
+  color: var(--error-text);
+  font-size: 0.85rem;
+}
+
 /* ---- Segment / addressing / byte-order views (components/SegmentViews.tsx) ---- */
 
 .sv-field {

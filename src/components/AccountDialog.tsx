@@ -24,6 +24,11 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
   const [view, setView] = useState<View>(initialView)
   const [email, setEmail] = useState(initialEmail ?? '')
   const [password, setPassword] = useState('')
+  // A mistyped new password locks a student out until a reset email arrives,
+  // so new passwords are typed twice (#88).
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [confirmMismatch, setConfirmMismatch] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [fullName, setFullName] = useState('')
   const [studentNo, setStudentNo] = useState('')
   const [classGroup, setClassGroup] = useState('')
@@ -55,6 +60,8 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
     setCode('')
     setAlreadyExists(false)
     setCodeRejected(false)
+    setConfirmPassword('')
+    setConfirmMismatch(false)
   }
 
   async function handleResendConfirmation() {
@@ -89,6 +96,10 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (needsConfirm && password !== confirmPassword) {
+      setConfirmMismatch(true)
+      return
+    }
     setBusy(true)
     setError(null)
     setNotice(null)
@@ -166,6 +177,8 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
   }
   const needsEmail = view !== 'newpassword' && view !== 'confirm'
   const needsPassword = view !== 'reset' && view !== 'confirm'
+  const needsConfirm = view === 'signup' || view === 'newpassword'
+  const passwordType = showPassword ? 'text' : 'password'
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -234,15 +247,46 @@ export function AccountDialog({ onClose, initialView = 'signin', initialError, i
           {needsPassword && (
             <label>
               {view === 'newpassword' ? 'New password' : 'Password'}
+              <span className="password-row">
+                <input
+                  type={passwordType}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    setConfirmMismatch(false)
+                  }}
+                  required
+                  minLength={view === 'signin' ? undefined : MIN_PASSWORD_LENGTH}
+                  autoFocus={view === 'newpassword'}
+                  autoComplete={view === 'signin' ? 'current-password' : 'new-password'}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </span>
+            </label>
+          )}
+
+          {needsConfirm && (
+            <label>
+              Confirm password
               <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                type={passwordType}
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value)
+                  setConfirmMismatch(false)
+                }}
                 required
-                minLength={view === 'signin' ? undefined : MIN_PASSWORD_LENGTH}
-                autoFocus={view === 'newpassword'}
-                autoComplete={view === 'signin' ? 'current-password' : 'new-password'}
+                autoComplete="new-password"
+                aria-invalid={confirmMismatch}
               />
+              {confirmMismatch && <span className="field-error">The passwords don't match.</span>}
             </label>
           )}
 
