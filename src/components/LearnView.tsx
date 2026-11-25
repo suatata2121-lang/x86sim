@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { CURRICULUM, type Assignment, type Stage, type Task } from '../curriculum'
 import { INSTRUCTION_REFERENCE, type InstructionCategory, type InstructionDoc } from '../instructionReference'
 import { HARDWARE_REFERENCE, type HardwareCategory, type HardwareTopic } from '../hardwareReference'
@@ -728,6 +728,21 @@ function loadTaskPanelSize(): TaskPanelSize {
 function ResizableTaskPanel({ children }: { children: ReactNode }) {
   const [size, setSize] = useState<TaskPanelSize>(loadTaskPanelSize)
   const panelRef = useRef<HTMLDivElement>(null)
+  // Whether the text is cut off. Short tasks fit at the default height, where
+  // Expand used to show but change nothing (#100); it now only shows when it
+  // would open more text.
+  const [overflowing, setOverflowing] = useState(false)
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    const measure = () => setOverflowing(panel.scrollHeight > panel.clientHeight + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(panel)
+    for (const child of Array.from(panel.children)) observer.observe(child)
+    return () => observer.disconnect()
+  }, [children, size])
 
   function save(next: TaskPanelSize) {
     setSize(next)
@@ -774,16 +789,22 @@ function ResizableTaskPanel({ children }: { children: ReactNode }) {
 
   const expanded = size === 'expanded'
   const style = typeof size === 'number' ? { height: size, maxHeight: 'none' } : expanded ? { maxHeight: 'none' } : undefined
+  // Expand while text is cut off; otherwise Collapse back to the default, which
+  // also undoes a dragged height. At the default with nothing hidden: no button.
+  const canExpand = !expanded && overflowing
+  const showToggle = canExpand || size !== null
   return (
     <div className="task-panel-wrap">
       <div ref={panelRef} className="mode-panel learn-detail-panel task-panel" style={style}>
-        <button
-          className="task-panel-toggle"
-          onClick={() => save(expanded ? null : 'expanded')}
-          aria-expanded={expanded}
-        >
-          {expanded ? 'Collapse' : 'Expand'}
-        </button>
+        {showToggle && (
+          <button
+            className="task-panel-toggle"
+            onClick={() => save(canExpand ? 'expanded' : null)}
+            aria-expanded={!canExpand}
+          >
+            {canExpand ? 'Expand' : 'Collapse'}
+          </button>
+        )}
         {children}
       </div>
       <div
