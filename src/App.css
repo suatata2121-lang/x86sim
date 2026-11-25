@@ -5275,3 +5275,34 @@ aside .panel {
   border-radius: 3px;
   font-size: 0.9rem;
 }
+
+/* Paper-style subtraction (#89). */
+.nv-sub-grid .nv-cell.nv-small {
+  font-size: 0.7rem;
+}
+
+.nv-cell.nv-struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--num-carry);
+  text-decoration-thickness: 2px;
+  opacity: 0.7;
+}
+
+.nv-cell.nv-current {
+  outline: 1px dashed var(--num-carry);
+}
+
+.nv-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.8rem;
+  margin: 0.4rem 0;
+  font-size: 0.85rem;
+}
+
+.nv-note-line {
+  margin: 0.3rem 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}

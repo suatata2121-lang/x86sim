@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { assemble } from '../core/assembler'
 import type { Base, NumVisual } from '../numberingSystems'
 
@@ -383,6 +383,139 @@ function Column({ op, a, b, bits, base, showFlags }: { op: 'add' | 'sub'; a: num
   )
 }
 
+// Subtraction drawn the way it is done on paper (#89, feedback #22): the
+// borrowed "10" sits above the column that receives it, and the column that
+// lends has its digit struck through with what is left written above. A
+// zero with nothing to lend borrows from its own left neighbour first, keeps
+// 1 and passes 1 on; "Show borrow steps" walks the columns one at a time.
+function SubColumn({ a, b, bits, base, showFlags }: { a: number; b: number; bits: 8; base: 2 | 16; showFlags?: boolean }) {
+  const width = base === 2 ? bits : bits / 4
+  const mask = 2 ** bits - 1
+  const sign = 2 ** (bits - 1)
+  const da = digitsOf(a, base, width)
+  const db = digitsOf(b, base, width)
+  const res: number[] = []
+  // Least significant first: whether column i received a borrow from its
+  // left (borrowOut) and whether it lent 1 to its right (borrowIn).
+  const borrowIn: boolean[] = []
+  const borrowOut: boolean[] = []
+  let c = 0
+  for (let i = 0; i < width; i++) {
+    borrowIn.push(c === 1)
+    let s = da[i] - db[i] - c
+    c = s < 0 ? 1 : 0
+    if (s < 0) s += base
+    borrowOut.push(c === 1)
+    res.push(s)
+  }
+  const cf = c === 1
+  const raw = a - b
+  const kept = raw & mask
+  const of = ((a ^ b) & (a ^ kept) & sign) !== 0
+  const color = BASE_COLOR[base]
+  const cols = `auto 1.35rem repeat(${width}, 2rem)`
+  const ten = `10${SUB[base]}`
+  const literal = (v: number) => (base === 16 ? hexLiteral(v) : `${bin(v, bits)}b`)
+  // null: everything shown; n: only the n rightmost columns are worked out.
+  const [shown, setShown] = useState<number | null>(null)
+  const visible = (i: number) => shown === null || i < shown
+  const current = shown === null ? null : shown - 1
+  // Drawn most significant first; i is the column's position from the right.
+  const order = Array.from({ length: width }, (_, k) => width - 1 - k)
+  // What is left in a column that lent 1 (plus the 10 it received, if any).
+  const left = (i: number) => da[i] - 1 + (borrowOut[i] ? base : 0)
+
+  function explain(i: number): string {
+    const after = borrowIn[i] ? da[i] - 1 : da[i]
+    if (borrowOut[i] && borrowIn[i] && da[i] === 0) {
+      return `No 1 to borrow here, so this column borrows from the next one first, keeps 1 and passes 1 on. ${digitChar(left(i))} − ${digitChar(db[i])} = ${digitChar(res[i])}.`
+    }
+    if (borrowOut[i]) {
+      return `This column borrows 1 from the next column, which is worth ${base} here (${ten}). ${base === 2 ? '10' : digitChar(after + base)} − ${digitChar(db[i])} = ${digitChar(res[i])}.`
+    }
+    if (borrowIn[i]) {
+      return `This column lent 1 to the column on its right, so ${digitChar(da[i])} becomes ${digitChar(after)}; ${digitChar(after)} − ${digitChar(db[i])} = ${digitChar(res[i])}.`
+    }
+    return `No borrow needed: ${digitChar(da[i])} − ${digitChar(db[i])} = ${digitChar(res[i])}.`
+  }
+
+  const anyBorrow = borrowOut.some(Boolean)
+  const chained = da.some((d, i) => d === 0 && borrowIn[i] && borrowOut[i])
+
+  return (
+    <Block
+      legend={[
+        [color, `${BASE_NAME[base]} digit`],
+        ['var(--num-carry)', `borrow: ${ten} received, digit lent`],
+        ...(cf || showFlags ? [['var(--num-flag)', 'flag'] as LegendItem] : []),
+        ['var(--num-dec)', 'decimal check'],
+      ]}
+    >
+      <div className="nv-grid nv-column nv-sub-grid" style={{ gridTemplateColumns: cols }}>
+        <span className="nv-rowlabel">borrowed</span>
+        <Cell className="nv-small" color="var(--num-carry)">{cf && (shown === null || shown >= width) ? '1' : ''}</Cell>
+        {order.map((i) => (
+          <Cell key={i} className={`nv-small${i === current ? ' nv-current' : ''}`} color="var(--num-carry)">
+            {visible(i) && borrowOut[i] ? `+${ten}` : ''}
+          </Cell>
+        ))}
+        <span className="nv-rowlabel">left after lending</span>
+        <Cell />
+        {order.map((i) => (
+          <Cell key={i} className="nv-small" color="var(--num-carry)">
+            {visible(i) && borrowIn[i] ? (base === 2 && left(i) >= 2 ? left(i).toString(2) : digitChar(left(i))) : ''}
+          </Cell>
+        ))}
+        <span className="nv-rowlabel" />
+        <Cell />
+        {order.map((i) => (
+          <Cell key={i} color={color} className={visible(i) && borrowIn[i] ? 'nv-struck' : ''}>{digitChar(da[i])}</Cell>
+        ))}
+        <span className="nv-rowlabel" />
+        <Cell>−</Cell>
+        {order.map((i) => <Cell key={i} color={color}>{digitChar(db[i])}</Cell>)}
+        <span className="nv-rowlabel" />
+        <span className="nv-rule" style={{ gridColumn: `2 / span ${width + 1}` }} />
+        <span className="nv-rowlabel">{`${base === 2 ? bits : bits / 4}-${base === 2 ? 'bit' : 'digit'} result`}</span>
+        <Cell />
+        {order.map((i) => (
+          <Cell key={i} color={color} className={`strong${i === current ? ' nv-current' : ''}`}>{visible(i) ? digitChar(res[i]) : ''}</Cell>
+        ))}
+      </div>
+      <div className="nv-steps">
+        {shown === null ? (
+          anyBorrow && <button onClick={() => setShown(1)}>Show borrow steps</button>
+        ) : (
+          <>
+            <span className="nv-step-text">Column {current}: {explain(current ?? 0)}</span>
+            {shown < width
+              ? <button onClick={() => setShown(shown + 1)}>Next column ←</button>
+              : <button onClick={() => setShown(null)}>Done</button>}
+          </>
+        )}
+      </div>
+      {shown === null && anyBorrow && (
+        <p className="nv-note-line">
+          <span style={{ color: 'var(--num-carry)' }}>+{ten}</span>: this column borrows 1 from the next column, which
+          is worth {base} here ({ten}).
+          {chained && ' A struck-out 0 had no 1 to borrow, so that column borrowed from the next one first, kept 1 and passed 1 on.'}
+        </p>
+      )}
+      <div className="nv-total">
+        {(cf || showFlags) && <Chip>CF = {cf ? 1 : 0}</Chip>}
+        {showFlags && <Chip>OF = {of ? 1 : 0}</Chip>}
+        {cf && <> a borrow ran off the top; kept in AL: <Num base={16} strong>{hexLiteral(kept).replace(/h$/, '')}</Num> ({kept} unsigned, {kept - 256} signed)</>}
+      </div>
+      {showFlags && <div className="nv-total"><Register name="AL" value={kept} bits={8} /></div>}
+      <div className="nv-check">
+        <Num base={10}>{a}</Num> − <Num base={10}>{b}</Num> = <Num base={10}>{raw}</Num>
+        {kept !== raw && <> → AL keeps {raw < 0 ? `256 − ${-raw}` : `${raw} − 256`} = <Num base={10}>{kept}</Num></>}
+        {base === 16 && <> ({literal(a)} − {literal(b)} = {literal(kept)})</>}
+      </div>
+    </Block>
+  )
+}
+
 // One colour per multiplier bit, shared by that bit and its partial-product
 // row (#70), so students see which bit made which row. Cycles past four bits.
 const BIT_COLORS = ['var(--num-hex)', 'var(--num-oct)', 'var(--num-carry)', 'var(--num-dec)']
@@ -700,7 +833,7 @@ export function NumberVisual({ visual: v }: { visual: NumVisual }) {
     case 'twos': return <Twos {...v} />
     case 'range': return <Range {...v} />
     case 'addRules': return <AddRules />
-    case 'column': return <Column {...v} />
+    case 'column': return v.op === 'sub' ? <SubColumn {...v} /> : <Column {...v} />
     case 'shiftAdd': return <ShiftAdd {...v} />
     case 'longDiv': return <LongDiv {...v} />
     case 'shift': return <Shift {...v} />
