@@ -177,7 +177,7 @@ export function HardwarePlayground({
             steps={steps}
           />
         )}
-        {visual === 'devices' && <DevicesView key={`devices-${generation}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />}
+        {visual === 'devices' && <DevicesView key={`devices-${generation}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} note="Every OUT shows here at once. Press Play, or Step to watch one OUT at a time." />}
       </div>
       <pre className="hw-playground-source">
         {lines.map((line, idx) => (

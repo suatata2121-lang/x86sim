@@ -5331,3 +5331,73 @@ aside .panel {
 .worked-solution p {
   margin: 0.25rem 0;
 }
+
+/* Highlights on Learn pages (#91). */
+::highlight(hl-yellow) { background-color: rgba(250, 204, 21, 0.45); }
+::highlight(hl-green) { background-color: rgba(74, 222, 128, 0.4); }
+::highlight(hl-pink) { background-color: rgba(244, 114, 182, 0.45); }
+
+.selection-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel);
+}
+
+.selection-menu > button {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.highlight-picks {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.highlight-swatch {
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.hl-swatch-yellow, .hl-mark-yellow { background: rgba(250, 204, 21, 0.45); }
+.hl-swatch-green, .hl-mark-green { background: rgba(74, 222, 128, 0.4); }
+.hl-swatch-pink, .hl-mark-pink { background: rgba(244, 114, 182, 0.45); }
+
+.notes-highlights {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.notes-highlights h4 {
+  margin: 0 0 0.3rem;
+}
+
+.notes-highlights ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.notes-highlights li {
+  margin-bottom: 0.3rem;
+}
+
+.notes-highlight {
+  padding: 0 0.2rem;
+  border-radius: 2px;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+}
+
+.notes-highlight-page {
+  color: var(--text-dim);
+}

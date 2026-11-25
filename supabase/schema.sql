@@ -891,6 +891,37 @@ drop policy if exists "notes: delete own" on public.student_notes;
 create policy "notes: delete own" on public.student_notes
   for delete using (user_id = auth.uid());
 
+-- Highlights on Learn pages (#91). Private to the student: no admin policy,
+-- so not even the instructor can read them. A highlight is found again by its
+-- text plus up to 30 characters on either side (prefix/suffix).
+create table if not exists public.student_highlights (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  module_id  text not null,
+  concept_id text not null,
+  text       text not null check (char_length(text) between 1 and 2000),
+  prefix     text not null default '' check (char_length(prefix) <= 60),
+  suffix     text not null default '' check (char_length(suffix) <= 60),
+  color      text not null default 'yellow' check (color in ('yellow', 'green', 'pink')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists student_highlights_user_idx on public.student_highlights (user_id);
+
+alter table public.student_highlights enable row level security;
+
+drop policy if exists "highlights: read own" on public.student_highlights;
+create policy "highlights: read own" on public.student_highlights
+  for select using (user_id = auth.uid());
+
+drop policy if exists "highlights: insert own" on public.student_highlights;
+create policy "highlights: insert own" on public.student_highlights
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "highlights: delete own" on public.student_highlights;
+create policy "highlights: delete own" on public.student_highlights
+  for delete using (user_id = auth.uid());
+
 -- How many students keep a (non-empty) note per module; admins only.
 create or replace function public.note_counts()
 returns table (module_id text, students bigint)

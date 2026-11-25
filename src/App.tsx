@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { assemble } from './core/assembler'
 import { Cpu, type CpuSnapshot } from './core/cpu'
 import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
@@ -52,6 +52,8 @@ import { useModuleProgress } from './backend/moduleProgress'
 import { useNotes } from './backend/notes'
 import { NotesPanel } from './components/NotesPanel'
 import { AddToNotes } from './components/AddToNotes'
+import { PageHighlights, captureSelection } from './components/PageHighlights'
+import { useHighlights, type HighlightColor, type StudentHighlight } from './backend/highlights'
 import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
@@ -301,6 +303,10 @@ export default function App() {
   const [stepChange, setStepChange] = useState<StepChange | null>(null)
   // My Notes (#71): open state remembered; null module = the one the student is on.
   const notesStore = useNotes(userId)
+  const highlightsStore = useHighlights(userId)
+  // A highlight picked in My Notes, scrolled to once its page is drawn.
+  const [scrollToHighlight, setScrollToHighlight] = useState<string | null>(null)
+  const clearScrollToHighlight = useCallback(() => setScrollToHighlight(null), [])
   const [notesOpen, setNotesOpen] = useState(() => {
     try {
       return window.localStorage.getItem(NOTES_OPEN_KEY) === '1'
@@ -1070,6 +1076,30 @@ export default function App() {
     )
   }
 
+  // Highlights (#91): the open page's, keyed `${section}:${id}`.
+  const pageKey = pageRef ? `${pageRef.section}:${pageRef.id}` : null
+  const pageHighlights = useMemo(
+    () => (pageKey ? highlightsStore.items.filter((h) => h.concept_id === pageKey) : []),
+    [highlightsStore.items, pageKey],
+  )
+
+  function addHighlight(range: Range, color: HighlightColor) {
+    if (!pageKey) return
+    const picked = captureSelection(range)
+    if (picked) highlightsStore.add({ ...picked, color, module_id: hereModule.id, concept_id: pageKey })
+  }
+
+  function openHighlight(h: StudentHighlight) {
+    const [section, ...rest] = h.concept_id.split(':')
+    openConcept({ section, id: rest.join(':') } as ConceptRef)
+    setScrollToHighlight(h.id)
+  }
+
+  function highlightPageTitle(conceptId: string) {
+    const [section, ...rest] = conceptId.split(':')
+    return conceptTitle({ section, id: rest.join(':') } as ConceptRef)
+  }
+
   function addQuoteToNotes(text: string) {
     const topic = pageRef ? conceptTitle(pageRef) : 'Learn'
     const quote = [...text.split(/\r?\n/).filter((l) => l.trim()).map((l) => `> ${l.trim()}`), `> — ${topic}`].join('\n')
@@ -1726,6 +1756,9 @@ export default function App() {
       )}
       {notesOpen && (
         <NotesPanel
+          highlights={highlightsStore.items}
+          pageTitle={highlightPageTitle}
+          onOpenHighlight={openHighlight}
           moduleId={shownNotesModuleId}
           onSelect={(id) => setNotesModuleId(id)}
           notes={notesStore.notes}
@@ -1735,7 +1768,15 @@ export default function App() {
           onClose={() => setNotesOpenPersist(false)}
         />
       )}
-      {mode === 'learn' && <AddToNotes onAdd={addQuoteToNotes} />}
+      {mode === 'learn' && <AddToNotes onAdd={addQuoteToNotes} onHighlight={pageKey ? addHighlight : undefined} />}
+      {mode === 'learn' && !focus && pageKey && (
+        <PageHighlights
+          items={pageHighlights}
+          onRemove={highlightsStore.remove}
+          scrollTo={scrollToHighlight}
+          onScrolled={clearScrollToHighlight}
+        />
+      )}
       <footer className="app-footer">
         <p>
           Developed by Dr. Murat Adnan TAMER as part of the Microprocessors course at Haliç

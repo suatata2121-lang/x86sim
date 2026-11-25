@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { LEARNING_PATH } from '../learningPath'
 import { MAX_NOTE_CHARS, type SaveState } from '../backend/notes'
+import type { StudentHighlight } from '../backend/highlights'
 import { NoteMarkdown } from './NoteMarkdown'
 
 // My Notes (#71): a panel on the right, one note per module, written in
@@ -17,16 +18,22 @@ interface Props {
   saveState: SaveState
   onChange: (moduleId: string, body: string) => void
   onClose: () => void
+  /** Every highlight the student made (#91); the panel lists the open module's. */
+  highlights?: StudentHighlight[]
+  /** Page title for a highlight's concept_id. */
+  pageTitle?: (conceptId: string) => string
+  onOpenHighlight?: (h: StudentHighlight) => void
 }
 
 const SAVE_LABELS: Record<SaveState, string> = { idle: '', saving: 'Saving…', saved: 'Saved', error: 'Not saved yet: retrying with your next edit' }
 
-export function NotesPanel({ moduleId, onSelect, notes, loaded, saveState, onChange, onClose }: Props) {
+export function NotesPanel({ moduleId, onSelect, notes, loaded, saveState, onChange, onClose, highlights, pageTitle, onOpenHighlight }: Props) {
   const [tab, setTab] = useState<'write' | 'preview'>('write')
   const textRef = useRef<HTMLTextAreaElement>(null)
   const module = LEARNING_PATH.find((m) => m.id === moduleId)
   const index = module ? LEARNING_PATH.indexOf(module) : -1
   const body = notes.get(moduleId) ?? ''
+  const moduleHighlights = (highlights ?? []).filter((h) => h.module_id === moduleId)
 
   // A quote just added from a Learn page lands at the end: show it.
   useEffect(() => {
@@ -86,6 +93,22 @@ export function NotesPanel({ moduleId, onSelect, notes, loaded, saveState, onCha
           ))}
           {!LEARNING_PATH.some((m) => notes.get(m.id)?.trim()) && <p className="example-description">No notes yet.</p>}
         </div>
+      )}
+
+      {module && moduleHighlights.length > 0 && (
+        <section className="notes-highlights">
+          <h4>Highlights</h4>
+          <ul>
+            {moduleHighlights.map((h) => (
+              <li key={h.id}>
+                <button className={`link-button notes-highlight hl-mark-${h.color}`} onClick={() => onOpenHighlight?.(h)}>
+                  {h.text.length > 140 ? `${h.text.slice(0, 140)}…` : h.text}
+                </button>
+                <span className="notes-highlight-page"> · {pageTitle?.(h.concept_id) ?? h.concept_id}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <p className="notes-footer">
