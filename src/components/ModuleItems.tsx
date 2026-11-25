@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { flashTarget } from './navFeedback'
 import { EXAMPLES } from '../examples'
 import { CURRICULUM } from '../curriculum'
 import { HARDWARE_REFERENCE } from '../hardwareReference'
@@ -89,7 +90,11 @@ function openInteractive(a: PathActions, m: LearningModule, item: Interactive) {
     a.onOpenExample(item.example, m.observe?.panel ?? 'registers', m.observe?.watch, m.id)
   } else {
     const ref = m.concepts.find((c) => c.id === item.topic)
-    if (ref) openPathStep(a, m, 'concept', m.concepts.indexOf(ref), true)
+    if (!ref) return
+    openPathStep(a, m, 'concept', m.concepts.indexOf(ref), true)
+    // Land on the builder / figure itself, not the top of a long page (#90).
+    const kind = item.id.endsWith('-figure') ? 'figure' : item.id.endsWith('-demo') ? 'demo' : 'tool'
+    flashTarget(`.learn-interactive[data-interactive="${kind}"]`)
   }
 }
 

@@ -586,11 +586,13 @@ export function LearnDetail({
             : <NumberVisual key={idx} visual={p} />
         )}
         {hwTopic.demo && (
-          <HardwarePlayground
-            source={hwTopic.demo.source}
-            visual={hwTopic.demo.visual}
-            onHalted={() => onInteractiveDone?.(`${hwTopic.id}-demo`)}
-          />
+          <div className="learn-interactive" data-interactive="demo">
+            <HardwarePlayground
+              source={hwTopic.demo.source}
+              visual={hwTopic.demo.visual}
+              onHalted={() => onInteractiveDone?.(`${hwTopic.id}-demo`)}
+            />
+          </div>
         )}
         {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
         {hwTopic.timing && <TimingDiagramView />}
@@ -603,8 +605,11 @@ export function LearnDetail({
         {hwTopic.staticDiagram === 'ivt' && <IvtDiagram />}
         {hwTopic.staticDiagram === 'pic-8259' && <Pic8259Diagram />}
         {hwTopic.figure && (
-          <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
+          <div className="learn-interactive" data-interactive="figure">
+            <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
+          </div>
         )}
+        {hwTopic.interactive && <div className="learn-interactive" data-interactive="tool">
         {hwTopic.interactive === 'fde' && <FetchDecodeExecuteView onFinish={() => onInteractiveDone?.('fde-program')} />}
         {hwTopic.interactive === 'move-it' && <MoveItView solved={interactivesDone} onSolved={onInteractiveDone} />}
         {hwTopic.interactive === 'alu' && <AluView />}
@@ -622,6 +627,7 @@ export function LearnDetail({
         {hwTopic.interactive === 'byte-layout' && <ByteLayout done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'ivt-calc' && <IvtCalculator done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'pic-playground' && <PicPlayground done={interactivesDone} onDone={onInteractiveDone} />}
+        </div>}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">

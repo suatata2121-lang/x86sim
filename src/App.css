@@ -4346,6 +4346,31 @@ aside .panel {
   opacity: 0.7;
 }
 
+/* Make the clickable bits look clickable (#90). */
+.ppi-bit:not(:disabled) {
+  border-width: 2px;
+  border-style: dashed;
+}
+
+.ppi-bit:not(:disabled):hover {
+  border-style: solid;
+  border-color: var(--accent-border);
+}
+
+.ppi-howto {
+  margin: 0.3rem 0 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border-left: 3px solid var(--accent-border);
+  background: var(--accent-bg);
+  border-radius: 3px;
+  font-size: 0.9rem;
+}
+
+.ppi-howto ol {
+  margin: 0.3rem 0 0;
+  padding-left: 1.3rem;
+}
+
 .ppi-bit-name {
   color: var(--text-dim);
   font-size: 0.7rem;
