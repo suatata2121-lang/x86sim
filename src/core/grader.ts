@@ -5,7 +5,7 @@
 // even though they share the same assembled program.
 import { assemble } from './assembler'
 import { Cpu } from './cpu'
-import { PPI_PORT_A, PPI_PORT_B, PPI_PORT_C } from './ppi8255'
+import { PPI_PORT_A, PPI_PORT_B, PPI_PORT_C, type Ppi8255 } from './ppi8255'
 import type { AssembleError, Flags, RegName } from './types'
 
 export interface MemoryAssertion {
@@ -96,6 +96,11 @@ export interface GradeReport {
   results: TestResult[]
   passedCount: number
   totalCount: number
+  /**
+   * The ports and 8255 as the last test case left them, so the Devices panel
+   * can show what the tested program did (#101, feedback #44).
+   */
+  devices?: { testName: string; ports: Uint8Array; ppi: Ppi8255 }
 }
 
 const DEFAULT_MAX_STEPS = 200_000
@@ -251,12 +256,15 @@ export function gradeSource(source: string, testCases: TestCase[], rules?: Sourc
     return { assembled: false, assembleErrors: errors, results: [], passedCount: 0, totalCount: testCases.length + ruleCount }
   }
 
+  let devices: GradeReport['devices']
   const results = [
     ...(rules ? checkRules(source, instructions.map((i) => i.mnemonic), rules) : []),
     ...testCases.map((testCase) => {
       const cpu = new Cpu()
       cpu.load(instructions, data)
-      return runTestCase(cpu, testCase)
+      const result = runTestCase(cpu, testCase)
+      devices = { testName: testCase.name, ports: cpu.ports, ppi: cpu.ppi }
+      return result
     }),
   ]
 
@@ -266,5 +274,6 @@ export function gradeSource(source: string, testCases: TestCase[], rules?: Sourc
     results,
     passedCount: results.filter((r) => r.passed).length,
     totalCount: results.length,
+    devices,
   }
 }

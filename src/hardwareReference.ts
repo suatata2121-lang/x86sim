@@ -935,18 +935,53 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
             'instead of at a memory address.',
           'This simulator wires a few ports to virtual devices you can watch react live: port 40h is a traffic ' +
             'light, 41h a stepper motor, 42h a seven-segment display, and 43h a thermometer.',
+          'Each device shows the last byte written to its port. The traffic light uses bit 0 = red, bit 1 = ' +
+            'yellow, bit 2 = green. The stepper motor turns one step each time the next coil pattern of 03h, 06h, ' +
+            '0Ch, 09h arrives (backwards through the list turns it back). The thermometer shows the byte as ' +
+            'degrees. The seven-segment display does not take a digit: each bit lights one segment, so a program ' +
+            'writes the pattern of the digit it wants:',
+          {
+            kind: 'table',
+            head: ['Digit', 'Segments lit', 'Byte (bit 6 … bit 0 = g f e d c b a)', 'OUT 42h, AL with AL ='],
+            rows: [
+              ['0', 'a b c d e f', '0111111', '3Fh'],
+              ['1', 'b c', '0000110', '06h'],
+              ['2', 'a b d e g', '1011011', '5Bh'],
+              ['3', 'a b c d g', '1001111', '4Fh'],
+              ['4', 'b c f g', '1100110', '66h'],
+              ['5', 'a c d f g', '1101101', '6Dh'],
+              ['6', 'a c d e f g', '1111101', '7Dh'],
+              ['7', 'a b c', '0000111', '07h'],
+              ['8', 'a b c d e f g', '1111111', '7Fh'],
+              ['9', 'a b c d f g', '1101111', '6Fh'],
+            ],
+          },
+          'So OUT 42h with AL = 7Fh shows 8, and AL = 1 lights only segment a. The demo below loops ten times: ' +
+            'each pass shows the next digit from the table, moves the traffic light and the motor one step, and ' +
+            'raises the temperature. Press Play, or Step to watch one OUT at a time.',
         ],
         demo: {
           visual: 'devices',
           source:
-            'MOV AL, 04h\n' +
-            'OUT 40h, AL   ; traffic light: bit 2 = green\n' +
-            'MOV AL, 06h\n' +
-            'OUT 41h, AL   ; stepper motor: one step command\n' +
-            'MOV AL, 7Fh\n' +
-            'OUT 42h, AL   ; seven-segment: light up segments a-g\n' +
-            'MOV AL, 25\n' +
-            'OUT 43h, AL   ; thermometer: 25 degrees\n' +
+            'DIGITS DB 3Fh, 06h, 5Bh, 4Fh, 66h, 6Dh, 7Dh, 07h, 7Fh, 6Fh   ; 0-9\n' +
+            'LIGHTS DB 1, 3, 4, 2            ; red, red+yellow, green, yellow\n' +
+            'COILS  DB 03h, 06h, 0Ch, 09h    ; stepper coil patterns\n' +
+            'MOV SI, 0\n' +
+            'NEXT:\n' +
+            'MOV AL, [DIGITS+SI]\n' +
+            'OUT 42h, AL   ; seven-segment: digit SI\n' +
+            'MOV BX, SI\n' +
+            'AND BX, 3     ; 0, 1, 2, 3, 0, 1 ...\n' +
+            'MOV AL, [LIGHTS+BX]\n' +
+            'OUT 40h, AL   ; traffic light: next phase\n' +
+            'MOV AL, [COILS+BX]\n' +
+            'OUT 41h, AL   ; stepper motor: one step\n' +
+            'MOV AX, SI\n' +
+            'ADD AL, 20\n' +
+            'OUT 43h, AL   ; thermometer: 20, 21 ... 29\n' +
+            'INC SI\n' +
+            'CMP SI, 10\n' +
+            'JNE NEXT\n' +
             'HLT\n',
         },
       },

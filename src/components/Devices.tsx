@@ -65,6 +65,20 @@ function SevenSegmentView({ value }: { value: number }) {
   )
 }
 
+// Common-cathode patterns, bit 0 = segment a ... bit 6 = g (the table on the
+// IN / OUT page). A value that matches one is named next to the display (#101).
+export const SEGMENT_DIGITS = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f]
+
+function segmentCaption(value: number): string {
+  const v = value & 0x7f
+  const digit = SEGMENT_DIGITS.indexOf(v)
+  const hex = `${value.toString(16).toUpperCase().padStart(2, '0')}h`
+  if (digit >= 0) return `${hex} → ${digit}`
+  if (v === 0) return `${hex} → blank`
+  const segs = 'abcdefg'.split('').filter((_, i) => v & (1 << i)).join('')
+  return `${hex} → segments ${segs}`
+}
+
 function ThermometerView({ value }: { value: number }) {
   const celsius = Math.max(0, Math.min(99, value))
   const pct = Math.max(2, Math.min(100, celsius))
@@ -80,7 +94,7 @@ function ThermometerView({ value }: { value: number }) {
 }
 
 // The 4511 on the slide's board: PB3-PB0 as one BCD digit; A-F are blank.
-const BCD_SEGMENTS = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f]
+const BCD_SEGMENTS = SEGMENT_DIGITS
 
 /**
  * One row of 8 port pins, bit 7 on the left. Bits in `inputMask` are
@@ -141,6 +155,12 @@ function Ppi8255Card({ ppi }: { ppi: Ppi8255 }) {
       {(c.aMode !== 0 || c.bMode !== 0) && (
         <div className="ppi-notice">Mode 1/2 handshaking is not simulated; ports behave as in Mode 0.</div>
       )}
+      {!c.aIn && !c.cUpperIn && !c.cLowerIn && (
+        <div className="ppi-notice">
+          No port is an input yet, so there are no switches. Send a control word first, e.g. 90h to port 83h
+          (Port A in): Port A then shows eight switches to click. The "8255: switches to display" example does this.
+        </div>
+      )}
       <div className="ppi-port">
         <span className="ppi-port-name">Port A <small>80h · {c.aIn ? 'switches' : 'LEDs'}</small></span>
         <PinRow name="PA" value={ppi.read(PPI_PORT_A)} inputMask={c.aIn ? 0xff : 0} onFlip={(b) => flip('switchesA', b)} />
@@ -167,10 +187,13 @@ function Ppi8255Card({ ppi }: { ppi: Ppi8255 }) {
   )
 }
 
-export function DevicesView({ ports, ppi }: { ports: Uint8Array; ppi?: Ppi8255 }) {
+export function DevicesView({ ports, ppi, note }: { ports: Uint8Array; ppi?: Ppi8255; note?: string }) {
   return (
     <div className="panel">
       <h3>Virtual Devices</h3>
+      {note
+        ? <p className="devices-note">{note}</p>
+        : <p className="devices-note">Every OUT shows here at once. Run jumps straight to the end; use Step or ▶ Animate to watch each OUT.</p>}
       <div className="devices-grid">
         <div className="device-card">
           <div className="device-title">Traffic Light <span className="device-port">port 40h</span></div>
@@ -183,6 +206,7 @@ export function DevicesView({ ports, ppi }: { ports: Uint8Array; ppi?: Ppi8255 }
         <div className="device-card">
           <div className="device-title">7-Segment Display <span className="device-port">port 42h</span></div>
           <SevenSegmentView value={ports[PORTS.SEVEN_SEGMENT]} />
+          <div className="device-readout">{segmentCaption(ports[PORTS.SEVEN_SEGMENT])}</div>
         </div>
         <div className="device-card">
           <div className="device-title">Thermometer <span className="device-port">port 43h</span></div>

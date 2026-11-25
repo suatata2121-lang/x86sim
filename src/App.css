@@ -5306,3 +5306,16 @@ aside .panel {
   color: var(--text-dim);
   font-size: 0.85rem;
 }
+
+/* Virtual devices (#101). */
+.devices-note {
+  margin: 0 0 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.device-readout {
+  margin-top: 0.3rem;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}

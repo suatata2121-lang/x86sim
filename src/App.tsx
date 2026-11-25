@@ -1686,7 +1686,21 @@ export default function App() {
               steps={cpuRef.current.steps}
             />
           )}
-          {shownAsideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />}
+          {shownAsideTab === 'devices' && (
+            // Run Tests grades in its own Cpus, so on its own the panel showed
+            // nothing of the tested program (feedback #44). Until the student
+            // steps or runs, it shows where the last test left the devices.
+            gradeReport?.devices && cpuRef.current.steps === 0
+              ? (
+                <DevicesView
+                  key={`devices-test-${cpuGeneration}`}
+                  ports={gradeReport.devices.ports}
+                  ppi={gradeReport.devices.ppi}
+                  note={`After Run Tests: the devices as the last test ("${gradeReport.devices.testName}") left them. Step or Run to see your own run.`}
+                />
+              )
+              : <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />
+          )}
           {shownAsideTab === 'memory' && (
             <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} segments={regs} />
           )}
