@@ -35,7 +35,7 @@ import { CURRICULUM, type Assignment } from './curriculum'
 import { HARDWARE_REFERENCE } from './hardwareReference'
 import { NUMBERING_REFERENCE } from './numberingSystems'
 import {
-  LEARNING_PATH, STEPS, currentModule, interactiveParts, isModuleDone, moduleForPage, nextStep, predictQuestions,
+  LEARNING_PATH, STEPS, currentModule, interactiveParts, isModuleDone, isUnlocked, moduleForPage, nextStep, predictQuestions,
   quizBlockers, unreadConcepts, type AsidePanel, type ConceptRef, type LearningModule, type PathProgress,
 } from './learningPath'
 import { PredictDialog } from './components/PredictDialog'
@@ -675,8 +675,34 @@ export default function App() {
   function markInteractiveDone(itemId: string) {
     if (!auth.session) return
     for (const m of LEARNING_PATH) {
+      if (!moduleOpen(m)) continue
       if (m.interactives?.some((i) => interactiveParts(i).includes(itemId))) moduleProgress.markInteractive(m.id, itemId)
     }
+  }
+
+  // A locked module's pages can be read ahead, but nothing done there counts
+  // as lab work until the module opens (#93); module_open() in schema.sql
+  // refuses the rows on the server too. Admins see every module open.
+  function moduleOpen(m: LearningModule) {
+    return auth.isAdmin || !moduleProgress.loaded || isUnlocked(m, pathProgress, moduleProgress.rows)
+  }
+
+  /** The locked module a page belongs to, or null when it is open (or in no module). */
+  function lockedModuleOf(ref: ConceptRef): LearningModule | null {
+    if (!auth.session || !moduleProgress.loaded) return null
+    const owners = LEARNING_PATH.filter((m) => m.concepts.some((c) => c.section === ref.section && c.id === ref.id))
+    return owners.length > 0 && !owners.some(moduleOpen) ? owners[0] : null
+  }
+
+  function topicHeader(ref: ConceptRef) {
+    const locked = lockedModuleOf(ref)
+    if (!locked) return null
+    const n = LEARNING_PATH.indexOf(locked)
+    return (
+      <p className="locked-module-note">
+        Module {n} is locked. You can read ahead, but this doesn't count as lab work until you finish Module {n - 1}.
+      </p>
+    )
   }
 
   // "Mark as read" at the end of a Learn page that belongs to a quiz module.
@@ -685,7 +711,7 @@ export default function App() {
   function topicFooter(ref: ConceptRef) {
     if (!auth.session || !moduleProgress.loaded) return null
     const m = LEARNING_PATH.find((x) => x.quiz && x.concepts.some((c) => c.section === ref.section && c.id === ref.id))
-    if (!m) return null
+    if (!m || !moduleOpen(m)) return null
     const unread = unreadConcepts(m, pathProgress)
     const isRead = !unread.some((c) => c.id === ref.id)
     const nextUnread = unread.find((c) => c.id !== ref.id)
@@ -1468,6 +1494,7 @@ export default function App() {
                     activeAssignmentId={activeAssignmentId}
                     completedIds={completedAssignments}
                     topicFooter={backendEnabled ? topicFooter : undefined}
+                    topicHeader={backendEnabled ? topicHeader : undefined}
                     interactivesDone={interactivesDone}
                     onInteractiveDone={markInteractiveDone}
                   />

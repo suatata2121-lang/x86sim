@@ -479,6 +479,7 @@ export function LearnDetail({
   activeAssignmentId,
   completedIds,
   topicFooter,
+  topicHeader,
   interactivesDone,
   onInteractiveDone,
 }: {
@@ -487,6 +488,8 @@ export function LearnDetail({
   completedIds: Set<string>
   /** Rendered at the very end of a Hardware or Numbering Systems page (the learning path's "Mark as read"). */
   topicFooter?: (ref: ConceptRef) => ReactNode
+  /** Rendered under a Hardware or Numbering Systems page's title (e.g. "Module n is locked"). */
+  topicHeader?: (ref: ConceptRef) => ReactNode
   /** Interactive item ids the student has finished (learning-path checklists, #25). */
   interactivesDone?: Set<string>
   /** Called when an interactive on a page is finished; ids match LearningModule.interactives. */
@@ -536,6 +539,7 @@ export function LearnDetail({
     return (
       <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
         <h4 className="learn-stage-title">{numTopic.title}</h4>
+        {topicHeader?.({ section: 'numbering', id: numTopic.id })}
         <p className="example-description">{numTopic.summary}</p>
         {numTopic.content.map((p, idx) =>
           // Worked examples are drawn (NumberVisual); a string containing a newline is a code
@@ -580,6 +584,7 @@ export function LearnDetail({
     return (
       <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
         <h4 className="learn-stage-title">{hwTopic.title}</h4>
+        {topicHeader?.({ section: 'hardware', id: hwTopic.id })}
         <p className="example-description">{hwTopic.summary}</p>
         {hwTopic.content.map((p, idx) =>
           typeof p === 'string'
