@@ -4346,6 +4346,31 @@ aside .panel {
   opacity: 0.7;
 }
 
+/* Make the clickable bits look clickable (#90). */
+.ppi-bit:not(:disabled) {
+  border-width: 2px;
+  border-style: dashed;
+}
+
+.ppi-bit:not(:disabled):hover {
+  border-style: solid;
+  border-color: var(--accent-border);
+}
+
+.ppi-howto {
+  margin: 0.3rem 0 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border-left: 3px solid var(--accent-border);
+  background: var(--accent-bg);
+  border-radius: 3px;
+  font-size: 0.9rem;
+}
+
+.ppi-howto ol {
+  margin: 0.3rem 0 0;
+  padding-left: 1.3rem;
+}
+
 .ppi-bit-name {
   color: var(--text-dim);
   font-size: 0.7rem;
@@ -4449,6 +4474,27 @@ aside .panel {
 
 .account-code label {
   flex: 1;
+}
+
+/* Password input with its Show / Hide toggle on the same line. */
+.password-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.password-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.password-toggle {
+  flex: none;
+  font-size: 0.85rem;
+}
+
+.field-error {
+  color: var(--error-text);
+  font-size: 0.85rem;
 }
 
 /* ---- Segment / addressing / byte-order views (components/SegmentViews.tsx) ---- */
@@ -5207,4 +5253,151 @@ aside .panel {
 .learn-inline-link {
   display: inline;
   font-size: inherit;
+}
+
+/* ---- Task flow (#92) ---- */
+.task-position {
+  margin: 0 0 0.3rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.next-after-pass {
+  margin: 0.6rem 0;
+}
+
+/* A locked module's Learn page (#93). */
+.locked-module-note {
+  margin: 0.3rem 0 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--warning-text);
+  background: var(--warning-bg-strong);
+  border-radius: 3px;
+  font-size: 0.9rem;
+}
+
+/* Paper-style subtraction (#89). */
+.nv-sub-grid .nv-cell.nv-small {
+  font-size: 0.7rem;
+}
+
+.nv-cell.nv-struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--num-carry);
+  text-decoration-thickness: 2px;
+  opacity: 0.7;
+}
+
+.nv-cell.nv-current {
+  outline: 1px dashed var(--num-carry);
+}
+
+.nv-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.8rem;
+  margin: 0.4rem 0;
+  font-size: 0.85rem;
+}
+
+.nv-note-line {
+  margin: 0.3rem 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* Virtual devices (#101). */
+.devices-note {
+  margin: 0 0 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.device-readout {
+  margin-top: 0.3rem;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+
+/* Worked solution under the hint ladder (#103). */
+.worked-solution {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--accent-border);
+  background: var(--accent-bg);
+  border-radius: 3px;
+}
+
+.worked-solution p {
+  margin: 0.25rem 0;
+}
+
+/* Highlights on Learn pages (#91). */
+::highlight(hl-yellow) { background-color: rgba(250, 204, 21, 0.45); }
+::highlight(hl-green) { background-color: rgba(74, 222, 128, 0.4); }
+::highlight(hl-pink) { background-color: rgba(244, 114, 182, 0.45); }
+
+.selection-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel);
+}
+
+.selection-menu > button {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.highlight-picks {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.highlight-swatch {
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.hl-swatch-yellow, .hl-mark-yellow { background: rgba(250, 204, 21, 0.45); }
+.hl-swatch-green, .hl-mark-green { background: rgba(74, 222, 128, 0.4); }
+.hl-swatch-pink, .hl-mark-pink { background: rgba(244, 114, 182, 0.45); }
+
+.notes-highlights {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.notes-highlights h4 {
+  margin: 0 0 0.3rem;
+}
+
+.notes-highlights ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.notes-highlights li {
+  margin-bottom: 0.3rem;
+}
+
+.notes-highlight {
+  padding: 0 0.2rem;
+  border-radius: 2px;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+}
+
+.notes-highlight-page {
+  color: var(--text-dim);
 }

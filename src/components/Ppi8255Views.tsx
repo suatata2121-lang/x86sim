@@ -117,7 +117,12 @@ export function ControlWordBuilder({ done, onDone }: { done?: Set<string>; onDon
   return (
     <div className="panel ppi-builder">
       <h3>Control Word Builder</h3>
-      <p className="example-description">Click the bits to build a word, or type a hex value to decode one.</p>
+      {/* Students couldn't tell where this checklist item is done (feedback #28, #90). */}
+      <p className="ppi-howto">
+        <strong>How to:</strong> Click the bits D6–D0 below to pick a mode and a direction for each port (D7 stays 1).
+        The control word appears in binary and hex. Build three different words to finish this item.
+      </p>
+      <p className="example-description">You can also type a hex value to decode it.</p>
       <BitBoxes word={word} bits={IO_BITS} locked={(b) => b === 7} onToggle={(b) => choose(word ^ (1 << b))} />
       <div className="mb-inputs">
         <label>
@@ -187,6 +192,15 @@ export function BsrBuilder({ done, onDone }: { done?: Set<string>; onDone?: (par
   const [didHere, setDidHere] = useState<Set<string>>(new Set())
   const { bit, set } = decodeBsrWord(word)
   const after = set ? portC | (1 << bit) : portC & ~(1 << bit)
+  const setDone = didHere.has('ppi-bsr-set') || !!done?.has('ppi-bsr-set')
+  const resetDone = didHere.has('ppi-bsr-reset') || !!done?.has('ppi-bsr-reset')
+  // The word starts with D0 = 1, so a first send only sets a bit; nothing said
+  // that D0 has to be cleared for the reset half (#90).
+  const nextHint = didHere.size === 0 || (setDone && resetDone)
+    ? null
+    : setDone
+      ? 'Now reset a bit: set D0 to 0 and send again.'
+      : 'Now set a bit: set D0 to 1 and send again.'
 
   function send() {
     setPortC(after)
@@ -198,13 +212,21 @@ export function BsrBuilder({ done, onDone }: { done?: Set<string>; onDone?: (par
   return (
     <div className="panel ppi-builder">
       <h3>BSR Builder</h3>
-      <p className="example-description">Pick a Port C bit and set or reset it, then send the word to the control register.</p>
+      <div className="ppi-howto">
+        <strong>How to:</strong> D7 = 0 selects BSR mode.
+        <ol>
+          <li>Pick a Port C bit with D3–D1.</li>
+          <li>D0 = 1 sets the bit: press <strong>OUT 83h, AL</strong>.</li>
+          <li>Click D0 to make it 0 and press <strong>OUT 83h, AL</strong> again to reset it.</li>
+        </ol>
+      </div>
       <BitBoxes word={word} bits={BSR_BITS} locked={(b) => b >= 4} onToggle={(b) => setWord(word ^ (1 << b))} />
       <div className="mb-inputs">
         <code className="ppi-word">{hex2(word)} = {word.toString(2).padStart(8, '0')}b</code>
         <span>→ {set ? 'set' : 'reset'} PC{bit}</span>
-        <button onClick={send}>OUT 83h, AL</button>
+        <button className="primary" onClick={send}>OUT 83h, AL</button>
       </div>
+      {nextHint && <p className="moveit-hint">{nextHint}</p>}
       <div className="ppi-c-row" aria-label="Port C">
         {[7, 6, 5, 4, 3, 2, 1, 0].map((b) => (
           <span key={b} className={`ppi-c-cell${b === bit ? ' target' : ''}`}>
@@ -218,7 +240,7 @@ export function BsrBuilder({ done, onDone }: { done?: Set<string>; onDone?: (par
       </p>
       <ul className="mb-cases">
         {BSR_PARTS.map((p) => {
-          const ok = didHere.has(p) || !!done?.has(p)
+          const ok = p === 'ppi-bsr-set' ? setDone : resetDone
           return <li key={p} className={ok ? 'done' : ''}>{ok ? '✓' : '○'} {p === 'ppi-bsr-set' ? 'Set a bit' : 'Reset a bit'}</li>
         })}
       </ul>

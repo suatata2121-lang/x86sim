@@ -763,7 +763,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       supabase.from('concept_reads').select('module_id, concept_id, read_at').eq('user_id', student.id).order('read_at'),
       supabase.from('quiz_attempts').select('*').eq('user_id', student.id).order('created_at', { ascending: false }),
       supabase.from('interactive_runs').select('module_id, item_id, done_at').eq('user_id', student.id),
-      supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).in('kind', ['hint', 'challenge']).order('created_at'),
+      supabase.from('activity_events').select('id, kind, assignment_id, detail, created_at').eq('user_id', student.id).in('kind', ['hint', 'challenge', 'solution_viewed']).order('created_at'),
       supabase.from('predictions').select('module_id, question_id, answer, correct, created_at').eq('user_id', student.id).order('created_at', { ascending: false }),
     ]).then(([a, e, s, m, r, q, ir, h, pr]) => {
       const err = a.error ?? e.error ?? s.error ?? m.error ?? r.error ?? q.error ?? ir.error
@@ -776,7 +776,7 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       setQuizAttempts((q.data ?? []) as QuizAttempt[])
       setRuns((ir.data ?? []) as InteractiveRun[])
       const hc = (h.data ?? []) as ActivityEvent[]
-      setHintEvents(hc.filter((e) => e.kind === 'hint'))
+      setHintEvents(hc.filter((e) => e.kind === 'hint' || e.kind === 'solution_viewed'))
       setChallengeEvents(hc.filter((e) => e.kind === 'challenge'))
       // Missing table (schema not re-run yet) just shows no predictions.
       setPredictions((pr.data ?? []) as Prediction[])
@@ -998,20 +998,22 @@ function StudentDetail({ student, progress, onBack }: { student: StudentSummary;
       <h3>Hints used</h3>
       <div className="admin-table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Assignment</th><th>Highest hint opened</th><th>Last opened</th></tr></thead>
+          <thead><tr><th>Assignment</th><th>Highest hint opened</th><th>Worked solution</th><th>Last opened</th></tr></thead>
           <tbody>
             {[...new Set(hintEvents.map((e) => e.assignment_id ?? ''))].map((aid) => {
               const mine = hintEvents.filter((e) => (e.assignment_id ?? '') === aid)
-              const top = Math.max(...mine.map((e) => Number(e.detail.level) || 0))
+              const top = Math.max(0, ...mine.filter((e) => e.kind === 'hint').map((e) => Number(e.detail.level) || 0))
+              const solution = mine.find((e) => e.kind === 'solution_viewed')
               return (
                 <tr key={aid}>
                   <td>{ASSIGNMENT_TITLES.get(aid) ?? aid}</td>
                   <td>{top} of 3</td>
+                  <td>{solution ? <span className="admin-badge tried">solution viewed</span> : '-'}</td>
                   <td>{formatDate(mine[mine.length - 1].created_at)}</td>
                 </tr>
               )
             })}
-            {hintEvents.length === 0 && <tr><td colSpan={3} className="admin-empty">No hints opened.</td></tr>}
+            {hintEvents.length === 0 && <tr><td colSpan={4} className="admin-empty">No hints opened.</td></tr>}
           </tbody>
         </table>
       </div>

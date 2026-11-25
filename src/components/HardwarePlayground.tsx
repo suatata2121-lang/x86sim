@@ -9,6 +9,9 @@ import { StackView } from './StackView'
 import { DevicesView } from './Devices'
 
 const PLAY_INTERVAL_MS = 600
+// The devices demo loops over every device; at the normal pace one pass took
+// several seconds, so it plays faster.
+const DEVICES_PLAY_INTERVAL_MS = 150
 const MAX_HISTORY = 500
 
 export type HardwareVisual = 'registers' | 'databus' | 'busdetail' | 'stack' | 'devices'
@@ -119,7 +122,7 @@ export function HardwarePlayground({
       cpu.step()
       sync()
       if (cpu.halted) stop()
-    }, PLAY_INTERVAL_MS)
+    }, visual === 'devices' ? DEVICES_PLAY_INTERVAL_MS : PLAY_INTERVAL_MS)
   }
 
   function reset() {
@@ -174,7 +177,7 @@ export function HardwarePlayground({
             steps={steps}
           />
         )}
-        {visual === 'devices' && <DevicesView key={`devices-${generation}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />}
+        {visual === 'devices' && <DevicesView key={`devices-${generation}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} note="Every OUT shows here at once. Press Play, or Step to watch one OUT at a time." />}
       </div>
       <pre className="hw-playground-source">
         {lines.map((line, idx) => (

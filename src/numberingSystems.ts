@@ -188,6 +188,10 @@ export const NUMBERING_REFERENCE: NumberingCategory[] = [
             'column to its left (just as decimal borrows 10), so the column becomes 10b - 1 = 1 and the next ' +
             'column has 1 less to work with:',
           { kind: 'column', op: 'sub', a: 80, b: 27, bits: 8, base: 2 },
+          'A zero has no 1 to lend, so a borrow can run through several columns. In 00001000b - 00000001b bit 0 ' +
+            'needs a borrow, but bits 1 and 2 are 0 too: each of them borrows from the column to its left first, ' +
+            'keeps 1 and passes 1 on, until bit 3 lends its 1. Press Show borrow steps to follow it one column at a time:',
+          { kind: 'column', op: 'sub', a: 8, b: 1, bits: 8, base: 2 },
           'If the number being subtracted is larger, the borrow runs off the top of the register. The CPU then ' +
             'sets CF = 1 to say "a borrow was needed", and the bits left in the register are the two\'s complement ' +
             'of the negative answer. 27 - 80 = -53, which the byte stores as 256 - 53 = 203 = 0CBh:',

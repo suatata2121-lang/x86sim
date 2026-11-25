@@ -308,9 +308,7 @@ drop policy if exists "concept reads: read own or admin" on public.concept_reads
 create policy "concept reads: read own or admin" on public.concept_reads
   for select using (user_id = auth.uid() or public.is_admin());
 
-drop policy if exists "concept reads: insert own" on public.concept_reads;
-create policy "concept reads: insert own" on public.concept_reads
-  for insert with check (user_id = auth.uid());
+-- The insert policy is created after module_open() below (#93).
 
 create table if not exists public.quiz_attempts (
   id         bigint generated always as identity primary key,
@@ -378,9 +376,7 @@ drop policy if exists "interactive runs: read own or admin" on public.interactiv
 create policy "interactive runs: read own or admin" on public.interactive_runs
   for select using (user_id = auth.uid() or public.is_admin());
 
-drop policy if exists "interactive runs: insert own" on public.interactive_runs;
-create policy "interactive runs: insert own" on public.interactive_runs
-  for insert with check (user_id = auth.uid());
+-- The insert policy is created after module_open() below (#93).
 
 -- Every Check on a Predict-step question (#11), right or wrong, so the
 -- instructor sees which ideas don't stick. question_id matches the ids in
@@ -561,6 +557,43 @@ values
   ('m0', 0), ('m1', 1), ('m2', 2), ('m12', 3), ('m3', 4), ('m4', 5), ('m5', 6),
   ('m6', 7), ('m7', 8), ('m11', 9), ('m8', 10), ('m13', 11), ('m9', 12), ('m10', 13)
 on conflict (module_id) do update set position = excluded.position;
+
+-- Whether a module is open to the signed-in student for lab work (#93): the
+-- last quiz before it in module_order is passed (Module 0's also by
+-- placement credit); admins always. Pages of a locked module can still be
+-- read, but reads and interactives there are not lab work, so they can't be
+-- recorded. Modules without a quiz between the two are gated in the browser
+-- only, as in quiz_ready. Rows written before this rule are left as they are.
+create or replace function public.module_open(p_module text)
+returns boolean
+language sql
+stable
+security definer set search_path = public
+as $$
+  select public.is_admin() or not exists (
+    select 1
+      from public.module_order mine
+      join lateral (
+        select o.module_id from public.module_order o
+          join public.quiz_settings q on q.module_id = o.module_id
+         where o.position < mine.position
+         order by o.position desc limit 1
+      ) prev on true
+     where mine.module_id = p_module
+       and not exists (select 1 from public.quiz_attempts a
+                        where a.user_id = auth.uid() and a.module_id = prev.module_id and a.passed)
+       and not (prev.module_id = 'm0'
+                and exists (select 1 from public.profiles p where p.id = auth.uid() and p.placement_credit))
+  );
+$$;
+
+drop policy if exists "concept reads: insert own" on public.concept_reads;
+create policy "concept reads: insert own" on public.concept_reads
+  for insert with check (user_id = auth.uid() and public.module_open(module_id));
+
+drop policy if exists "interactive runs: insert own" on public.interactive_runs;
+create policy "interactive runs: insert own" on public.interactive_runs
+  for insert with check (user_id = auth.uid() and public.module_open(module_id));
 
 -- Whether the signed-in student has done everything the quiz requires: the
 -- module's checklist, and the last quiz before it in module_order passed
@@ -856,6 +889,37 @@ create policy "notes: update own" on public.student_notes
 
 drop policy if exists "notes: delete own" on public.student_notes;
 create policy "notes: delete own" on public.student_notes
+  for delete using (user_id = auth.uid());
+
+-- Highlights on Learn pages (#91). Private to the student: no admin policy,
+-- so not even the instructor can read them. A highlight is found again by its
+-- text plus up to 30 characters on either side (prefix/suffix).
+create table if not exists public.student_highlights (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  module_id  text not null,
+  concept_id text not null,
+  text       text not null check (char_length(text) between 1 and 2000),
+  prefix     text not null default '' check (char_length(prefix) <= 60),
+  suffix     text not null default '' check (char_length(suffix) <= 60),
+  color      text not null default 'yellow' check (color in ('yellow', 'green', 'pink')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists student_highlights_user_idx on public.student_highlights (user_id);
+
+alter table public.student_highlights enable row level security;
+
+drop policy if exists "highlights: read own" on public.student_highlights;
+create policy "highlights: read own" on public.student_highlights
+  for select using (user_id = auth.uid());
+
+drop policy if exists "highlights: insert own" on public.student_highlights;
+create policy "highlights: insert own" on public.student_highlights
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "highlights: delete own" on public.student_highlights;
+create policy "highlights: delete own" on public.student_highlights
   for delete using (user_id = auth.uid());
 
 -- How many students keep a (non-empty) note per module; admins only.

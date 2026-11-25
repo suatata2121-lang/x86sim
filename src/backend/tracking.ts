@@ -12,6 +12,12 @@ const HEARTBEAT_MS = 60_000
 const IDLE_MS = 5 * 60_000
 const ACTIVITY_EVENTS = ['pointermove', 'pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart'] as const
 const FLUSH_MS = 15_000
+// When opening the study session fails (network blip, expired token) it is
+// retried after these delays, then on every heartbeat. Until it opens, events
+// would be saved without a session and their time never credited (#110).
+const SESSION_RETRY_MS = [5_000, 15_000, 60_000]
+// At most this many events wait for the session id before being sent without it.
+const MAX_HELD_EVENTS = 500
 
 export type ActivityKind =
   | 'assemble'
@@ -25,11 +31,11 @@ export type ActivityKind =
   | 'quiz_attempt'
   | 'interactive_done'
   | 'hint'
+  | 'solution_viewed'
   | 'challenge'
 
 interface QueuedEvent {
   user_id: string
-  session_id: string | null
   kind: ActivityKind
   assignment_id: string | null
   detail: Record<string, unknown>
@@ -43,12 +49,17 @@ let queue: QueuedEvent[] = []
 let pendingSteps = 0
 let pendingStepsAssignment: string | null = null
 
-function flush() {
+/**
+ * Sends queued events. The session id is stamped here, not when the event was
+ * queued, so events from before the session row came back still get it. While
+ * there is no session yet the queue is held back, unless the page is going
+ * away (`force`) or the queue has grown too long.
+ */
+function flush(force = false) {
   if (!supabase || !currentUserId) return
   if (pendingSteps > 0) {
     queue.push({
       user_id: currentUserId,
-      session_id: currentSessionId,
       kind: 'step',
       assignment_id: pendingStepsAssignment,
       detail: { count: pendingSteps },
@@ -56,7 +67,8 @@ function flush() {
     pendingSteps = 0
   }
   if (queue.length === 0) return
-  const batch = queue
+  if (!currentSessionId && !force && queue.length < MAX_HELD_EVENTS) return
+  const batch = queue.map((e) => ({ ...e, session_id: currentSessionId }))
   queue = []
   void supabase.from('activity_events').insert(batch).then(() => undefined)
 }
@@ -69,7 +81,7 @@ export function trackActivity(kind: ActivityKind, assignmentId: string | null, d
     pendingStepsAssignment = assignmentId
     return
   }
-  queue.push({ user_id: currentUserId, session_id: currentSessionId, kind, assignment_id: assignmentId, detail })
+  queue.push({ user_id: currentUserId, kind, assignment_id: assignmentId, detail })
 }
 
 /**
@@ -122,15 +134,45 @@ export function useStudySession(userId: string | null) {
     currentUserId = userId
     let cancelled = false
     let lastBeat = Date.now()
+    // Active seconds earned while there was no session id yet; sent with the
+    // first heartbeat after the session opens.
+    let owedSeconds = 0
+    let opening = false
+    let attempts = 0
+    let retryTimer: number | undefined
 
-    client
-      .from('study_sessions')
-      .insert({ user_id: userId, user_agent: navigator.userAgent.slice(0, 300) })
-      .select('id')
-      .single()
-      .then(({ data }) => {
-        if (!cancelled && data) currentSessionId = (data as { id: string }).id
-      })
+    function openSession() {
+      if (cancelled || opening || currentSessionId) return
+      opening = true
+      window.clearTimeout(retryTimer)
+      client!
+        .from('study_sessions')
+        .insert({ user_id: userId, user_agent: navigator.userAgent.slice(0, 300) })
+        .select('id')
+        .single()
+        .then(
+          ({ data, error }) => {
+            opening = false
+            if (cancelled) return
+            if (!error && data) {
+              currentSessionId = (data as { id: string }).id
+              flush()
+            } else scheduleRetry()
+          },
+          () => {
+            opening = false
+            if (!cancelled) scheduleRetry()
+          },
+        )
+    }
+
+    // After the listed delays, beat() retries on every heartbeat.
+    function scheduleRetry() {
+      const delay = SESSION_RETRY_MS[attempts++]
+      if (delay !== undefined) retryTimer = window.setTimeout(openSession, delay)
+    }
+
+    openSession()
 
     // Time only accrues while the tab is visible and someone is using it.
     let paused = document.visibilityState !== 'visible'
@@ -141,8 +183,16 @@ export function useStudySession(userId: string | null) {
       // Credit up to IDLE_MS after the last input, never the idle time beyond it.
       const seconds = Math.max(0, Math.round((Math.min(now, lastActivity + IDLE_MS) - lastBeat) / 1000))
       lastBeat = now
-      if (paused || !currentSessionId || seconds === 0) return
-      void client!.rpc('session_heartbeat', { p_session_id: currentSessionId, p_seconds: seconds }).then(() => undefined)
+      if (paused) return
+      if (!currentSessionId) {
+        owedSeconds += seconds
+        if (attempts >= SESSION_RETRY_MS.length) openSession()
+        return
+      }
+      const total = seconds + owedSeconds
+      owedSeconds = 0
+      if (total === 0) return
+      void client!.rpc('session_heartbeat', { p_session_id: currentSessionId, p_seconds: total }).then(() => undefined)
     }
 
     // Coming back after an idle spell: settle what is owed so far (beat()
@@ -162,25 +212,28 @@ export function useStudySession(userId: string | null) {
       } else {
         beat()
         paused = true
-        flush()
+        flush(true)
       }
     }
+
+    const flushNow = () => flush(true)
 
     const heartbeat = window.setInterval(beat, HEARTBEAT_MS)
     const flusher = window.setInterval(flush, FLUSH_MS)
     document.addEventListener('visibilitychange', onVisibility)
-    window.addEventListener('pagehide', flush)
+    window.addEventListener('pagehide', flushNow)
     for (const name of ACTIVITY_EVENTS) window.addEventListener(name, onActivity, { passive: true, capture: true })
 
     return () => {
       cancelled = true
       // Credit the time since the last beat while the session id is still set.
       beat()
-      flush()
+      flush(true)
+      window.clearTimeout(retryTimer)
       window.clearInterval(heartbeat)
       window.clearInterval(flusher)
       document.removeEventListener('visibilitychange', onVisibility)
-      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('pagehide', flushNow)
       for (const name of ACTIVITY_EVENTS) window.removeEventListener(name, onActivity, { capture: true })
       currentUserId = null
       currentSessionId = null

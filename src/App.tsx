@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { assemble } from './core/assembler'
 import { Cpu, type CpuSnapshot } from './core/cpu'
 import type { AssembleError, Flags, PendingInput, Reg16 } from './core/types'
@@ -14,7 +14,7 @@ import { HelpDialog } from './components/HelpDialog'
 import { AccountDialog } from './components/AccountDialog'
 import { HintLadder } from './components/HintLadder'
 import { WhatChanged, describeStep, type StepChange } from './components/WhatChanged'
-import { useHintLadder } from './backend/hints'
+import { SOLUTION_AFTER_FAILS, useHintLadder } from './backend/hints'
 import { useChallenges } from './backend/challenges'
 import { ChallengePanel } from './components/ChallengePanel'
 import { ReviewCard } from './components/ReviewCard'
@@ -25,7 +25,9 @@ import { LearnSidebar, LearnDetail, useLearnNav } from './components/LearnView'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { LearningPathCard, conceptTitle } from './components/LearningPathCard'
 import { flashTarget, useClickLock } from './components/navFeedback'
-import { ModuleItemList, itemKey, moduleItems, type PathActions } from './components/ModuleItems'
+import {
+  ASSIGNMENT_TITLES, ModuleItemList, TASK_NAMES, itemKey, moduleItems, taskPositionLabel, type PathActions,
+} from './components/ModuleItems'
 import { QuizDialog } from './components/QuizDialog'
 import { ObserveView } from './components/ObserveView'
 import { EXAMPLES } from './examples'
@@ -33,7 +35,7 @@ import { CURRICULUM, type Assignment } from './curriculum'
 import { HARDWARE_REFERENCE } from './hardwareReference'
 import { NUMBERING_REFERENCE } from './numberingSystems'
 import {
-  LEARNING_PATH, STEPS, currentModule, interactiveParts, isModuleDone, moduleForPage, nextStep, predictQuestions,
+  LEARNING_PATH, STEPS, currentModule, interactiveParts, isModuleDone, isUnlocked, moduleForPage, nextStep, predictQuestions,
   quizBlockers, unreadConcepts, type AsidePanel, type ConceptRef, type LearningModule, type PathProgress,
 } from './learningPath'
 import { PredictDialog } from './components/PredictDialog'
@@ -50,6 +52,8 @@ import { useModuleProgress } from './backend/moduleProgress'
 import { useNotes } from './backend/notes'
 import { NotesPanel } from './components/NotesPanel'
 import { AddToNotes } from './components/AddToNotes'
+import { PageHighlights, captureSelection } from './components/PageHighlights'
+import { useHighlights, type HighlightColor, type StudentHighlight } from './backend/highlights'
 import './App.css'
 
 const DEFAULT_EXAMPLE_ID = 'array-sum'
@@ -299,6 +303,10 @@ export default function App() {
   const [stepChange, setStepChange] = useState<StepChange | null>(null)
   // My Notes (#71): open state remembered; null module = the one the student is on.
   const notesStore = useNotes(userId)
+  const highlightsStore = useHighlights(userId)
+  // A highlight picked in My Notes, scrolled to once its page is drawn.
+  const [scrollToHighlight, setScrollToHighlight] = useState<string | null>(null)
+  const clearScrollToHighlight = useCallback(() => setScrollToHighlight(null), [])
   const [notesOpen, setNotesOpen] = useState(() => {
     try {
       return window.localStorage.getItem(NOTES_OPEN_KEY) === '1'
@@ -673,8 +681,34 @@ export default function App() {
   function markInteractiveDone(itemId: string) {
     if (!auth.session) return
     for (const m of LEARNING_PATH) {
+      if (!moduleOpen(m)) continue
       if (m.interactives?.some((i) => interactiveParts(i).includes(itemId))) moduleProgress.markInteractive(m.id, itemId)
     }
+  }
+
+  // A locked module's pages can be read ahead, but nothing done there counts
+  // as lab work until the module opens (#93); module_open() in schema.sql
+  // refuses the rows on the server too. Admins see every module open.
+  function moduleOpen(m: LearningModule) {
+    return auth.isAdmin || !moduleProgress.loaded || isUnlocked(m, pathProgress, moduleProgress.rows)
+  }
+
+  /** The locked module a page belongs to, or null when it is open (or in no module). */
+  function lockedModuleOf(ref: ConceptRef): LearningModule | null {
+    if (!auth.session || !moduleProgress.loaded) return null
+    const owners = LEARNING_PATH.filter((m) => m.concepts.some((c) => c.section === ref.section && c.id === ref.id))
+    return owners.length > 0 && !owners.some(moduleOpen) ? owners[0] : null
+  }
+
+  function topicHeader(ref: ConceptRef) {
+    const locked = lockedModuleOf(ref)
+    if (!locked) return null
+    const n = LEARNING_PATH.indexOf(locked)
+    return (
+      <p className="locked-module-note">
+        Module {n} is locked. You can read ahead, but this doesn't count as lab work until you finish Module {n - 1}.
+      </p>
+    )
   }
 
   // "Mark as read" at the end of a Learn page that belongs to a quiz module.
@@ -683,7 +717,7 @@ export default function App() {
   function topicFooter(ref: ConceptRef) {
     if (!auth.session || !moduleProgress.loaded) return null
     const m = LEARNING_PATH.find((x) => x.quiz && x.concepts.some((c) => c.section === ref.section && c.id === ref.id))
-    if (!m) return null
+    if (!m || !moduleOpen(m)) return null
     const unread = unreadConcepts(m, pathProgress)
     const isRead = !unread.some((c) => c.id === ref.id)
     const nextUnread = unread.find((c) => c.id !== ref.id)
@@ -993,6 +1027,79 @@ export default function App() {
       (pageRef && moduleForPage(pageRef, studentModule)) || studentModule
   const sideHereKey = onTask ? itemKey.task(activeAssignmentId) : pageRef ? itemKey.page(pageRef) : null
 
+  // After every test passes: a button to the module's next task, or once all
+  // of them are passed, to the module's next open item (#92), so the tasks
+  // can be done one after another without hunting for them.
+  function nextAfterPass(report: GradeReport) {
+    const id = activeAssignmentId
+    const passed = report.assembled && report.totalCount > 0 && report.passedCount === report.totalCount
+    const m = id && passed ? LEARNING_PATH.find((x) => x.assignments.includes(id)) : null
+    if (!m || !id) return null
+    const i = m.assignments.indexOf(id)
+    const nextId = [...m.assignments.slice(i + 1), ...m.assignments.slice(0, i)].find((x) => !completedAssignments.has(x))
+    if (nextId) {
+      return (
+        <div className="next-after-pass">
+          <button
+            className="primary"
+            disabled={navLocked}
+            onClick={() => lockNav(() => {
+              openAssignment(nextId)
+              flashTarget(focus ? '.focus-task' : '.editor-col')
+            })}
+          >
+            Passed. Next: {TASK_NAMES.get(nextId) ?? 'Task'} – {ASSIGNMENT_TITLES.get(nextId) ?? nextId} →
+          </button>
+        </div>
+      )
+    }
+    const item = auth.session && moduleProgress.loaded
+      ? moduleItems(pathActions, m).find((r) => !r.done && !r.locked && !r.key.startsWith('task-'))
+      : undefined
+    return (
+      <div className="next-after-pass">
+        {item ? (
+          <button
+            className="primary"
+            disabled={navLocked}
+            onClick={() => lockNav(() => {
+              item.open()
+              if (/^(read|example|interactive)-/.test(item.key)) flashTarget()
+            })}
+          >
+            All tasks of this module are done. Next: {item.label} →
+          </button>
+        ) : (
+          <p className="read-done">All tasks of this module are done.</p>
+        )}
+      </div>
+    )
+  }
+
+  // Highlights (#91): the open page's, keyed `${section}:${id}`.
+  const pageKey = pageRef ? `${pageRef.section}:${pageRef.id}` : null
+  const pageHighlights = useMemo(
+    () => (pageKey ? highlightsStore.items.filter((h) => h.concept_id === pageKey) : []),
+    [highlightsStore.items, pageKey],
+  )
+
+  function addHighlight(range: Range, color: HighlightColor) {
+    if (!pageKey) return
+    const picked = captureSelection(range)
+    if (picked) highlightsStore.add({ ...picked, color, module_id: hereModule.id, concept_id: pageKey })
+  }
+
+  function openHighlight(h: StudentHighlight) {
+    const [section, ...rest] = h.concept_id.split(':')
+    openConcept({ section, id: rest.join(':') } as ConceptRef)
+    setScrollToHighlight(h.id)
+  }
+
+  function highlightPageTitle(conceptId: string) {
+    const [section, ...rest] = conceptId.split(':')
+    return conceptTitle({ section, id: rest.join(':') } as ConceptRef)
+  }
+
   function addQuoteToNotes(text: string) {
     const topic = pageRef ? conceptTitle(pageRef) : 'Learn'
     const quote = [...text.split(/\r?\n/).filter((l) => l.trim()).map((l) => `> ${l.trim()}`), `> — ${topic}`].join('\n')
@@ -1260,7 +1367,11 @@ export default function App() {
       {adminOpen && auth.isAdmin ? <AdminView onClose={() => setAdminOpen(false)} /> : (
       <main>
         <section className="editor-panel">
-          {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && !focus && (
+          {/* Hidden, not unmounted, in focus mode: the card remembers which module
+              the student picked, and remounting it on Exit focus jumped back to
+              the current module (Module 0 for some) (#92). */}
+          {backendEnabled && auth.session && moduleProgress.loaded && !pathCardHidden && (
+            <div hidden={focus}>
             <LearningPathCard
               rows={moduleProgress.rows}
               progress={pathProgress}
@@ -1285,6 +1396,7 @@ export default function App() {
               unlockAll={auth.isAdmin}
               unsaved={unsavedAssignments}
             />
+            </div>
           )}
           {backendEnabled && auth.session && moduleProgress.loaded && !observe && !focus && reviewCard && (
             <ReviewCard
@@ -1334,6 +1446,7 @@ export default function App() {
               return a && (
                 <details className="panel focus-task" open>
                   <summary>{a.title}</summary>
+                  {taskPositionLabel(a.id) && <p className="task-position">{taskPositionLabel(a.id)}</p>}
                   <p className="example-description">{a.concept}</p>
                   <h4>The tests check</h4>
                   <ul>{a.testCases.map((t) => <li key={t.name}>{t.name}</li>)}</ul>
@@ -1411,6 +1524,7 @@ export default function App() {
                     activeAssignmentId={activeAssignmentId}
                     completedIds={completedAssignments}
                     topicFooter={backendEnabled ? topicFooter : undefined}
+                    topicHeader={backendEnabled ? topicHeader : undefined}
                     interactivesDone={interactivesDone}
                     onInteractiveDone={markInteractiveDone}
                   />
@@ -1542,6 +1656,7 @@ export default function App() {
                   <pre className="output">(no output yet)</pre>
                 )}
               </div>
+              {gradeReport && nextAfterPass(gradeReport)}
               {gradeReport && <GraderView report={gradeReport} />}
               {gradeReport && gradeReport === unsavedReport && (
                 <p className="feedback-error">Your result could not be saved. Check your connection and press Run Tests again.</p>
@@ -1565,9 +1680,13 @@ export default function App() {
               })()}
               {activeAssignmentId && hintLadder.available && (
                 <HintLadder
+                  key={activeAssignmentId}
                   hints={ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.hints ?? ['', '', '']}
                   level={hintLadder.level}
                   onReveal={hintLadder.revealNext}
+                  solution={ALL_ASSIGNMENTS.find((a) => a.id === activeAssignmentId)?.workedSolution}
+                  solutionReady={hintLadder.fails >= SOLUTION_AFTER_FAILS}
+                  onSolutionViewed={() => trackActivity('solution_viewed', activeAssignmentId)}
                 />
               )}
             </>
@@ -1601,7 +1720,21 @@ export default function App() {
               steps={cpuRef.current.steps}
             />
           )}
-          {shownAsideTab === 'devices' && <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />}
+          {shownAsideTab === 'devices' && (
+            // Run Tests grades in its own Cpus, so on its own the panel showed
+            // nothing of the tested program (feedback #44). Until the student
+            // steps or runs, it shows where the last test left the devices.
+            gradeReport?.devices && cpuRef.current.steps === 0
+              ? (
+                <DevicesView
+                  key={`devices-test-${cpuGeneration}`}
+                  ports={gradeReport.devices.ports}
+                  ppi={gradeReport.devices.ppi}
+                  note={`After Run Tests: the devices as the last test ("${gradeReport.devices.testName}") left them. Step or Run to see your own run.`}
+                />
+              )
+              : <DevicesView key={`devices-${cpuGeneration}`} ports={cpuRef.current.ports} ppi={cpuRef.current.ppi} />
+          )}
           {shownAsideTab === 'memory' && (
             <MemoryView memory={cpuRef.current.memory} dataLabels={cpuRef.current.dataLabels} sp={regs.SP} segments={regs} />
           )}
@@ -1623,6 +1756,9 @@ export default function App() {
       )}
       {notesOpen && (
         <NotesPanel
+          highlights={highlightsStore.items}
+          pageTitle={highlightPageTitle}
+          onOpenHighlight={openHighlight}
           moduleId={shownNotesModuleId}
           onSelect={(id) => setNotesModuleId(id)}
           notes={notesStore.notes}
@@ -1632,7 +1768,15 @@ export default function App() {
           onClose={() => setNotesOpenPersist(false)}
         />
       )}
-      {mode === 'learn' && <AddToNotes onAdd={addQuoteToNotes} />}
+      {mode === 'learn' && <AddToNotes onAdd={addQuoteToNotes} onHighlight={pageKey ? addHighlight : undefined} />}
+      {mode === 'learn' && !focus && pageKey && (
+        <PageHighlights
+          items={pageHighlights}
+          onRemove={highlightsStore.remove}
+          scrollTo={scrollToHighlight}
+          onScrolled={clearScrollToHighlight}
+        />
+      )}
       <footer className="app-footer">
         <p>
           Developed by Dr. Murat Adnan TAMER as part of the Microprocessors course at Haliç

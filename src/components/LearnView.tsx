@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { CURRICULUM, type Assignment, type Stage, type Task } from '../curriculum'
 import { INSTRUCTION_REFERENCE, type InstructionCategory, type InstructionDoc } from '../instructionReference'
 import { HARDWARE_REFERENCE, type HardwareCategory, type HardwareTopic } from '../hardwareReference'
@@ -18,6 +18,7 @@ import { Dma8257Diagram } from './Dma8257View'
 import { InterruptTimeline, IvtCalculator, IvtDiagram, Pic8259Diagram, PicPlayground } from './InterruptViews'
 import { ByteLayout, EaCalculator, EndianFigure, SegmentCalculator, SegmentMapDiagram, SegmentPractice } from './SegmentViews'
 import type { ConceptRef } from '../learningPath'
+import { taskPositionLabel } from './ModuleItems'
 
 function progressOf(assignments: Assignment[], completedIds: Set<string>) {
   return { done: assignments.filter((a) => completedIds.has(a.id)).length, total: assignments.length }
@@ -478,6 +479,7 @@ export function LearnDetail({
   activeAssignmentId,
   completedIds,
   topicFooter,
+  topicHeader,
   interactivesDone,
   onInteractiveDone,
 }: {
@@ -486,6 +488,8 @@ export function LearnDetail({
   completedIds: Set<string>
   /** Rendered at the very end of a Hardware or Numbering Systems page (the learning path's "Mark as read"). */
   topicFooter?: (ref: ConceptRef) => ReactNode
+  /** Rendered under a Hardware or Numbering Systems page's title (e.g. "Module n is locked"). */
+  topicHeader?: (ref: ConceptRef) => ReactNode
   /** Interactive item ids the student has finished (learning-path checklists, #25). */
   interactivesDone?: Set<string>
   /** Called when an interactive on a page is finished; ids match LearningModule.interactives. */
@@ -535,6 +539,7 @@ export function LearnDetail({
     return (
       <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
         <h4 className="learn-stage-title">{numTopic.title}</h4>
+        {topicHeader?.({ section: 'numbering', id: numTopic.id })}
         <p className="example-description">{numTopic.summary}</p>
         {numTopic.content.map((p, idx) =>
           // Worked examples are drawn (NumberVisual); a string containing a newline is a code
@@ -579,6 +584,7 @@ export function LearnDetail({
     return (
       <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
         <h4 className="learn-stage-title">{hwTopic.title}</h4>
+        {topicHeader?.({ section: 'hardware', id: hwTopic.id })}
         <p className="example-description">{hwTopic.summary}</p>
         {hwTopic.content.map((p, idx) =>
           typeof p === 'string'
@@ -586,11 +592,13 @@ export function LearnDetail({
             : <NumberVisual key={idx} visual={p} />
         )}
         {hwTopic.demo && (
-          <HardwarePlayground
-            source={hwTopic.demo.source}
-            visual={hwTopic.demo.visual}
-            onHalted={() => onInteractiveDone?.(`${hwTopic.id}-demo`)}
-          />
+          <div className="learn-interactive" data-interactive="demo">
+            <HardwarePlayground
+              source={hwTopic.demo.source}
+              visual={hwTopic.demo.visual}
+              onHalted={() => onInteractiveDone?.(`${hwTopic.id}-demo`)}
+            />
+          </div>
         )}
         {hwTopic.staticDiagram === 'segmented-addressing' && <SegmentedAddressingView />}
         {hwTopic.timing && <TimingDiagramView />}
@@ -603,8 +611,11 @@ export function LearnDetail({
         {hwTopic.staticDiagram === 'ivt' && <IvtDiagram />}
         {hwTopic.staticDiagram === 'pic-8259' && <Pic8259Diagram />}
         {hwTopic.figure && (
-          <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
+          <div className="learn-interactive" data-interactive="figure">
+            <FigureStepper key={hwTopic.id} spec={hwTopic.figure} onFinish={() => onInteractiveDone?.(`${hwTopic.id}-figure`)} />
+          </div>
         )}
+        {hwTopic.interactive && <div className="learn-interactive" data-interactive="tool">
         {hwTopic.interactive === 'fde' && <FetchDecodeExecuteView onFinish={() => onInteractiveDone?.('fde-program')} />}
         {hwTopic.interactive === 'move-it' && <MoveItView solved={interactivesDone} onSolved={onInteractiveDone} />}
         {hwTopic.interactive === 'alu' && <AluView />}
@@ -622,6 +633,7 @@ export function LearnDetail({
         {hwTopic.interactive === 'byte-layout' && <ByteLayout done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'ivt-calc' && <IvtCalculator done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'pic-playground' && <PicPlayground done={interactivesDone} onDone={onInteractiveDone} />}
+        </div>}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
           <ul className="instr-notes">
@@ -695,9 +707,11 @@ export function LearnDetail({
   }
 
   const activeAssignment = task.assignments.find((a) => a.id === activeAssignmentId) ?? null
+  const position = activeAssignment && taskPositionLabel(activeAssignment.id)
   return (
     <ResizableTaskPanel>
       <h4 className="learn-stage-title">{task.title}</h4>
+      {position && <p className="task-position">{position}</p>}
       <p className="example-description">{task.scenario}</p>
       <p className="example-description learn-concept">
         {activeAssignment ? activeAssignment.concept : 'Pick an assignment on the left to load it into the editor.'}
@@ -728,6 +742,21 @@ function loadTaskPanelSize(): TaskPanelSize {
 function ResizableTaskPanel({ children }: { children: ReactNode }) {
   const [size, setSize] = useState<TaskPanelSize>(loadTaskPanelSize)
   const panelRef = useRef<HTMLDivElement>(null)
+  // Whether the text is cut off. Short tasks fit at the default height, where
+  // Expand used to show but change nothing (#100); it now only shows when it
+  // would open more text.
+  const [overflowing, setOverflowing] = useState(false)
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    const measure = () => setOverflowing(panel.scrollHeight > panel.clientHeight + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(panel)
+    for (const child of Array.from(panel.children)) observer.observe(child)
+    return () => observer.disconnect()
+  }, [children, size])
 
   function save(next: TaskPanelSize) {
     setSize(next)
@@ -774,16 +803,22 @@ function ResizableTaskPanel({ children }: { children: ReactNode }) {
 
   const expanded = size === 'expanded'
   const style = typeof size === 'number' ? { height: size, maxHeight: 'none' } : expanded ? { maxHeight: 'none' } : undefined
+  // Expand while text is cut off; otherwise Collapse back to the default, which
+  // also undoes a dragged height. At the default with nothing hidden: no button.
+  const canExpand = !expanded && overflowing
+  const showToggle = canExpand || size !== null
   return (
     <div className="task-panel-wrap">
       <div ref={panelRef} className="mode-panel learn-detail-panel task-panel" style={style}>
-        <button
-          className="task-panel-toggle"
-          onClick={() => save(expanded ? null : 'expanded')}
-          aria-expanded={expanded}
-        >
-          {expanded ? 'Collapse' : 'Expand'}
-        </button>
+        {showToggle && (
+          <button
+            className="task-panel-toggle"
+            onClick={() => save(canExpand ? 'expanded' : null)}
+            aria-expanded={!canExpand}
+          >
+            {canExpand ? 'Expand' : 'Collapse'}
+          </button>
+        )}
         {children}
       </div>
       <div

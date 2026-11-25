@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
+import { HIGHLIGHT_COLORS, type HighlightColor } from '../backend/highlights'
 
 // "Add to notes" (#71): a small button over text selected on a Learn page;
-// it hands the text to My Notes as a quote.
-export function AddToNotes({ onAdd }: { onAdd: (text: string) => void }) {
-  const [pick, setPick] = useState<{ text: string; top: number; left: number } | null>(null)
+// it hands the text to My Notes as a quote. Next to it, "Highlight" in three
+// colours (#91) when the page can keep highlights.
+export function AddToNotes({ onAdd, onHighlight }: {
+  onAdd: (text: string) => void
+  onHighlight?: (range: Range, color: HighlightColor) => void
+}) {
+  const [pick, setPick] = useState<{ text: string; range: Range; top: number; left: number } | null>(null)
 
   useEffect(() => {
     function update() {
@@ -16,7 +21,12 @@ export function AddToNotes({ onAdd }: { onAdd: (text: string) => void }) {
         return
       }
       const rect = sel!.getRangeAt(0).getBoundingClientRect()
-      setPick({ text, top: Math.max(8, rect.top - 36), left: Math.min(window.innerWidth - 140, Math.max(8, rect.left)) })
+      setPick({
+        text,
+        range: sel!.getRangeAt(0).cloneRange(),
+        top: Math.max(8, rect.top - 36),
+        left: Math.min(window.innerWidth - (onHighlight ? 330 : 140), Math.max(8, rect.left)),
+      })
     }
     // On release, not on every selectionchange, so the button doesn't chase the drag.
     const onUp = () => window.setTimeout(update, 0)
@@ -31,22 +41,41 @@ export function AddToNotes({ onAdd }: { onAdd: (text: string) => void }) {
       document.removeEventListener('keyup', onUp)
       document.removeEventListener('touchend', onUp)
     }
-  }, [])
+  }, [onHighlight])
 
   if (!pick) return null
+  const done = () => {
+    window.getSelection()?.removeAllRanges()
+    setPick(null)
+  }
   return (
-    <button
-      className="add-to-notes"
-      style={{ top: pick.top, left: pick.left }}
-      // Keep the selection while clicking.
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => {
-        onAdd(pick.text)
-        window.getSelection()?.removeAllRanges()
-        setPick(null)
-      }}
-    >
-      📝 Add to notes
-    </button>
+    // Keep the selection while clicking.
+    <div className="add-to-notes selection-menu" style={{ top: pick.top, left: pick.left }} onMouseDown={(e) => e.preventDefault()}>
+      <button
+        onClick={() => {
+          onAdd(pick.text)
+          done()
+        }}
+      >
+        📝 Add to notes
+      </button>
+      {onHighlight && (
+        <span className="highlight-picks">
+          Highlight
+          {HIGHLIGHT_COLORS.map((c) => (
+            <button
+              key={c}
+              className={`highlight-swatch hl-swatch-${c}`}
+              title={`Highlight (${c})`}
+              aria-label={`Highlight (${c})`}
+              onClick={() => {
+                onHighlight(pick.range, c)
+                done()
+              }}
+            />
+          ))}
+        </span>
+      )}
+    </div>
   )
 }

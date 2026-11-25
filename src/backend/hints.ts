@@ -8,6 +8,9 @@ import { trackActivity } from './tracking'
 // counts, so the ladder follows them to another computer.
 
 export const HINT_AFTER_FAILS = 3
+// A worked solution is offered once all three hints are open and Run Tests
+// has failed this many times (#103; the instructor may change it).
+export const SOLUTION_AFTER_FAILS = 8
 
 interface HintState {
   fails: number
