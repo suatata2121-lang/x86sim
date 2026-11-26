@@ -16,6 +16,7 @@ import { ArchCompareView, BankSelectorView, ChipCheckView } from './MemoryBusVie
 import { BsrBuilder, ControlWordBuilder, PpiBlockDiagram } from './Ppi8255Views'
 import { Dma8257Diagram } from './Dma8257View'
 import { InterruptTimeline, IvtCalculator, IvtDiagram, Pic8259Diagram, PicPlayground } from './InterruptViews'
+import { BusMatching, ButtonLedPlayer, PollingTimeline, PwmSlider, SensorSlider, UnoBoardTour } from './ArduinoViews'
 import { ByteLayout, EaCalculator, EndianFigure, SegmentCalculator, SegmentMapDiagram, SegmentPractice } from './SegmentViews'
 import type { ConceptRef } from '../learningPath'
 import { taskPositionLabel } from './ModuleItems'
@@ -566,7 +567,8 @@ export function LearnDetail({
         <div className="mode-panel learn-detail-panel learn-detail-panel-wide">
           <p className="example-description">
             How the 8086 works inside (CPU, buses, stack) and how it talks to the outside world (ports,
-            interrupts, support chips). Pick a category on the left to get started.
+            interrupts, support chips), then the Arduino Uno microcontroller. Pick a category on the left to get
+            started.
           </p>
         </div>
       )
@@ -633,6 +635,12 @@ export function LearnDetail({
         {hwTopic.interactive === 'byte-layout' && <ByteLayout done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'ivt-calc' && <IvtCalculator done={interactivesDone} onDone={onInteractiveDone} />}
         {hwTopic.interactive === 'pic-playground' && <PicPlayground done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'uno-tour' && <UnoBoardTour done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'button-led' && <ButtonLedPlayer done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'pwm-slider' && <PwmSlider done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'polling-timeline' && <PollingTimeline done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'sensor-slider' && <SensorSlider done={interactivesDone} onDone={onInteractiveDone} />}
+        {hwTopic.interactive === 'bus-matching' && <BusMatching done={interactivesDone} onDone={onInteractiveDone} />}
         </div>}
         {hwTopic.pipeline && <BiuEuView key={hwTopic.id} scenarios={hwTopic.pipeline} />}
         {hwTopic.notes && (
