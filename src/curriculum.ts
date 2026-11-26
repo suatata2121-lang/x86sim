@@ -648,7 +648,7 @@ INT 21h
             hints: [
               'SHL would push the top bit out and lose it; ROL brings it back in at bit 0.',
               'Instruction Reference → ROL.',
-              '`MOV BL, [LEDS]` / `___ BL, 1`',
+              '`MOV AL, [LEDS]` / `ROL AL, 1` / `MOV [LEDS], ___`',
             ],
           },
         ],
