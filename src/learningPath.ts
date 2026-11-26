@@ -1,4 +1,4 @@
-// The weekly learning path shown to signed-in students: 11 modules, each
+// The weekly learning path shown to signed-in students: modules, each
 // tying a concept page to an example program that makes it visible and to
 // the curriculum assignments that practise it. Modules only reference
 // existing content by id (Learn pages, EXAMPLES, CURRICULUM) -- nothing is
@@ -412,6 +412,82 @@ export const LEARNING_PATH: LearningModule[] = [
       ],
     },
     assignments: ['t13-rotate-indicator', 't14-preserve-carry', 't15-copy-samples'],
+  },
+  // Microcontrollers (Arduino Uno), #112-#114: background for the students'
+  // hands-on Arduino project. Reading, scripted widgets and a quiz like
+  // Module 0; the boards are real, so there is no task and nothing runs here.
+  {
+    id: 'm14',
+    title: 'Microcontrollers and the Arduino Uno',
+    summary:
+      'See what a microcontroller puts on one chip, find your way around the Arduino Uno board and learn how an ' +
+      'Arduino program runs and drives its pins.',
+    concepts: [hw('mpu-vs-mcu'), hw('uno-board'), hw('arduino-program'), hw('arduino-digital-pins')],
+    assignments: [],
+    steps: ['concept', 'quiz'],
+    quiz: 'm14',
+    tools: [],
+    interactives: [
+      {
+        id: 'uno-tour',
+        label: 'Explore: the Uno board tour ({n}/4)',
+        topic: 'uno-board',
+        parts: ['uno-tour-digital', 'uno-tour-pwm', 'uno-tour-analog', 'uno-tour-power'],
+      },
+      {
+        id: 'button-led',
+        label: 'Step: the button and LED sketch ({n}/2)',
+        topic: 'arduino-digital-pins',
+        parts: ['button-led-on', 'button-led-off'],
+      },
+    ],
+  },
+  {
+    id: 'm15',
+    title: 'Timing, PWM and Interrupts',
+    summary:
+      'Keep a sketch responsive with millis(), dim an LED with PWM and react to a button the moment it is pressed ' +
+      'with an interrupt.',
+    concepts: [hw('arduino-timing'), hw('arduino-pwm'), hw('arduino-interrupts')],
+    assignments: [],
+    steps: ['concept', 'quiz'],
+    quiz: 'm15',
+    tools: [],
+    interactives: [
+      {
+        id: 'pwm-slider',
+        label: 'Try: the PWM slider ({n}/3)',
+        topic: 'arduino-pwm',
+        parts: ['pwm-low', 'pwm-high', 'pwm-slow'],
+      },
+      {
+        id: 'interrupt-timeline',
+        label: 'Try: polling vs interrupt ({n}/2)',
+        topic: 'arduino-interrupts',
+        parts: ['timeline-missed', 'timeline-caught'],
+      },
+    ],
+  },
+  {
+    id: 'm16',
+    title: 'Sensors and Communication',
+    summary:
+      "Read a sensor's voltage as a number, print values to the Serial Monitor and connect modules over UART, I²C " +
+      'and SPI.',
+    concepts: [hw('arduino-analog-input'), hw('arduino-serial-monitor'), hw('arduino-buses')],
+    assignments: [],
+    steps: ['concept', 'quiz'],
+    quiz: 'm16',
+    tools: [],
+    interactives: [
+      {
+        id: 'sensor-slider',
+        label: 'Try: the sensor slider ({n}/2)',
+        topic: 'arduino-analog-input',
+        parts: ['sensor-low', 'sensor-high'],
+      },
+      { id: 'bus-matching', label: 'Solve: wire the four modules', topic: 'arduino-buses' },
+    ],
   },
 ]
 

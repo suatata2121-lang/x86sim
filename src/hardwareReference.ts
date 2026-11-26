@@ -6,6 +6,8 @@
 // at ports 80h-83h (core/ppi8255.ts), and the 8257 DMA controller as a
 // figure only; the rest of the classic support-chip set
 // (8284/8282/8283/8288/8259/8253/8254/8251/8237) is not simulated.
+// The last category, "Microcontrollers (Arduino Uno)", is background for the
+// students' Arduino project: reading pages with scripted widgets, no code runs.
 //
 // Each demo's `source` is a small, self-contained program run in its own Cpu
 // instance by HardwarePlayground (components/HardwarePlayground.tsx) -- fully
@@ -37,10 +39,12 @@ export interface HardwareTopic {
   // the 8255 word builders (Ppi8255Views), 'segment-calc' the segment
   // calculator and practice, 'ea-calc' the effective address calculator and
   // 'byte-layout' the endianness view (SegmentViews), 'ivt-calc' and
-  // 'pic-playground' the interrupt views (InterruptViews).
+  // 'pic-playground' the interrupt views (InterruptViews), and the scripted
+  // Arduino widgets 'uno-tour' to 'bus-matching' (ArduinoViews).
   interactive?:
     | 'fde' | 'alu' | 'move-it' | 'bank-selector' | 'chip-check' | 'ppi-control-word' | 'ppi-bsr'
     | 'segment-calc' | 'ea-calc' | 'byte-layout' | 'ivt-calc' | 'pic-playground'
+    | 'uno-tour' | 'button-led' | 'pwm-slider' | 'polling-timeline' | 'sensor-slider' | 'bus-matching'
   // A step-through figure built from data (components/FigureStepper.tsx).
   figure?: FigureSpec
   // A clock-by-clock BIU/EU pipeline simulation (components/BiuEuView.tsx,
@@ -1546,6 +1550,228 @@ export const HARDWARE_REFERENCE: HardwareCategory[] = [
         staticDiagram: 'pic-8259',
         interactive: 'pic-playground',
         notes: ['Initialisation command words (ICW1–ICW4) are not covered here; the playground starts already set up like an IBM PC.'],
+      },
+    ],
+  },
+  {
+    // Background for the students' hands-on Arduino project (#112-#114):
+    // what is on the board and what the Arduino functions do, at concept
+    // level only. Nothing here runs code; the widgets are scripted
+    // (components/ArduinoViews.tsx).
+    id: 'microcontrollers',
+    title: 'Microcontrollers (Arduino Uno)',
+    topics: [
+      {
+        id: 'mpu-vs-mcu',
+        title: 'Microprocessor vs Microcontroller',
+        summary: 'Why a microcontroller needs little more than itself, a clock and power.',
+        content: [
+          'A microprocessor such as the 8086 is only the CPU: memory, I/O ports and timers are separate chips on the ' +
+            'board. A microcontroller puts the CPU, program memory, data memory and the I/O peripherals on one chip, ' +
+            "so a small device needs little more than the chip, a clock and power. The Arduino Uno's chip is the " +
+            'ATmega328P.',
+          {
+            kind: 'table',
+            head: ['', '8086 (microprocessor)', 'ATmega328P (microcontroller)'],
+            rows: [
+              ['What is on the chip', 'CPU only',
+                'CPU + 32 KB Flash (program) + 2 KB SRAM (data) + 1 KB EEPROM + I/O ports, timers, ADC, serial'],
+              ['Data width', '16-bit', '8-bit'],
+              ['Clock', '5–10 MHz (4.77 MHz in the IBM PC)', '16 MHz on the Uno'],
+              ['Memory organisation', 'Von Neumann: one memory for code and data',
+                'Harvard: separate program and data memory (see Module 2)'],
+              ['Typical use', 'PCs and general-purpose computers',
+                'Washing machines, toys, remote controls, sensor boards'],
+            ],
+          },
+          'Von Neumann and Harvard are compared on the [[hardware:von-neumann-harvard|Von Neumann vs Harvard]] page.',
+        ],
+      },
+      {
+        id: 'uno-board',
+        title: 'A Tour of the Arduino Uno',
+        summary: 'What each part of the Uno board is for, and which pins do what.',
+        content: [
+          'The Arduino Uno is a small board built around the ATmega328P. Everything else on it is there to power the ' +
+            'chip, give it a clock, load your program and bring its pins out to headers you can plug wires into.',
+          'Click the parts of the board below to see what each one does. Open at least one digital pin, one PWM (~) ' +
+            'pin, one analog pin and one power pin.',
+          'The Uno works with 5 V signals: an output pin gives 0 V or 5 V, and an input reads anything near 0 V as LOW ' +
+            'and anything near 5 V as HIGH. An LED always needs a series resistor (220–330 Ω); without one it draws ' +
+            'too much current and can damage the LED or the pin.',
+        ],
+        interactive: 'uno-tour',
+      },
+      {
+        id: 'arduino-program',
+        title: 'How an Arduino Program Runs',
+        summary: 'Sketches, setup() and loop(): what the board does from power-on until power-off.',
+        content: [
+          'A program is called a sketch. It is written in C++ in the Arduino IDE, compiled to the ATmega328P\'s machine ' +
+            'code and uploaded over USB. There is no operating system: the board runs only your program, from power-on ' +
+            'until power-off.',
+          'Every sketch has two functions: setup() runs once at start-up (set pin modes, start Serial); loop() then ' +
+            'runs again and again forever.',
+          { kind: 'code', text: 'void setup() {\n  // runs once\n}\nvoid loop() {\n  // runs over and over\n}' },
+          'Link to the 8086 modules: just as the assembler turned your 8086 code into machine code, the compiler turns ' +
+            'C++ into AVR machine code.',
+        ],
+      },
+      {
+        id: 'arduino-digital-pins',
+        title: 'Digital Pins',
+        summary: 'Make a pin an output or an input, drive it HIGH or LOW and read a button.',
+        content: [
+          'pinMode(pin, OUTPUT) makes the pin drive a level; pinMode(pin, INPUT) makes it read one; ' +
+            'pinMode(pin, INPUT_PULLUP) reads with a built-in pull-up.',
+          'digitalWrite(pin, HIGH) gives 5 V, LOW gives 0 V. digitalRead(pin) returns HIGH or LOW.',
+          'Pull-up: a button input left unconnected "floats" and reads random values. INPUT_PULLUP pulls the pin up to ' +
+            '5 V inside the chip, so it reads HIGH when the button is released and LOW when pressed (the button connects ' +
+            'the pin to GND).',
+          "Under the hood: Arduino functions write the chip's port registers: DDR sets each pin's direction, PORT sets " +
+            "an output's level, PIN reads the inputs. It is the same idea as the 8255's control word and port registers " +
+            'in Module m11.',
+          'Step through the sketch below. Press the button, keep stepping and watch the LED on pin 13 follow it.',
+        ],
+        interactive: 'button-led',
+      },
+      {
+        id: 'arduino-timing',
+        title: 'Timing: delay() and millis()',
+        summary: 'Why delay() makes a sketch deaf to buttons, and how millis() keeps the loop running.',
+        content: [
+          'delay(ms) stops the sketch for that many milliseconds. While it waits the board does nothing else: a button ' +
+            'pressed during a delay(1000) can be missed.',
+          'millis() returns the number of milliseconds since the board started. Instead of waiting, the sketch checks ' +
+            'whether enough time has passed and carries on. This is how one sketch does several things "at the same ' +
+            'time" (blink an LED, read a button, read a sensor). Use it in your project wherever the loop must stay ' +
+            'responsive.',
+          'The time is kept by a timer, a hardware counter inside the chip that counts clock ticks on its own.',
+          {
+            kind: 'code',
+            text:
+              'const int LED = 13;\nbool ledOn = false;\nunsigned long last = 0;\n\nvoid setup() {\n  pinMode(LED, OUTPUT);\n}\n\n' +
+              'void loop() {\n  if (millis() - last >= 500) {   // 500 ms passed?\n    last = millis();\n    ledOn = !ledOn;\n' +
+              '    digitalWrite(LED, ledOn ? HIGH : LOW);\n  }\n  // the loop never waits, so buttons and sensors can be read here too\n}',
+          },
+        ],
+      },
+      {
+        id: 'arduino-pwm',
+        title: 'PWM and analogWrite',
+        summary: 'Get an in-between effect from a pin that can only give 0 V or 5 V.',
+        content: [
+          'A digital pin can only give 0 V or 5 V. PWM (Pulse Width Modulation) switches the pin on and off very fast ' +
+            'to get an effect in between.',
+          'The share of each period that the pin is on is the duty cycle: 0 % always off, 50 % half on, half off, ' +
+            '100 % always on.',
+          'The switching happens about 500 times per second, too fast for the eye: an LED at 25 % duty looks dim, a ' +
+            'motor at 50 % turns slower. The average voltage is 5 V × duty, but the pin still only switches between ' +
+            '0 V and 5 V; it is not a real analog output.',
+          'analogWrite(pin, value) with value 0–255: analogWrite(9, 128) gives about 50 %, analogWrite(9, 64) about ' +
+            '25 %. It works only on the pins marked ~ (3, 5, 6, 9, 10, 11), where a hardware timer does the switching ' +
+            'for you.',
+          'Try the slider below: a low value, a high value, and Slow motion to see the LED really switching.',
+        ],
+        interactive: 'pwm-slider',
+      },
+      {
+        id: 'arduino-interrupts',
+        title: 'Interrupts',
+        summary: 'React to a button the moment it is pressed, even while the loop is busy.',
+        content: [
+          'An interrupt makes the board stop what it is doing when an event happens (a button press, for example), ' +
+            'run a short function called an ISR (Interrupt Service Routine) and then continue where it left off. It is ' +
+            'the same idea as the 8086 interrupts in Module m13.',
+          'Polling vs interrupt: polling means the loop keeps checking the button itself, so a short press can fall ' +
+            'between two checks. With an interrupt the hardware notices the press and calls the ISR at once.',
+          'On the Uno, pins 2 and 3 can trigger interrupts: attachInterrupt(digitalPinToInterrupt(2), onPress, ' +
+            'FALLING). FALLING = the pin goes from HIGH to LOW (a press, with INPUT_PULLUP), RISING = LOW to HIGH ' +
+            '(release), CHANGE = both.',
+          'Two rules: keep the ISR short (no delay, no Serial printing), and declare variables the ISR changes as ' +
+            'volatile.',
+          'A mechanical button "bounces" for a few milliseconds, so one press can look like several; ignore changes ' +
+            'that come within a few ms of the last one.',
+          {
+            kind: 'code',
+            text:
+              'const int LED = 13;\nvolatile bool pressed = false;   // changed by the ISR\n\n' +
+              'void onPress() {                 // the ISR: short\n  pressed = true;\n}\n\n' +
+              'void setup() {\n  pinMode(LED, OUTPUT);\n  pinMode(2, INPUT_PULLUP);\n' +
+              '  attachInterrupt(digitalPinToInterrupt(2), onPress, FALLING);\n}\n\n' +
+              'void loop() {\n  if (pressed) {\n    pressed = false;\n    digitalWrite(LED, !digitalRead(LED));   // toggle the LED\n  }\n' +
+              '  delay(1000);   // even while the loop waits here, a press is not lost\n}',
+          },
+          'Below, click on the time axis to press the button for 0.2 s. The polling row is a loop that checks the ' +
+            'button and then waits with delay(1000). Find a press it misses, and one it catches.',
+        ],
+        interactive: 'polling-timeline',
+      },
+      {
+        id: 'arduino-analog-input',
+        title: 'Reading Analog Sensors',
+        summary: "Turn a sensor's voltage into a number with analogRead, and rescale it with map().",
+        content: [
+          'Many sensors (a potentiometer, a light sensor (LDR) in a voltage divider, a temperature sensor) give a ' +
+            'voltage anywhere between 0 and 5 V. A digital pin only tells HIGH or LOW; the analog pins A0–A5 can read ' +
+            'the actual voltage.',
+          "The chip's ADC (analog-to-digital converter) turns the voltage into a number. analogRead(A0) returns " +
+            '0–1023: 0 V → 0, 5 V → 1023, 2.5 V → about 512. In general: value ≈ voltage / 5 V × 1023.',
+          'map(value, 0, 1023, 0, 255) rescales the reading to another range, for example to drive analogWrite ' +
+            '(Module m15).',
+          {
+            kind: 'code',
+            text:
+              'void setup() {\n  Serial.begin(9600);\n}\n\nvoid loop() {\n' +
+              '  int value = analogRead(A0);              // 0..1023\n' +
+              '  int brightness = map(value, 0, 1023, 0, 255);\n' +
+              '  analogWrite(9, brightness);              // LED on pin 9 follows the knob\n' +
+              '  Serial.println(value);\n  delay(200);\n}',
+          },
+          'Turn the knob below as if this sketch were running. Try a value near 0 and one near 1023.',
+        ],
+        interactive: 'sensor-slider',
+      },
+      {
+        id: 'arduino-serial-monitor',
+        title: 'The Serial Monitor',
+        summary: 'Send text from the board to the computer to see values and debug a sketch.',
+        content: [
+          'The board can send text to the computer over the USB cable. Serial.begin(9600) (in setup) starts it, ' +
+            'Serial.print(x) sends a value, Serial.println(x) sends it and starts a new line. The Arduino IDE\'s Serial ' +
+            'Monitor shows the text; the Serial Plotter draws numbers as a graph.',
+          '9600 is the speed in bits per second (the baud rate). The Serial Monitor must be set to the same speed, ' +
+            'otherwise you see garbage characters.',
+          'It is the easiest way to debug a sketch: print the values of your variables and watch them change.',
+          'Underneath, the data travels as UART serial data, one bit after another, on pins 0 (RX) and 1 (TX), which ' +
+            'the Uno turns into USB.',
+        ],
+      },
+      {
+        id: 'arduino-buses',
+        title: 'Connecting Modules: UART, I²C, SPI',
+        summary: 'Which pins a display, sensor or wireless module is wired to, and why.',
+        content: [
+          'Displays, sensors and wireless modules talk to the Arduino through one of three serial buses. The module\'s ' +
+            'library runs the protocol for you; what you need to know is which pins to wire.',
+          {
+            kind: 'table',
+            head: ['', 'UART', 'I²C', 'SPI'],
+            rows: [
+              ['Wires (besides GND)', '2: TX, RX', '2: SDA, SCL', '4: MOSI, MISO, SCK, SS'],
+              ['Uno pins', '0 (RX), 1 (TX)', 'A4 (SDA), A5 (SCL)', '10 (SS), 11 (MOSI), 12 (MISO), 13 (SCK)'],
+              ['Devices on one bus', '1 to 1', 'many, each with its own address', 'many, one SS wire each'],
+              ['Speed', 'slow', 'medium', 'fast'],
+              ['Typical modules', 'USB to computer, Bluetooth (HC-05), GPS', 'LCD with I²C adapter, MPU-6050, many sensors',
+                'SD card, some displays'],
+              ['Arduino library', 'Serial', 'Wire', 'SPI'],
+            ],
+          },
+          'Pins 0 and 1 are shared with the USB connection, so a module on them must be unplugged while uploading (or ' +
+            'use other pins with SoftwareSerial).',
+          'Wire the four modules below: pick a module, then the pins it goes to.',
+        ],
+        interactive: 'bus-matching',
       },
     ],
   },

@@ -530,7 +530,19 @@ values
   ('m13', 10, 2, 7,
    array['interrupt-types', 'interrupt-vector-table', 'interrupt-sequence', 'pic-8259'],
    array['ivt-calc-1', 'ivt-calc-2', 'ivt-calc-3', 'interrupt-sequence-figure', 'pic-served', 'pic-masked', 'pic-eoi'],
-   array['t22-pic-mask', 't23-ivt-entry', 't24-isr-address'])
+   array['t22-pic-mask', 't23-ivt-entry', 't24-isr-address']),
+  ('m14', 10, 2, 7,
+   array['mpu-vs-mcu', 'uno-board', 'arduino-program', 'arduino-digital-pins'],
+   array['uno-tour-digital', 'uno-tour-pwm', 'uno-tour-analog', 'uno-tour-power', 'button-led-on', 'button-led-off'],
+   array[]::text[]),
+  ('m15', 10, 2, 7,
+   array['arduino-timing', 'arduino-pwm', 'arduino-interrupts'],
+   array['pwm-low', 'pwm-high', 'pwm-slow', 'timeline-missed', 'timeline-caught'],
+   array[]::text[]),
+  ('m16', 10, 2, 7,
+   array['arduino-analog-input', 'arduino-serial-monitor', 'arduino-buses'],
+   array['sensor-low', 'sensor-high', 'bus-matching'],
+   array[]::text[])
 on conflict (module_id) do nothing;
 
 -- The learning path's module order (src/learningPath.ts LEARNING_PATH, #74):
@@ -555,7 +567,8 @@ create policy "module order: admin writes" on public.module_order
 insert into public.module_order (module_id, position)
 values
   ('m0', 0), ('m1', 1), ('m2', 2), ('m12', 3), ('m3', 4), ('m4', 5), ('m5', 6),
-  ('m6', 7), ('m7', 8), ('m11', 9), ('m8', 10), ('m13', 11), ('m9', 12), ('m10', 13)
+  ('m6', 7), ('m7', 8), ('m11', 9), ('m8', 10), ('m13', 11), ('m9', 12), ('m10', 13),
+  ('m14', 14), ('m15', 15), ('m16', 16)
 on conflict (module_id) do update set position = excluded.position;
 
 -- Whether a module is open to the signed-in student for lab work (#93): the

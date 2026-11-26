@@ -69,6 +69,36 @@ export const QUIZZES: Quiz[] = [
     passCount: 7,
     passNote: 'You have finished the 8255 module.',
   },
+  {
+    id: 'm14',
+    title: 'Quiz: Microcontrollers and the Arduino Uno',
+    intro:
+      '10 questions on microprocessors and microcontrollers, the Uno board, how a sketch runs and digital pins. You ' +
+      'need 7 correct answers to pass and finish the module. You can retake the quiz as many times as you need.',
+    lockedNote: 'Finish every item on the checklist above to unlock the quiz.',
+    passCount: 7,
+    passNote: 'You have finished the Arduino Uno module.',
+  },
+  {
+    id: 'm15',
+    title: 'Quiz: Timing, PWM and Interrupts',
+    intro:
+      '10 questions on delay() and millis(), PWM and analogWrite, and interrupts. You need 7 correct answers to ' +
+      'pass and finish the module. You can retake the quiz as many times as you need.',
+    lockedNote: 'Finish every item on the checklist above to unlock the quiz.',
+    passCount: 7,
+    passNote: 'You have finished the timing, PWM and interrupts module.',
+  },
+  {
+    id: 'm16',
+    title: 'Quiz: Sensors and Communication',
+    intro:
+      '10 questions on reading analog sensors, the Serial Monitor and connecting modules over UART, I²C and SPI. ' +
+      'You need 7 correct answers to pass and finish the module. You can retake the quiz as many times as you need.',
+    lockedNote: 'Finish every item on the checklist above to unlock the quiz.',
+    passCount: 7,
+    passNote: 'You have finished the microcontroller section.',
+  },
 ]
 
 export function findQuiz(id: string): Quiz | undefined {
